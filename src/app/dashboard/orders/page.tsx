@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import ReactCountryFlag from "react-country-flag"
 import {
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -12,12 +13,18 @@ import {
   EyeSlashIcon
 } from '@heroicons/react/24/outline'
 
-// Add this CountryFlag component here
+
 const CountryFlag = ({ countryCode }: { countryCode: string }) => {
   return (
-    <div className="w-6 h-4 rounded-sm overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
-      <span className="text-xs font-medium text-gray-600">{countryCode}</span>
-    </div>
+    <ReactCountryFlag
+      countryCode={countryCode}
+      svg
+      style={{
+        width: '24px',
+        height: '16px',
+      }}
+      title={countryCode}
+    />
   )
 }
 
