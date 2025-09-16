@@ -69,6 +69,15 @@ interface OrderDetailsProps {
     shippingAddress: Address
     billingAddress: Address
     shippingMethod: string
+    shippingCost?: number
+    taxAmount?: number
+    fees?: number
+    handlingFee?: number
+    discounts?: {
+      code: string
+      amount: number
+      description: string
+    }[]
     trackingNumber?: string
     notes?: string
   }
@@ -94,6 +103,13 @@ export default function OrderDetailsModal({ isOpen, onClose, order }: OrderDetai
 
   const calculateSubtotal = () => {
     return order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  }
+
+  const calculateTotalWeight = () => {
+    return order.items.reduce((sum, item) => {
+      const itemWeight = item.weight || 0
+      return sum + (itemWeight * item.quantity)
+    }, 0)
   }
 
   const statusColors = {
@@ -219,7 +235,12 @@ export default function OrderDetailsModal({ isOpen, onClose, order }: OrderDetai
                         {/* Order Items */}
                         <div className="bg-white border rounded-lg overflow-hidden">
                           <div className="px-4 py-3 bg-gray-50 border-b">
-                            <h4 className="font-medium text-gray-900">Order Items ({order.items.length})</h4>
+                            <div className="flex justify-between items-center">
+                              <h4 className="font-medium text-gray-900">Order Items ({order.items.length})</h4>
+                              <div className="text-sm text-gray-500">
+                                Total Weight: <span className="font-medium">{calculateTotalWeight().toFixed(2)} kg</span>
+                              </div>
+                            </div>
                           </div>
                           <div className="divide-y divide-gray-200">
                             {order.items.map((item) => (
@@ -290,14 +311,73 @@ export default function OrderDetailsModal({ isOpen, onClose, order }: OrderDetai
                               <dt className="text-gray-500">Subtotal:</dt>
                               <dd>{formatCurrency(calculateSubtotal(), order.currency)}</dd>
                             </div>
+
+                            {/* Shipping Cost */}
                             <div className="flex justify-between">
                               <dt className="text-gray-500">Shipping:</dt>
-                              <dd>Calculated at checkout</dd>
+                              <dd>
+                                {order.shippingCost ?
+                                  formatCurrency(order.shippingCost, order.currency) :
+                                  'Calculated at checkout'
+                                }
+                              </dd>
                             </div>
+
+                            {/* Tax */}
                             <div className="flex justify-between">
                               <dt className="text-gray-500">Tax:</dt>
-                              <dd>Included</dd>
+                              <dd>
+                                {order.taxAmount ?
+                                  formatCurrency(order.taxAmount, order.currency) :
+                                  'Included'
+                                }
+                              </dd>
                             </div>
+
+                            {/* Fees */}
+                            {order.fees && order.fees > 0 && (
+                              <div className="flex justify-between">
+                                <dt className="text-gray-500">Fees:</dt>
+                                <dd>{formatCurrency(order.fees, order.currency)}</dd>
+                              </div>
+                            )}
+
+                            {/* Handling Fee */}
+                            {order.handlingFee && order.handlingFee > 0 && (
+                              <div className="flex justify-between">
+                                <dt className="text-gray-500">Handling:</dt>
+                                <dd>{formatCurrency(order.handlingFee, order.currency)}</dd>
+                              </div>
+                            )}
+
+                            {/* Discounts - Support for multiple discounts */}
+                            {order.discounts && order.discounts.length > 0 && (
+                              <div className="space-y-1">
+                                {order.discounts.map((discount, index) => (
+                                  <div key={index} className="flex justify-between text-green-600">
+                                    <dt className="text-sm">
+                                      {discount.description} ({discount.code}):
+                                    </dt>
+                                    <dd className="text-sm">-{formatCurrency(discount.amount, order.currency)}</dd>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Legacy single discount support (fallback) */}
+                            {(!order.discounts || order.discounts.length === 0) && order.discount && order.discount > 0 && (
+                              <div className="flex justify-between text-green-600">
+                                <dt>Discount {order.discountCode && `(${order.discountCode})`}:</dt>
+                                <dd>-{formatCurrency(order.discount, order.currency)}</dd>
+                              </div>
+                            )}
+
+                            {/* Total Weight */}
+                            <div className="flex justify-between text-gray-600 pt-2 border-t border-gray-200">
+                              <dt className="text-gray-500">Total Weight:</dt>
+                              <dd className="font-medium">{calculateTotalWeight().toFixed(2)} kg</dd>
+                            </div>
+
                             <div className="border-t border-gray-200 pt-2 flex justify-between font-medium">
                               <dt>Total:</dt>
                               <dd className="text-lg">{formatCurrency(order.totalAmount, order.currency)}</dd>
