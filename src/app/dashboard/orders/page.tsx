@@ -238,11 +238,18 @@ export default function OrdersPage() {
         return order.notes || '-'
       case 'requestedShipping':
         return order.requestedShipping
-      case 'country':
-        return (
-            <div className="flex items-center gap-2">
-              <CountryFlag countryCode={order.countryCode} />
-              <span>{order.country}</span>
+        case 'country':
+          return (
+            <div className="flex items-center justify-center">
+              <ReactCountryFlag
+                countryCode={order.countryCode}
+                svg
+                style={{
+                  width: '24px',
+                  height: '16px',
+                }}
+                title={order.country}
+              />
             </div>
           )
       case 'shippingFirstName':
