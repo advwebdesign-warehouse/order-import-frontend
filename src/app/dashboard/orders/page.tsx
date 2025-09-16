@@ -12,6 +12,15 @@ import {
   EyeSlashIcon
 } from '@heroicons/react/24/outline'
 
+// Add this CountryFlag component here
+const CountryFlag = ({ countryCode }: { countryCode: string }) => {
+  return (
+    <div className="w-6 h-4 rounded-sm overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
+      <span className="text-xs font-medium text-gray-600">{countryCode}</span>
+    </div>
+  )
+}
+
 interface Order {
   id: string
   orderDate: string
@@ -85,19 +94,6 @@ const statusColors = {
   REFUNDED: 'bg-gray-100 text-gray-800',
 }
 
-// Country flag emoji mapping
-const countryFlags: Record<string, string> = {
-  US: '🇺🇸',
-  CA: '🇨🇦',
-  GB: '🇬🇧',
-  AU: '🇦🇺',
-  DE: '🇩🇪',
-  FR: '🇫🇷',
-  IT: '🇮🇹',
-  ES: '🇪🇸',
-  JP: '🇯🇵',
-  KR: '🇰🇷',
-}
 
 export default function OrdersPage() {
   const router = useRouter()
@@ -237,11 +233,11 @@ export default function OrdersPage() {
         return order.requestedShipping
       case 'country':
         return (
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{countryFlags[order.countryCode] || '🏳️'}</span>
-            <span>{order.country}</span>
-          </div>
-        )
+            <div className="flex items-center gap-2">
+              <CountryFlag countryCode={order.countryCode} />
+              <span>{order.country}</span>
+            </div>
+          )
       case 'shippingFirstName':
         return order.shippingFirstName
       case 'shippingLastName':
