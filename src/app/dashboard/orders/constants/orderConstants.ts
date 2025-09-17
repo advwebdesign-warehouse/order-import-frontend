@@ -1,5 +1,5 @@
 // orderConstants.ts
-import { ColumnConfig } from './orderTypes'
+import { ColumnConfig } from '../utils/orderTypes'
 
 export const STATUS_COLORS = {
   PENDING: 'bg-yellow-100 text-yellow-800',
