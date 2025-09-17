@@ -6,15 +6,18 @@ import {
   Bars3Icon,
   HomeIcon,
   ShoppingBagIcon,
+  CubeIcon,
   Cog6ToothIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Orders', href: '/dashboard/orders', icon: ShoppingBagIcon },
+  { name: 'Products', href: '/dashboard/products', icon: CubeIcon },
   { name: 'Integrations', href: '/dashboard/integrations', icon: Cog6ToothIcon },
 ]
 
@@ -26,6 +29,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [user, setUser] = useState<any>(null)
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -43,6 +47,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     router.push('/auth/signin')
+  }
+
+  const isCurrentPage = (href: string) => {
+    if (href === '/dashboard') {
+      return pathname === '/dashboard'
+    }
+    return pathname.startsWith(href)
   }
 
   if (!user) {
@@ -88,9 +99,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             <li key={item.name}>
                               <Link
                                 href={item.href}
-                                className="text-gray-700 hover:text-indigo-600 hover:bg-gray-50 group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold"
+                                className={`group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold ${
+                                  isCurrentPage(item.href)
+                                    ? 'bg-gray-50 text-indigo-600'
+                                    : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50'
+                                }`}
                               >
-                                <item.icon className="h-6 w-6 shrink-0" aria-hidden="true" />
+                                <item.icon
+                                  className={`h-6 w-6 shrink-0 ${
+                                    isCurrentPage(item.href)
+                                      ? 'text-indigo-600'
+                                      : 'text-gray-400 group-hover:text-indigo-600'
+                                  }`}
+                                  aria-hidden="true"
+                                />
                                 {item.name}
                               </Link>
                             </li>
@@ -120,9 +142,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     <li key={item.name}>
                       <Link
                         href={item.href}
-                        className="text-gray-700 hover:text-indigo-600 hover:bg-gray-50 group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold"
+                        className={`group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold ${
+                          isCurrentPage(item.href)
+                            ? 'bg-gray-50 text-indigo-600'
+                            : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50'
+                        }`}
                       >
-                        <item.icon className="h-6 w-6 shrink-0" aria-hidden="true" />
+                        <item.icon
+                          className={`h-6 w-6 shrink-0 ${
+                            isCurrentPage(item.href)
+                              ? 'text-indigo-600'
+                              : 'text-gray-400 group-hover:text-indigo-600'
+                          }`}
+                          aria-hidden="true"
+                        />
                         {item.name}
                       </Link>
                     </li>

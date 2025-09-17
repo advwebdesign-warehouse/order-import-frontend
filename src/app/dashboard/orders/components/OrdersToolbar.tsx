@@ -2,7 +2,7 @@
 
 import { ArrowDownTrayIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { ColumnConfig } from '../utils/orderTypes'
-import OrdersColumnSettings from './OrdersColumnSettings'
+import ColumnSettings from '../../shared/components/ColumnSettings'
 
 interface OrdersToolbarProps {
   selectedOrdersCount: number
@@ -41,7 +41,7 @@ export default function OrdersToolbar({
           </button>
         )}
 
-        <OrdersColumnSettings
+        <ColumnSettings
           columns={columns}
           onColumnVisibilityChange={onColumnVisibilityChange}
         />

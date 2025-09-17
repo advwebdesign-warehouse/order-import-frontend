@@ -14,14 +14,97 @@ import { useOrderFilters } from './hooks/useOrderFilters'
 import { useOrderSelection } from './hooks/useOrderSelection'
 import { useOrderColumns } from './hooks/useOrderColumns'
 
+// Shared components
+import ColumnSettings, { ColumnConfig } from '../shared/components/ColumnSettings'
+
 // Utils
 import { transformToDetailedOrder } from './utils/orderUtils'
-import { exportOrdersToCSV } from './utils/csvExporter'
+import { exportToCSV } from '../shared/utils/csvExporter'
 import { printMultiplePackingSlips } from './utils/packingSlipGenerator'
 
 // Types
 import { Order, OrderWithDetails } from './utils/orderTypes'
 import { ITEMS_PER_PAGE } from './constants/orderConstants'
+
+// Helper function to export orders as CSV
+const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
+  // Convert ColumnConfig to ExportColumn format expected by your CSV exporter
+  const exportColumns = columns.map(column => ({
+    ...column,
+    formatter: (value: any, order: Order) => {
+      switch (column.field) {
+        case 'orderNumber':
+          return order.orderNumber || ''
+        case 'customerName':
+          return order.customerName || ''
+        case 'customerEmail':
+          return order.customerEmail || ''
+        case 'status':
+          return order.status || ''
+        case 'fulfillmentStatus':
+          return (order.fulfillmentStatus || '').replace('_', ' ')
+        case 'totalAmount':
+          return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: order.currency || 'USD'
+          }).format(order.totalAmount || 0)
+        case 'currency':
+          return order.currency || ''
+        case 'itemCount':
+          return (order.itemCount || 0).toString()
+        case 'platform':
+          return order.platform || ''
+        case 'country':
+          return order.country || ''
+        case 'countryCode':
+          return order.countryCode || ''
+        case 'orderDate':
+          return order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) : ''
+        case 'shippingFirstName':
+          return order.shippingFirstName || ''
+        case 'shippingLastName':
+          return order.shippingLastName || ''
+        case 'shippingFullName':
+          return `${order.shippingFirstName || ''} ${order.shippingLastName || ''}`.trim()
+        case 'requestedShipping':
+          return order.requestedShipping || ''
+        case 'orderTime':
+          return order.orderDate ? new Date(order.orderDate).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          }) : ''
+        case 'orderDay':
+          return order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-US', {
+            weekday: 'long'
+          }) : ''
+        case 'orderMonth':
+          return order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-US', {
+            month: 'long'
+          }) : ''
+        case 'orderYear':
+          return order.orderDate ? new Date(order.orderDate).getFullYear().toString() : ''
+        default:
+          return value?.toString() || ''
+      }
+    }
+  }))
+
+  // Generate filename with current date
+  const now = new Date()
+  const dateStr = now.toISOString().split('T')[0] // YYYY-MM-DD format
+  const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-') // HH-MM-SS format
+  const filename = `orders-export-${dateStr}-${timeStr}.csv`
+
+  // Use your existing CSV exporter
+  exportToCSV(orders, exportColumns, filename)
+}
 
 export default function OrdersPage() {
   // Modal states
