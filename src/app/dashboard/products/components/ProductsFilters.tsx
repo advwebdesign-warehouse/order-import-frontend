@@ -39,10 +39,10 @@ export default function ProductsFilters({
     !filters.includeVariants ||
     filters.tags.length > 0
 
-  // Get unique values for dropdowns
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))]
-  const vendors = [...new Set(products.map(p => p.vendor).filter(Boolean))]
-  const brands = [...new Set(products.map(p => p.brand).filter(Boolean))]
+  // Get unique values for dropdowns - Fixed for Vercel compatibility
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)))
+  const vendors = Array.from(new Set(products.map(p => p.vendor).filter(Boolean)))
+  const brands = Array.from(new Set(products.map(p => p.brand).filter(Boolean)))
 
   return (
     <div className="mt-8">
