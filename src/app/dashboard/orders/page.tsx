@@ -19,7 +19,7 @@ import ColumnSettings, { ColumnConfig } from '../shared/components/ColumnSetting
 
 // Utils
 import { transformToDetailedOrder } from './utils/orderUtils'
-import { exportToCSV } from '../shared/utils/csvExporter'
+import { exportToCSV, ExportableItem } from '../shared/utils/csvExporter'
 import { printMultiplePackingSlips } from './utils/packingSlipGenerator'
 
 // Types
@@ -31,7 +31,10 @@ const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
   // Convert ColumnConfig to ExportColumn format expected by your CSV exporter
   const exportColumns = columns.map(column => ({
     ...column,
-    formatter: (value: any, order: Order) => {
+    formatter: (value: any, item: ExportableItem): string => {
+      // Cast item to Order type since we know it's an order
+      const order = item as Order
+
       switch (column.field) {
         case 'orderNumber':
           return order.orderNumber || ''
