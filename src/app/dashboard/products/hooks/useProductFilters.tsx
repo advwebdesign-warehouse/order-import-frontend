@@ -53,12 +53,12 @@ export function useProductFilters(products: Product[]) {
       const matchesTags = filters.tags.length === 0 ||
         filters.tags.some(tag => product.tags.includes(tag))
 
-      // Has variants filtering
+      // Has variants filtering - Fixed with Boolean() wrapper
       let matchesHasVariants = true
       if (filters.hasVariants === 'yes') {
-        matchesHasVariants = product.variants && product.variants.length > 0
+        matchesHasVariants = Boolean(product.variants && product.variants.length > 0)
       } else if (filters.hasVariants === 'no') {
-        matchesHasVariants = !product.variants || product.variants.length === 0
+        matchesHasVariants = Boolean(!product.variants || product.variants.length === 0)
       }
 
       // Parent/child filtering
@@ -87,13 +87,13 @@ export function useProductFilters(products: Product[]) {
     })
   }, [products, searchTerm, filters])
 
-  // Get unique values for filter dropdowns
+  // Get unique values for filter dropdowns - Fixed with Array.from() for Vercel compatibility
   const filterOptions = useMemo(() => {
     return {
-      categories: [...new Set(products.map(p => p.category).filter(Boolean))],
-      vendors: [...new Set(products.map(p => p.vendor).filter(Boolean))],
-      brands: [...new Set(products.map(p => p.brand).filter(Boolean))],
-      tags: [...new Set(products.flatMap(p => p.tags))],
+      categories: Array.from(new Set(products.map(p => p.category).filter(Boolean))),
+      vendors: Array.from(new Set(products.map(p => p.vendor).filter(Boolean))),
+      brands: Array.from(new Set(products.map(p => p.brand).filter(Boolean))),
+      tags: Array.from(new Set(products.flatMap(p => p.tags))),
       statuses: ['active', 'inactive', 'draft', 'archived'],
       visibilities: ['visible', 'hidden', 'catalog', 'search'],
       types: ['simple', 'variant', 'bundle', 'configurable'],
