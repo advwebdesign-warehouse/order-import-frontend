@@ -54,7 +54,8 @@ export function useSelection<T extends SelectableItem>() {
 
   const selectItemsByFilter = (items: T[], filterFn: (item: T) => boolean) => {
     const filteredIds = items.filter(filterFn).map(item => item.id)
-    setSelectedItems(prev => new Set([...prev, ...filteredIds]))
+    // Fixed: Use Array.from() instead of spread operator for Vercel compatibility
+    setSelectedItems(prev => new Set([...Array.from(prev), ...filteredIds]))
   }
 
   const getSelectedItems = (items: T[]) => {
