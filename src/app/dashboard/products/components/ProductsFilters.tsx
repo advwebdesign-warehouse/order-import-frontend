@@ -2,6 +2,7 @@
 
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
 import { Product, ProductFilterState } from '../utils/productTypes'
+import { useSettings } from '../../shared/hooks/useSettings'
 
 interface ProductsFiltersProps {
   searchTerm: string
@@ -24,11 +25,14 @@ export default function ProductsFilters({
   onClearAllFilters,
   products
 }: ProductsFiltersProps) {
+  const { settings } = useSettings()
+  const isStockManagementEnabled = settings.inventory.manageStock
+
   const hasActiveFilters = searchTerm ||
     filters.status ||
     filters.visibility ||
     filters.type ||
-    filters.stockStatus ||
+    (isStockManagementEnabled && filters.stockStatus) ||
     filters.category ||
     filters.vendor ||
     filters.brand ||
@@ -73,6 +77,25 @@ export default function ProductsFilters({
         </button>
       </div>
 
+      {/* Stock Management Disabled Notice */}
+      {!isStockManagementEnabled && (
+        <div className="mt-3 rounded-md bg-blue-50 p-3">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-blue-700">
+                <strong>Stock management is disabled.</strong> Stock-related filters and columns are hidden.
+                <button
+                  onClick={() => window.location.href = '/dashboard/settings'}
+                  className="ml-1 underline hover:text-blue-900"
+                >
+                  Enable in settings
+                </button>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Active Filters Display */}
       {hasActiveFilters && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -114,8 +137,8 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Stock Status Filter */}
-          {filters.stockStatus && (
+          {/* Stock Status Filter - Only show if stock management is enabled */}
+          {isStockManagementEnabled && filters.stockStatus && (
             <FilterBadge
               label={`Stock: ${filters.stockStatus.replace('_', ' ')}`}
               onRemove={() => onFiltersChange({ ...filters, stockStatus: '' })}
@@ -123,7 +146,7 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Category Filter */}
+          {/* Other filters remain the same */}
           {filters.category && (
             <FilterBadge
               label={`Category: ${filters.category}`}
@@ -132,7 +155,6 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Vendor Filter */}
           {filters.vendor && (
             <FilterBadge
               label={`Vendor: ${filters.vendor}`}
@@ -141,7 +163,6 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Brand Filter */}
           {filters.brand && (
             <FilterBadge
               label={`Brand: ${filters.brand}`}
@@ -150,7 +171,6 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Price Range Filter */}
           {(filters.priceMin || filters.priceMax) && (
             <FilterBadge
               label={`Price: $${filters.priceMin || '0'} - $${filters.priceMax || '∞'}`}
@@ -159,7 +179,6 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Has Variants Filter */}
           {filters.hasVariants && (
             <FilterBadge
               label={`Has Variants: ${filters.hasVariants}`}
@@ -168,7 +187,6 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Parent Only Filter */}
           {filters.parentOnly && (
             <FilterBadge
               label="Parent Products Only"
@@ -177,7 +195,6 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Include Variants Filter */}
           {!filters.includeVariants && (
             <FilterBadge
               label="Exclude Variants"
@@ -246,20 +263,23 @@ export default function ProductsFilters({
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stock Status</label>
-              <select
-                value={filters.stockStatus}
-                onChange={(e) => onFiltersChange({ ...filters, stockStatus: e.target.value })}
-                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-              >
-                <option value="">All Stock Status</option>
-                <option value="in_stock">In Stock</option>
-                <option value="out_of_stock">Out of Stock</option>
-                <option value="low_stock">Low Stock</option>
-                <option value="backorder">Backorder</option>
-              </select>
-            </div>
+            {/* Stock Status Filter - Only show if stock management is enabled */}
+            {isStockManagementEnabled && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Stock Status</label>
+                <select
+                  value={filters.stockStatus}
+                  onChange={(e) => onFiltersChange({ ...filters, stockStatus: e.target.value })}
+                  className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                >
+                  <option value="">All Stock Status</option>
+                  <option value="in_stock">In Stock</option>
+                  <option value="out_of_stock">Out of Stock</option>
+                  <option value="low_stock">Low Stock</option>
+                  <option value="backorder">Backorder</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">

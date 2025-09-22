@@ -1,8 +1,15 @@
+// File: app/dashboard/orders/components/OrdersTable.tsx
+
 'use client'
 
 import React from 'react'
-import { EyeIcon, PrinterIcon, ChevronUpIcon, ChevronDownIcon, Bars3Icon } from '@heroicons/react/24/outline'
-import ReactCountryFlag from "react-country-flag"
+import {
+  EyeIcon,
+  DocumentTextIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  Bars3Icon
+} from '@heroicons/react/24/outline'
 import {
   DndContext,
   closestCenter,
@@ -24,8 +31,10 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 
 import { Order, ColumnConfig, SortState } from '../utils/orderTypes'
-import { STATUS_COLORS, FULFILLMENT_COLORS } from '../constants/orderConstants'
-import { formatCurrency, formatDate } from '../utils/orderUtils'
+import {
+  STATUS_COLORS,
+  FULFILLMENT_COLORS
+} from '../constants/orderConstants'
 
 interface OrdersTableProps {
   orders: Order[]
@@ -37,7 +46,47 @@ interface OrdersTableProps {
   onSelectAll: () => void
   onViewOrder: (order: Order) => void
   onPrintPackingSlip: (order: Order) => void
-  onColumnReorder: (columns: ColumnConfig[]) => void
+  onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
+  onColumnReorder?: (columns: ColumnConfig[]) => void
+}
+
+// Sortable header component for drag-and-drop column reordering
+function SortableHeader({ column, children }: { column: ColumnConfig; children: React.ReactNode }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: column.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <th
+      ref={setNodeRef}
+      style={style}
+      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 relative"
+      {...attributes}
+    >
+      <div className="flex items-center justify-between">
+        {children}
+        {column.sortable && (
+          <div
+            {...listeners}
+            className="cursor-grab hover:cursor-grabbing flex items-center ml-2"
+          >
+            <Bars3Icon className="h-4 w-4 text-gray-400" />
+          </div>
+        )}
+      </div>
+    </th>
+  )
 }
 
 export default function OrdersTable({
@@ -50,6 +99,7 @@ export default function OrdersTable({
   onSelectAll,
   onViewOrder,
   onPrintPackingSlip,
+  onColumnVisibilityChange,
   onColumnReorder
 }: OrdersTableProps) {
   const sensors = useSensors(
@@ -62,130 +112,57 @@ export default function OrdersTable({
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
 
-    if (over && active.id !== over.id) {
+    if (over && active.id !== over.id && onColumnReorder) {
       const oldIndex = columns.findIndex(item => item.id === active.id)
       const newIndex = columns.findIndex(item => item.id === over.id)
-      const newOrder = arrayMove(columns, oldIndex, newIndex)
-      onColumnReorder(newOrder)
+
+      const newColumns = arrayMove(columns, oldIndex, newIndex)
+      onColumnReorder(newColumns)
     }
   }
 
-  const SortableHeader = ({ column }: { column: ColumnConfig }) => {
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-    } = useSortable({ id: column.id })
+  // Filter visible columns
+  const visibleColumns = columns.filter(column => column.visible)
 
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-    }
+  // Check if all orders are selected
+  const allSelected = orders.length > 0 && orders.every(order => selectedOrders.has(order.id))
+  const someSelected = orders.some(order => selectedOrders.has(order.id))
 
-    if (!column.visible) return null
-
+  const renderSortableHeader = (column: ColumnConfig) => {
     const isActive = sortConfig.field === column.field
     const isAsc = isActive && sortConfig.direction === 'asc'
 
-    const handleSortClick = (e: React.MouseEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
+    const handleSortClick = () => {
       if (column.sortable) {
         onSort(column.field)
       }
     }
 
-    // Special handling for select column
-    if (column.field === 'select') {
-      return (
-        <th
-          ref={setNodeRef}
-          style={style}
-          className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide select-none ${
-            isDragging ? 'opacity-50' : ''
-          }`}
-          {...attributes}
-        >
-          <div className="flex items-center space-x-1">
-            {/* Drag handle */}
-            <div
-              {...listeners}
-              className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 flex-shrink-0"
-              title="Drag to reorder"
-            >
-              <Bars3Icon className="h-3 w-3 text-gray-400" />
-            </div>
-
-            {/* Select all checkbox */}
-            <input
-              type="checkbox"
-              checked={orders.length > 0 && selectedOrders.size === orders.length}
-              onChange={onSelectAll}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              title="Select all orders on this page"
-            />
-          </div>
-        </th>
-      )
-    }
-
     return (
-      <th
-        ref={setNodeRef}
-        style={style}
-        className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide select-none ${
-          isDragging ? 'opacity-50' : ''
-        }`}
-        {...attributes}
-      >
-        <div className="flex items-center space-x-1">
-          {/* Drag handle - separate from sort area */}
-          <div
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-gray-200 flex-shrink-0"
-            title="Drag to reorder"
-          >
-            <Bars3Icon className="h-3 w-3 text-gray-400" />
-          </div>
-
-          {/* Sort area - separate click handler */}
-          <div
-            className={`flex items-center space-x-1 flex-1 ${column.sortable ? 'cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5' : ''}`}
-            onClick={handleSortClick}
-          >
-            <span className="select-none">
-              {column.label}
-            </span>
-            {column.sortable && (
-              <div className="flex flex-col flex-shrink-0">
-                <ChevronUpIcon
-                  className={`h-3 w-3 ${isActive && isAsc ? 'text-indigo-600' : 'text-gray-300'}`}
-                />
-                <ChevronDownIcon
-                  className={`h-3 w-3 -mt-1 ${isActive && !isAsc ? 'text-indigo-600' : 'text-gray-300'}`}
-                />
-              </div>
-            )}
-          </div>
+      <SortableHeader key={column.id} column={column}>
+        <div
+          className={`flex items-center space-x-1 ${
+            column.sortable ? 'cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5' : ''
+          }`}
+          onClick={handleSortClick}
+        >
+          <span className="select-none">
+            {column.label}
+          </span>
+          {column.sortable && (
+            <div className="flex flex-col flex-shrink-0">
+              <ChevronUpIcon
+                className={`h-3 w-3 ${isActive && isAsc ? 'text-indigo-600' : 'text-gray-300'}`}
+              />
+              <ChevronDownIcon
+                className={`h-3 w-3 -mt-1 ${isActive && !isAsc ? 'text-indigo-600' : 'text-gray-300'}`}
+              />
+            </div>
+          )}
         </div>
-      </th>
+      </SortableHeader>
     )
   }
-
-  const CountryFlag = ({ countryCode }: { countryCode: string }) => (
-    <ReactCountryFlag
-      countryCode={countryCode}
-      svg
-      style={{
-        width: '24px',
-        height: '16px',
-      }}
-      title={countryCode}
-    />
-  )
 
   const renderCellContent = (column: ColumnConfig, order: Order) => {
     switch (column.field) {
@@ -198,6 +175,7 @@ export default function OrdersTable({
             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
           />
         )
+
       case 'orderNumber':
         return (
           <button
@@ -207,6 +185,18 @@ export default function OrdersTable({
             {order.orderNumber}
           </button>
         )
+
+      case 'orderDate':
+        return (
+          <div className="text-sm text-gray-900">
+            {new Date(order.orderDate).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric'
+            })}
+          </div>
+        )
+
       case 'customerName':
         return (
           <div>
@@ -218,30 +208,7 @@ export default function OrdersTable({
             </div>
           </div>
         )
-      case 'status':
-        return (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[order.status as keyof typeof STATUS_COLORS]}`}>
-            {order.status}
-          </span>
-        )
-      case 'fulfillmentStatus':
-        return (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${FULFILLMENT_COLORS[order.fulfillmentStatus as keyof typeof FULFILLMENT_COLORS]}`}>
-            {order.fulfillmentStatus.replace('_', ' ')}
-          </span>
-        )
-      case 'totalAmount':
-        return (
-          <div className="text-sm font-medium text-gray-900">
-            {formatCurrency(order.totalAmount, order.currency)}
-          </div>
-        )
-      case 'currency':
-        return (
-          <div className="text-sm text-gray-700 font-mono">
-            {order.currency}
-          </div>
-        )
+
       case 'itemCount':
         return (
           <button
@@ -251,112 +218,96 @@ export default function OrdersTable({
             {order.itemCount} item{order.itemCount !== 1 ? 's' : ''}
           </button>
         )
+
+      case 'status':
+        return (
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[order.status as keyof typeof STATUS_COLORS]}`}>
+            {order.status}
+          </span>
+        )
+
+      case 'fulfillmentStatus':
+        return (
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${FULFILLMENT_COLORS[order.fulfillmentStatus as keyof typeof FULFILLMENT_COLORS]}`}>
+            {order.fulfillmentStatus.replace('_', ' ')}
+          </span>
+        )
+
+      case 'totalAmount':
+        return (
+          <div className="text-sm font-medium text-gray-900">
+            {new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: order.currency || 'USD'
+            }).format(order.totalAmount || 0)}
+          </div>
+        )
+
       case 'platform':
         return (
-          <div className="text-sm text-gray-900">{order.platform}</div>
-        )
-      case 'country':
-        return (
-          <div className="flex items-center justify-center">
-            <CountryFlag countryCode={order.countryCode} />
-            <span className="sr-only">{order.country}</span>
-          </div>
-        )
-      case 'countryName':
-        return (
-          <div className="text-sm text-gray-700">
-            {order.country}
-          </div>
-        )
-      case 'countryCode':
-        return (
-          <div className="text-sm text-gray-700 font-mono">
-            {order.countryCode}
-          </div>
-        )
-      case 'orderDate':
-        return (
           <div className="text-sm text-gray-900">
-            {formatDate(order.orderDate)}
+            {order.platform}
           </div>
         )
-      case 'shippingFirstName':
-        return (
-          <div className="text-sm text-gray-700">
-            {order.shippingFirstName}
-          </div>
-        )
-      case 'shippingLastName':
-        return (
-          <div className="text-sm text-gray-700">
-            {order.shippingLastName}
-          </div>
-        )
-      case 'shippingFullName':
-        return (
-          <div className="text-sm text-gray-700">
-            {`${order.shippingFirstName} ${order.shippingLastName}`}
-          </div>
-        )
+
       case 'requestedShipping':
         return (
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-900">
             {order.requestedShipping}
           </div>
         )
-      case 'orderTime':
+
+      case 'shippingAddress':
+      case 'country':
         return (
-          <div className="text-sm text-gray-700">
-            {new Date(order.orderDate).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true
-            })}
+          <div className="text-sm text-gray-900">
+            <div>{order.shippingFirstName} {order.shippingLastName}</div>
+            <div className="text-xs text-gray-500">{order.country}</div>
           </div>
         )
-      case 'orderDay':
+
+      case 'warehouseName':
         return (
-          <div className="text-sm text-gray-700">
-            {new Date(order.orderDate).toLocaleDateString('en-US', {
-              weekday: 'long'
-            })}
+          <div className="text-sm text-gray-900">
+            {order.warehouseName}
           </div>
         )
-      case 'orderMonth':
+
+      case 'currency':
         return (
-          <div className="text-sm text-gray-700">
-            {new Date(order.orderDate).toLocaleDateString('en-US', {
-              month: 'long'
-            })}
+          <div className="text-sm text-gray-700 font-mono">
+            {order.currency}
           </div>
         )
-      case 'orderYear':
-        return (
-          <div className="text-sm text-gray-700">
-            {new Date(order.orderDate).getFullYear()}
-          </div>
-        )
+
       case 'actions':
         return (
           <div className="flex items-center space-x-2">
             <button
               onClick={() => onViewOrder(order)}
               className="text-indigo-600 hover:text-indigo-900"
-              title="View Details"
+              title="View Order"
             >
               <EyeIcon className="h-4 w-4" />
             </button>
             <button
               onClick={() => onPrintPackingSlip(order)}
-              className="text-green-600 hover:text-green-900"
+              className="text-gray-600 hover:text-gray-900"
               title="Print Packing Slip"
             >
-              <PrinterIcon className="h-4 w-4" />
+              <DocumentTextIcon className="h-4 w-4" />
             </button>
           </div>
         )
+
       default:
-        return null
+        // Fallback for any other fields
+        const value = order[column.field as keyof Order]
+        return (
+          <div className="text-sm text-gray-900">
+            {value?.toString() || ''}
+          </div>
+        )
     }
   }
 
@@ -364,7 +315,7 @@ export default function OrdersTable({
     <div className="mt-8 flow-root">
       <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
         <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-          <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+          <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -373,18 +324,44 @@ export default function OrdersTable({
               <table className="min-w-full divide-y divide-gray-300">
                 <thead className="bg-gray-50">
                   <tr>
-                    <SortableContext items={columns.map(col => col.id)} strategy={horizontalListSortingStrategy}>
-                      {columns.filter(col => col.visible).map((column) => (
-                        <SortableHeader key={column.id} column={column} />
-                      ))}
+                    <SortableContext
+                      items={visibleColumns.map(col => col.id)}
+                      strategy={horizontalListSortingStrategy}
+                    >
+                      {visibleColumns.map((column) => {
+                        if (column.field === 'select') {
+                          return (
+                            <th key={column.id} className="relative w-12 px-6 sm:w-16 sm:px-8">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                ref={(input) => {
+                                  if (input) input.indeterminate = someSelected && !allSelected
+                                }}
+                                onChange={onSelectAll}
+                                className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 sm:left-6"
+                              />
+                            </th>
+                          )
+                        }
+                        return renderSortableHeader(column)
+                      })}
                     </SortableContext>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50">
-                      {columns.filter(col => col.visible).map((column) => (
-                        <td key={`${order.id}-${column.id}`} className="px-6 py-4 whitespace-nowrap">
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {orders.map((order, orderIdx) => (
+                    <tr
+                      key={order.id}
+                      className={selectedOrders.has(order.id) ? 'bg-gray-50' : undefined}
+                    >
+                      {visibleColumns.map((column) => (
+                        <td
+                          key={column.id}
+                          className={`whitespace-nowrap px-6 py-4 text-sm ${
+                            column.field === 'select' ? 'relative w-12 sm:w-16' : ''
+                          }`}
+                        >
                           {renderCellContent(column, order)}
                         </td>
                       ))}

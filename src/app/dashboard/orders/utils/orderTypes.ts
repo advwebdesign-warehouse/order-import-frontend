@@ -64,13 +64,15 @@ export interface OrderWithDetails extends Order {
   notes?: string
 }
 
+// Updated FilterState to support arrays for multi-select filters
 export interface FilterState {
-  status: string
-  fulfillmentStatus: string
-  platform: string
-  dateRange: string
-  startDate: string
-  endDate: string
+  status: string[]               // Array of strings
+  fulfillmentStatus: string[]    // Array of strings
+  platform: string[]            // Array of strings
+  dateRange: string             // Single string
+  startDate: string             // Single string
+  endDate: string               // Single string
+  warehouseId?: string          // Optional string
 }
 
 export interface SortState {

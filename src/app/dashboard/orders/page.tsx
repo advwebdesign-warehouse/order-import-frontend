@@ -1,3 +1,5 @@
+// File: app/dashboard/orders/page.tsx
+
 'use client'
 
 import { useState } from 'react'
@@ -16,6 +18,7 @@ import { useOrderColumns } from './hooks/useOrderColumns'
 
 // Shared components
 import ColumnSettings, { ColumnConfig } from '../shared/components/ColumnSettings'
+import { usePagination } from '../shared/hooks/usePagination'
 
 // Utils
 import { transformToDetailedOrder } from './utils/orderUtils'
@@ -25,6 +28,9 @@ import { printMultiplePackingSlips } from './utils/packingSlipGenerator'
 // Types
 import { Order, OrderWithDetails } from './utils/orderTypes'
 import { ITEMS_PER_PAGE } from './constants/orderConstants'
+
+//Settings
+import { useSettings } from '../shared/hooks/useSettings'
 
 // Helper function to export orders as CSV
 const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
@@ -62,27 +68,14 @@ const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
         case 'countryCode':
           return order.countryCode || ''
         case 'orderDate':
-          return order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          }) : ''
-        case 'shippingFirstName':
-          return order.shippingFirstName || ''
-        case 'shippingLastName':
-          return order.shippingLastName || ''
-        case 'shippingFullName':
-          return `${order.shippingFirstName || ''} ${order.shippingLastName || ''}`.trim()
-        case 'requestedShipping':
-          return order.requestedShipping || ''
+          return order.orderDate ? new Date(order.orderDate).toLocaleString() : ''
         case 'orderTime':
-          return order.orderDate ? new Date(order.orderDate).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          }) : ''
+          return order.orderDate ?
+            new Date(order.orderDate).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            }) : ''
         case 'orderDay':
           return order.orderDate ? new Date(order.orderDate).toLocaleDateString('en-US', {
             weekday: 'long'
@@ -146,9 +139,10 @@ export default function OrdersPage() {
   } = useOrderColumns(filteredOrders)
 
   // Pagination
-  const totalPages = Math.ceil(sortedOrders.length / ITEMS_PER_PAGE)
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-  const endIndex = startIndex + ITEMS_PER_PAGE
+  const { ordersPerPage, setOrdersPerPage } = usePagination()
+  const totalPages = Math.ceil(sortedOrders.length / (ordersPerPage || 20))
+  const startIndex = (currentPage - 1) * (ordersPerPage || 20)
+  const endIndex = startIndex + (ordersPerPage || 20)
   const currentOrders = sortedOrders.slice(startIndex, endIndex)
 
   // Event handlers
@@ -197,19 +191,28 @@ export default function OrdersPage() {
   const handleClearAllFilters = () => {
     setSearchTerm('')
     setFilters({
-      status: '',
-      fulfillmentStatus: '',
-      platform: '',
+      status: [],  // Updated to empty arrays
+      fulfillmentStatus: [],  // Updated to empty arrays
+      platform: [],  // Updated to empty arrays
       dateRange: '',
       startDate: '',
-      endDate: ''
+      endDate: '',
+      warehouseId: ''
     })
+  }
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setOrdersPerPage(newItemsPerPage)
+    setCurrentPage(1) // Reset to first page
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading orders...</p>
+        </div>
       </div>
     )
   }
@@ -223,6 +226,9 @@ export default function OrdersPage() {
         onResetLayout={handleResetLayout}
         columns={columns}
         onColumnVisibilityChange={handleColumnVisibilityChange}
+        onColumnReorder={handleColumnReorder}
+        itemsPerPage={ordersPerPage || 20}
+        onItemsPerPageChange={handleItemsPerPageChange}
       />
 
       <OrdersFilters
@@ -252,25 +258,41 @@ export default function OrdersPage() {
         currentPage={currentPage}
         totalPages={totalPages}
         totalItems={sortedOrders.length}
-        itemsPerPage={ITEMS_PER_PAGE}
+        itemsPerPage={ordersPerPage || 20}
         onPageChange={setCurrentPage}
       />
 
-      {/* Modals */}
-      {selectedOrder && (
-        <>
-          <OrderDetailsModal
-            isOpen={showOrderDetails}
-            onClose={() => setShowOrderDetails(false)}
-            order={selectedOrder}
-          />
+      {/* Column Management - Separate from Screen Options for reordering */}
+      <div className="mt-4 flex justify-end">
+        <ColumnSettings
+          columns={columns}
+          onColumnVisibilityChange={handleColumnVisibilityChange}
+          onColumnReorder={handleColumnReorder}
+          buttonText="Manage Columns"
+        />
+      </div>
 
-          <PackingSlip
-            isOpen={showPackingSlip}
-            onClose={() => setShowPackingSlip(false)}
-            order={selectedOrder}
-          />
-        </>
+      {/* Modals */}
+      {showOrderDetails && selectedOrder && (
+        <OrderDetailsModal
+          order={selectedOrder}
+          isOpen={showOrderDetails}
+          onClose={() => {
+            setShowOrderDetails(false)
+            setSelectedOrder(null)
+          }}
+        />
+      )}
+
+      {showPackingSlip && selectedOrder && (
+        <PackingSlip
+          order={selectedOrder}
+          isOpen={showPackingSlip}
+          onClose={() => {
+            setShowPackingSlip(false)
+            setSelectedOrder(null)
+          }}
+        />
       )}
     </div>
   )

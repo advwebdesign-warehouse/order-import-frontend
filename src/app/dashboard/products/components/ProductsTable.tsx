@@ -46,6 +46,7 @@ import {
   formatProductType,
   formatVisibility
 } from '../utils/productUtils'
+import { useSettings } from '../../shared/hooks/useSettings'
 
 interface ProductsTableProps {
   products: Product[]
@@ -74,6 +75,9 @@ export default function ProductsTable({
   onDuplicateProduct,
   onColumnReorder
 }: ProductsTableProps) {
+  const { settings } = useSettings()
+  const isStockManagementEnabled = settings.inventory.manageStock
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -285,7 +289,10 @@ export default function ProductsTable({
           </span>
         )
 
+      // Stock-related columns - only render if stock management is enabled
       case 'stockStatus':
+        if (!isStockManagementEnabled) return null
+
         const stockLevel = getStockLevel(product)
         return (
           <div className="flex items-center">
@@ -302,6 +309,8 @@ export default function ProductsTable({
         )
 
       case 'stockQuantity':
+        if (!isStockManagementEnabled) return null
+
         return (
           <div className="text-sm">
             <div className="font-medium text-gray-900">

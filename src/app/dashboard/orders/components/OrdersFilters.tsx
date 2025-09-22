@@ -1,286 +1,412 @@
+// File: app/dashboard/orders/components/OrdersFilters.tsx
+
 'use client'
 
-import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import { Fragment } from 'react'
+import { Listbox, Transition } from '@headlessui/react'
+import { ChevronUpDownIcon, CheckIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import { FilterState } from '../utils/orderTypes'
+import { FILTER_OPTIONS } from '../constants/orderConstants'
+import { useWarehouses } from '../../warehouses/context/WarehouseContext'
 
 interface OrdersFiltersProps {
-  searchTerm: string
-  onSearchChange: (term: string) => void
-  showFilters: boolean
-  onToggleFilters: () => void
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   onClearAllFilters: () => void
+  hideWarehouseFilter?: boolean
 }
 
 export default function OrdersFilters({
-  searchTerm,
-  onSearchChange,
-  showFilters,
-  onToggleFilters,
   filters,
   onFiltersChange,
-  onClearAllFilters
+  onClearAllFilters,
+  hideWarehouseFilter = false
 }: OrdersFiltersProps) {
-  const hasActiveFilters = searchTerm ||
-    filters.status ||
-    filters.fulfillmentStatus ||
-    filters.platform ||
-    filters.dateRange ||
-    filters.startDate ||
-    filters.endDate
+  const { warehouses } = useWarehouses()
+
+  // Helper function to safely render filter values
+  const renderFilterValue = (value: any): string => {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (typeof value === 'object' && value !== null) {
+      // Handle object values (like date ranges)
+      if (value.start && value.end) {
+        return `${value.start} to ${value.end}`
+      }
+      if (value.label) {
+        return value.label
+      }
+      // Fallback: convert object to JSON string
+      return JSON.stringify(value)
+    }
+    return String(value || '')
+  }
+
+  // Helper function to ensure dateRange is always a string
+  const getDateRangeLabel = (dateRange: any): string => {
+    if (typeof dateRange === 'string') {
+      // Convert internal values to readable labels
+      switch (dateRange) {
+        case 'today': return 'Today'
+        case 'yesterday': return 'Yesterday'
+        case 'last7days': return 'Last 7 Days'
+        case 'last30days': return 'Last 30 Days'
+        case 'last90days': return 'Last 90 Days'
+        case 'thismonth': return 'This Month'
+        case 'lastmonth': return 'Last Month'
+        case 'custom': return 'Custom Range'
+        default: return dateRange
+      }
+    }
+    if (typeof dateRange === 'object' && dateRange !== null) {
+      if (dateRange.start && dateRange.end) {
+        return `${dateRange.start} to ${dateRange.end}`
+      }
+    }
+    return 'Unknown Range'
+  }
+
+  // Defensive validation to ensure arrays are always arrays and strings are strings
+  const safeFilters = {
+    ...filters,
+    status: Array.isArray(filters.status) ? filters.status : [],
+    fulfillmentStatus: Array.isArray(filters.fulfillmentStatus) ? filters.fulfillmentStatus : [],
+    platform: Array.isArray(filters.platform) ? filters.platform : [],
+    dateRange: typeof filters.dateRange === 'string' ? filters.dateRange : '',
+    startDate: typeof filters.startDate === 'string' ? filters.startDate : '',
+    endDate: typeof filters.endDate === 'string' ? filters.endDate : '',
+    warehouseId: typeof filters.warehouseId === 'string' ? filters.warehouseId : ''
+  }
+
+  // Multi-select handler for array filters
+  const handleMultiSelectChange = (field: keyof FilterState, value: string) => {
+    const currentValues = safeFilters[field] as string[]
+    const newValues = currentValues.includes(value)
+      ? currentValues.filter(v => v !== value)
+      : [...currentValues, value]
+
+    onFiltersChange({
+      ...safeFilters,
+      [field]: newValues
+    })
+  }
+
+  // Single select handler for non-array filters
+  const handleSingleSelectChange = (field: keyof FilterState, value: string) => {
+    onFiltersChange({
+      ...safeFilters,
+      [field]: value
+    })
+  }
+
+  // Get warehouse options for filter
+  const warehouseOptions = warehouses
+    .filter(w => w.status === 'active')
+    .map(warehouse => ({
+      value: warehouse.id,
+      label: warehouse.name
+    }))
+
+  const MultiSelectFilter = ({
+    label,
+    values,
+    options,
+    field
+  }: {
+    label: string
+    values: string[]
+    options: { value: string; label: string }[]
+    field: keyof FilterState
+  }) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <Listbox multiple value={values} onChange={(newValues) => onFiltersChange({ ...safeFilters, [field]: newValues })}>
+        <div className="relative">
+          <Listbox.Button className="relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm">
+            <span className="block truncate">
+              {values.length === 0
+                ? `All ${label}`
+                : values.length === 1
+                ? options.find(opt => opt.value === values[0])?.label
+                : `${values.length} selected`
+              }
+            </span>
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <ChevronUpDownIcon className="h-5 w-5 text-gray-400" />
+            </span>
+          </Listbox.Button>
+
+          <Transition
+            as={Fragment}
+            leave="transition ease-in duration-100"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+              {options.map((option) => (
+                <Listbox.Option
+                  key={option.value}
+                  value={option.value}
+                  className={({ active }) =>
+                    `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                      active ? 'bg-indigo-100 text-indigo-900' : 'text-gray-900'
+                    }`
+                  }
+                >
+                  {({ selected }) => (
+                    <>
+                      <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                        {option.label}
+                      </span>
+                      {selected ? (
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-indigo-600">
+                          <CheckIcon className="h-5 w-5" />
+                        </span>
+                      ) : null}
+                    </>
+                  )}
+                </Listbox.Option>
+              ))}
+            </Listbox.Options>
+          </Transition>
+        </div>
+      </Listbox>
+    </div>
+  )
+
+  const SingleSelectFilter = ({
+    label,
+    value,
+    options,
+    field,
+    placeholder = `All ${label}`
+  }: {
+    label: string
+    value: string
+    options: { value: string; label: string }[]
+    field: keyof FilterState
+    placeholder?: string
+  }) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => handleSingleSelectChange(field, e.target.value)}
+        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+
+  const hasActiveFilters =
+    (safeFilters.status && safeFilters.status.length > 0) ||
+    (safeFilters.fulfillmentStatus && safeFilters.fulfillmentStatus.length > 0) ||
+    (safeFilters.platform && safeFilters.platform.length > 0) ||
+    safeFilters.dateRange ||
+    safeFilters.startDate ||
+    safeFilters.endDate ||
+    (!hideWarehouseFilter && safeFilters.warehouseId)
 
   return (
-    <div className="mt-8">
-      <div className="flex flex-col sm:flex-row gap-4">
-        {/* Search */}
-        <div className="flex-1">
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-            </div>
-            <input
-              type="text"
-              placeholder="Search orders, customers, or emails..."
-              value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="block w-full rounded-md border-0 py-1.5 pl-10 pr-3 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-            />
-          </div>
+    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium text-gray-900">Filters</h3>
+        {hasActiveFilters && (
+          <button
+            onClick={onClearAllFilters}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <XMarkIcon className="h-4 w-4 mr-1" />
+            Clear All
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {/* Status Filter */}
+        <MultiSelectFilter
+          label="Status"
+          values={safeFilters.status}
+          options={FILTER_OPTIONS.STATUS}
+          field="status"
+        />
+
+        {/* Fulfillment Status Filter */}
+        <MultiSelectFilter
+          label="Fulfillment Status"
+          values={safeFilters.fulfillmentStatus}
+          options={FILTER_OPTIONS.FULFILLMENT_STATUS}
+          field="fulfillmentStatus"
+        />
+
+        {/* Platform Filter */}
+        <MultiSelectFilter
+          label="Platform"
+          values={safeFilters.platform}
+          options={FILTER_OPTIONS.PLATFORM}
+          field="platform"
+        />
+
+        {/* Warehouse Filter - Only show if not hidden */}
+        {!hideWarehouseFilter && (
+          <SingleSelectFilter
+            label="Warehouse"
+            value={safeFilters.warehouseId}
+            options={warehouseOptions}
+            field="warehouseId"
+            placeholder="All Warehouses"
+          />
+        )}
+
+        {/* Date Range Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+          <select
+            value={safeFilters.dateRange}
+            onChange={(e) => handleSingleSelectChange('dateRange', e.target.value)}
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            <option value="">All Dates</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7days">Last 7 Days</option>
+            <option value="last30days">Last 30 Days</option>
+            <option value="last90days">Last 90 Days</option>
+            <option value="thismonth">This Month</option>
+            <option value="lastmonth">Last Month</option>
+            <option value="custom">Custom Range</option>
+          </select>
         </div>
 
-        {/* Filter Toggle */}
-        <button
-          onClick={onToggleFilters}
-          className="inline-flex items-center gap-x-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-        >
-          <FunnelIcon className="h-4 w-4" />
-          Filters
-        </button>
+        {/* Custom Date Range */}
+        {safeFilters.dateRange === 'custom' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={safeFilters.startDate}
+                onChange={(e) => handleSingleSelectChange('startDate', e.target.value)}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <input
+                type="date"
+                value={safeFilters.endDate}
+                onChange={(e) => handleSingleSelectChange('endDate', e.target.value)}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Active Filters Display */}
       {hasActiveFilters && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">Active filters:</span>
+        <div className="border-t pt-4">
+          <div className="flex flex-wrap gap-2">
+            {/* Status filters - Safe array access */}
+            {safeFilters.status.map(status => (
+              <span key={status} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                Status: {FILTER_OPTIONS.STATUS.find(s => s.value === status)?.label || status}
+                <button
+                  onClick={() => handleMultiSelectChange('status', status)}
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-blue-400 hover:bg-blue-200 hover:text-blue-500"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
 
-          {/* Search Term Filter */}
-          {searchTerm && (
-            <FilterBadge
-              label={`Search: "${searchTerm}"`}
-              onRemove={() => onSearchChange('')}
-              color="blue"
-            />
-          )}
+            {/* Fulfillment Status filters - Safe array access */}
+            {safeFilters.fulfillmentStatus.map(status => (
+              <span key={status} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Fulfillment: {FILTER_OPTIONS.FULFILLMENT_STATUS.find(s => s.value === status)?.label || status}
+                <button
+                  onClick={() => handleMultiSelectChange('fulfillmentStatus', status)}
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-green-400 hover:bg-green-200 hover:text-green-500"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
 
-          {/* Status Filter */}
-          {filters.status && (
-            <FilterBadge
-              label={`Status: ${filters.status}`}
-              onRemove={() => onFiltersChange({ ...filters, status: '' })}
-              color="green"
-            />
-          )}
+            {/* Platform filters - Safe array access */}
+            {safeFilters.platform.map(platform => (
+              <span key={platform} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                Platform: {FILTER_OPTIONS.PLATFORM.find(p => p.value === platform)?.label || platform}
+                <button
+                  onClick={() => handleMultiSelectChange('platform', platform)}
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-purple-400 hover:bg-purple-200 hover:text-purple-500"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
 
-          {/* Fulfillment Status Filter */}
-          {filters.fulfillmentStatus && (
-            <FilterBadge
-              label={`Fulfillment: ${filters.fulfillmentStatus.replace('_', ' ')}`}
-              onRemove={() => onFiltersChange({ ...filters, fulfillmentStatus: '' })}
-              color="purple"
-            />
-          )}
+            {/* Date Range filter - SAFE RENDERING */}
+            {safeFilters.dateRange && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                Range: {getDateRangeLabel(safeFilters.dateRange)}
+                <button
+                  onClick={() => handleSingleSelectChange('dateRange', '')}
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-yellow-400 hover:bg-yellow-200 hover:text-yellow-500"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+            )}
 
-          {/* Platform Filter */}
-          {filters.platform && (
-            <FilterBadge
-              label={`Platform: ${filters.platform}`}
-              onRemove={() => onFiltersChange({ ...filters, platform: '' })}
-              color="indigo"
-            />
-          )}
+            {/* Start Date filter - SAFE RENDERING */}
+            {safeFilters.startDate && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                From: {renderFilterValue(safeFilters.startDate)}
+                <button
+                  onClick={() => handleSingleSelectChange('startDate', '')}
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-orange-400 hover:bg-orange-200 hover:text-orange-500"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+            )}
 
-          {/* Date Range Filter */}
-          {filters.dateRange && filters.dateRange !== 'custom' && (
-            <FilterBadge
-              label={`Date: ${getDateRangeLabel(filters.dateRange)}`}
-              onRemove={() => onFiltersChange({ ...filters, dateRange: '', startDate: '', endDate: '' })}
-              color="orange"
-            />
-          )}
+            {/* End Date filter - SAFE RENDERING */}
+            {safeFilters.endDate && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                To: {renderFilterValue(safeFilters.endDate)}
+                <button
+                  onClick={() => handleSingleSelectChange('endDate', '')}
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-red-400 hover:bg-red-200 hover:text-red-500"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+            )}
 
-          {/* Custom Date Range Filter */}
-          {filters.dateRange === 'custom' && (filters.startDate || filters.endDate) && (
-            <FilterBadge
-              label={`Date: ${filters.startDate ? new Date(filters.startDate).toLocaleDateString() : 'Any'} - ${filters.endDate ? new Date(filters.endDate).toLocaleDateString() : 'Any'}`}
-              onRemove={() => onFiltersChange({ ...filters, dateRange: '', startDate: '', endDate: '' })}
-              color="orange"
-            />
-          )}
-
-          {/* Clear All Filters */}
-          <button
-            type="button"
-            onClick={onClearAllFilters}
-            className="inline-flex items-center gap-x-1.5 rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
-      {/* Filter Panel */}
-      {showFilters && (
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={filters.status}
-                onChange={(e) => onFiltersChange({ ...filters, status: e.target.value })}
-                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-              >
-                <option value="">All Statuses</option>
-                <option value="PENDING">Pending</option>
-                <option value="PROCESSING">Processing</option>
-                <option value="SHIPPED">Shipped</option>
-                <option value="DELIVERED">Delivered</option>
-                <option value="CANCELLED">Cancelled</option>
-                <option value="REFUNDED">Refunded</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Fulfillment</label>
-              <select
-                value={filters.fulfillmentStatus}
-                onChange={(e) => onFiltersChange({ ...filters, fulfillmentStatus: e.target.value })}
-                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-              >
-                <option value="">All Fulfillment</option>
-                <option value="PENDING">Pending</option>
-                <option value="ASSIGNED">Assigned</option>
-                <option value="PICKING">Picking</option>
-                <option value="PACKED">Packed</option>
-                <option value="READY_TO_SHIP">Ready to Ship</option>
-                <option value="SHIPPED">Shipped</option>
-                <option value="DELIVERED">Delivered</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
-              <select
-                value={filters.platform}
-                onChange={(e) => onFiltersChange({ ...filters, platform: e.target.value })}
-                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-              >
-                <option value="">All Platforms</option>
-                <option value="Shopify">Shopify</option>
-                <option value="WooCommerce">WooCommerce</option>
-                <option value="BigCommerce">BigCommerce</option>
-                <option value="Magento">Magento</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-              <select
-                value={filters.dateRange}
-                onChange={(e) => onFiltersChange({
-                  ...filters,
-                  dateRange: e.target.value,
-                  startDate: e.target.value === 'custom' ? filters.startDate : '',
-                  endDate: e.target.value === 'custom' ? filters.endDate : ''
-                })}
-                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-              >
-                <option value="">All Time</option>
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="last7days">Last 7 Days</option>
-                <option value="last30days">Last 30 Days</option>
-                <option value="thismonth">This Month</option>
-                <option value="lastmonth">Last Month</option>
-                <option value="custom">Custom Range</option>
-              </select>
-            </div>
+            {/* Warehouse filter - SAFE RENDERING */}
+            {!hideWarehouseFilter && safeFilters.warehouseId && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                Warehouse: {warehouses.find(w => w.id === safeFilters.warehouseId)?.name || safeFilters.warehouseId}
+                <button
+                  onClick={() => handleSingleSelectChange('warehouseId', '')}
+                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-indigo-400 hover:bg-indigo-200 hover:text-indigo-500"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+            )}
           </div>
-
-          {/* Custom Date Range Inputs */}
-          {filters.dateRange === 'custom' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-200 bg-white rounded-md p-3">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">From Date</label>
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => onFiltersChange({ ...filters, startDate: e.target.value })}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="Select start date"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">To Date</label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => onFiltersChange({ ...filters, endDate: e.target.value })}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  min={filters.startDate}
-                  placeholder="Select end date"
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
   )
-}
-
-// Helper component for filter badges
-interface FilterBadgeProps {
-  label: string
-  onRemove: () => void
-  color: 'blue' | 'green' | 'purple' | 'indigo' | 'orange'
-}
-
-function FilterBadge({ label, onRemove, color }: FilterBadgeProps) {
-  const colorClasses = {
-    blue: 'bg-blue-100 text-blue-700 hover:bg-blue-200 stroke-blue-700/50 group-hover:stroke-blue-700/75',
-    green: 'bg-green-100 text-green-700 hover:bg-green-200 stroke-green-700/50 group-hover:stroke-green-700/75',
-    purple: 'bg-purple-100 text-purple-700 hover:bg-purple-200 stroke-purple-700/50 group-hover:stroke-purple-700/75',
-    indigo: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 stroke-indigo-700/50 group-hover:stroke-indigo-700/75',
-    orange: 'bg-orange-100 text-orange-700 hover:bg-orange-200 stroke-orange-700/50 group-hover:stroke-orange-700/75'
-  }
-
-  return (
-    <span className={`inline-flex items-center gap-x-1.5 rounded-full px-2 py-1 text-xs font-medium ${colorClasses[color]}`}>
-      {label}
-      <button
-        type="button"
-        onClick={onRemove}
-        className={`group relative -mr-1 h-3.5 w-3.5 rounded-sm ${colorClasses[color]}`}
-      >
-        <span className="sr-only">Remove filter</span>
-        <svg viewBox="0 0 14 14" className={`h-3.5 w-3.5 ${colorClasses[color]}`}>
-          <path d="m4 4 6 6m0-6-6 6" />
-        </svg>
-      </button>
-    </span>
-  )
-}
-
-// Helper function for date range labels
-function getDateRangeLabel(dateRange: string): string {
-  const labels = {
-    today: 'Today',
-    yesterday: 'Yesterday',
-    last7days: 'Last 7 Days',
-    last30days: 'Last 30 Days',
-    thismonth: 'This Month',
-    lastmonth: 'Last Month'
-  }
-  return labels[dateRange as keyof typeof labels] || dateRange
 }

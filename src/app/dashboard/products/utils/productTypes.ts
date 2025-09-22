@@ -43,6 +43,10 @@ export interface Product {
   metaTitle?: string
   metaDescription?: string
   seoSlug?: string
+  // Warehouse support
+  warehouseId?: string
+  warehouseName?: string
+  warehouseStock?: WarehouseStock[]
 }
 
 export interface ProductImage {

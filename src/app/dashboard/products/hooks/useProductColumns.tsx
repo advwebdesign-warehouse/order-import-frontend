@@ -1,10 +1,45 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Product, ProductColumnConfig, ProductSortState } from '../utils/productTypes'
 import { DEFAULT_PRODUCT_COLUMNS, DEFAULT_PRODUCT_SORT } from '../constants/productConstants'
+import { useSettings } from '../../shared/hooks/useSettings'
 
 export function useProductColumns(products: Product[]) {
-  const [columns, setColumns] = useState<ProductColumnConfig[]>(DEFAULT_PRODUCT_COLUMNS)
+  const { settings } = useSettings()
+  const [columns, setColumns] = useState<ProductColumnConfig[]>([])
   const [sortConfig, setSortConfig] = useState<ProductSortState>(DEFAULT_PRODUCT_SORT)
+
+  // Initialize columns based on stock management settings
+  useEffect(() => {
+    const getFilteredColumns = () => {
+      if (settings.inventory.manageStock) {
+        // Show all default columns when stock management is enabled
+        return DEFAULT_PRODUCT_COLUMNS
+      } else {
+        // Hide stock-related columns when stock management is disabled
+        return DEFAULT_PRODUCT_COLUMNS.map(column => {
+          if (column.field === 'stockStatus' || column.field === 'stockQuantity') {
+            return { ...column, visible: false }
+          }
+          return column
+        })
+      }
+    }
+
+    setColumns(getFilteredColumns())
+  }, [settings.inventory.manageStock])
+
+  // Filter columns for display based on stock management setting
+  const visibleColumns = useMemo(() => {
+    if (settings.inventory.manageStock) {
+      return columns
+    } else {
+      // Completely hide stock columns from the UI when stock management is disabled
+      return columns.filter(col =>
+        col.field !== 'stockStatus' &&
+        col.field !== 'stockQuantity'
+      )
+    }
+  }, [columns, settings.inventory.manageStock])
 
   // Sort products based on current sort config
   const sortedProducts = useMemo(() => {
@@ -126,8 +161,12 @@ export function useProductColumns(products: Product[]) {
     })
   }, [products, sortConfig])
 
-  // Handle sorting
+  // Handle sorting - prevent sorting on stock columns when stock management is disabled
   const handleSort = (field: string) => {
+    if (!settings.inventory.manageStock && (field === 'stockStatus' || field === 'stockQuantity')) {
+      return // Don't allow sorting on hidden stock columns
+    }
+
     setSortConfig(prevSort => {
       const newDirection = prevSort.field === field && prevSort.direction === 'asc' ? 'desc' : 'asc'
       return {
@@ -139,6 +178,13 @@ export function useProductColumns(products: Product[]) {
 
   // Handle column visibility changes
   const handleColumnVisibilityChange = (columnId: string, visible: boolean) => {
+    // Don't allow hiding/showing stock columns when stock management is disabled
+    const column = columns.find(col => col.id === columnId)
+    if (!settings.inventory.manageStock && column &&
+        (column.field === 'stockStatus' || column.field === 'stockQuantity')) {
+      return
+    }
+
     setColumns(prevColumns => {
       return prevColumns.map(col =>
         col.id === columnId ? { ...col, visible } : col
@@ -154,16 +200,30 @@ export function useProductColumns(products: Product[]) {
   // Reset to defaults
   const resetToDefaults = () => {
     setSortConfig(DEFAULT_PRODUCT_SORT)
-    setColumns(DEFAULT_PRODUCT_COLUMNS)
+
+    // Reset columns based on current stock management setting
+    if (settings.inventory.manageStock) {
+      setColumns(DEFAULT_PRODUCT_COLUMNS)
+    } else {
+      setColumns(DEFAULT_PRODUCT_COLUMNS.map(column => {
+        if (column.field === 'stockStatus' || column.field === 'stockQuantity') {
+          return { ...column, visible: false }
+        }
+        return column
+      }))
+    }
   }
 
   return {
-    columns,
+    columns: visibleColumns,
     sortConfig,
     sortedProducts,
     handleSort,
     handleColumnVisibilityChange,
     handleColumnReorder,
-    resetToDefaults
+    resetToDefaults,
+    // Additional helpers
+    isStockManagementEnabled: settings.inventory.manageStock,
+    stockSettings: settings.inventory
   }
 }

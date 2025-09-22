@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ProductsToolbar from './components/ProductsToolbar'
 import ProductsFilters from './components/ProductsFilters'
 import ProductsTable from './components/ProductsTable'
@@ -12,8 +12,14 @@ import { useProductFilters } from './hooks/useProductFilters'
 import { useProductSelection } from './hooks/useProductSelection'
 import { useProductColumns } from './hooks/useProductColumns'
 
+
 // Shared components
 import { ColumnConfig } from '../shared/components/ColumnSettings'
+import { usePagination } from '../shared/hooks/usePagination'
+import WarehouseSelector from '../shared/components/WarehouseSelector'
+
+// Warehouse support
+import { useWarehouses } from '../warehouses/hooks/useWarehouses'
 
 // Utils
 import { exportToCSV, ExportableItem } from '../shared/utils/csvExporter'
@@ -23,12 +29,12 @@ import { Product } from './utils/productTypes'
 import { PRODUCTS_PER_PAGE } from './constants/productConstants'
 
 // Helper function to export products as CSV
-const exportProductsToCSV = (products: Product[], columns: ColumnConfig[]) => {
+const exportProductsToCSV = (products: Product[], columns: ColumnConfig[], isStockManagementEnabled: boolean) => {
   // Convert ColumnConfig to ExportColumn format expected by your CSV exporter
   const exportColumns = columns.map(column => ({
     ...column,
     formatter: (value: any, item: ExportableItem): string => {
-      // Cast item to Product type since we know it's a product
+      // Cast item to Product type since we know it's an product
       const product = item as Product
 
       switch (column.field) {
@@ -50,9 +56,9 @@ const exportProductsToCSV = (products: Product[], columns: ColumnConfig[]) => {
         case 'type':
           return product.type || ''
         case 'stockStatus':
-          return (product.stockStatus || '').replace('_', ' ')
+          return isStockManagementEnabled ? (product.stockStatus || '').replace('_', ' ') : ''
         case 'stockQuantity':
-          return (product.stockQuantity || 0).toString()
+          return isStockManagementEnabled ? (product.stockQuantity || 0).toString() : ''
         case 'category':
           return product.category || ''
         case 'vendor':
@@ -69,6 +75,8 @@ const exportProductsToCSV = (products: Product[], columns: ColumnConfig[]) => {
           return product.variants ? product.variants.length.toString() : '0'
         case 'parentId':
           return product.parentId || ''
+        case 'warehouseName':
+          return product.warehouseName || ''
         case 'createdAt':
           return product.createdAt ? new Date(product.createdAt).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -91,6 +99,11 @@ const exportProductsToCSV = (products: Product[], columns: ColumnConfig[]) => {
     }
   }))
 
+  // Filter out stock-related columns if stock management is disabled
+  const filteredColumns = isStockManagementEnabled
+    ? exportColumns
+    : exportColumns.filter(col => col.field !== 'stockStatus' && col.field !== 'stockQuantity')
+
   // Generate filename with current date
   const now = new Date()
   const dateStr = now.toISOString().split('T')[0] // YYYY-MM-DD format
@@ -98,15 +111,28 @@ const exportProductsToCSV = (products: Product[], columns: ColumnConfig[]) => {
   const filename = `products-export-${dateStr}-${timeStr}.csv`
 
   // Use your existing CSV exporter
-  exportToCSV(products, exportColumns, filename)
+  exportToCSV(products, filteredColumns, filename)
 }
 
 export default function ProductsPage() {
   // Modal states
   const [currentPage, setCurrentPage] = useState(1)
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
+
+  // Get URL parameters for warehouse filtering
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const warehouseParam = urlParams.get('warehouse')
+    if (warehouseParam) {
+      setSelectedWarehouseId(warehouseParam)
+    }
+  }, [])
+
+  // Warehouse management
+  const { warehouses } = useWarehouses()
 
   // Custom hooks for state management
-  const { products, loading } = useProducts()
+  const { products, loading } = useProducts(selectedWarehouseId)
 
   const {
     searchTerm,
@@ -134,6 +160,8 @@ export default function ProductsPage() {
     handleColumnReorder,
     resetToDefaults
   } = useProductColumns(filteredProducts)
+
+  const { productsPerPage, setProductsPerPage } = usePagination()
 
   // Pagination
   const totalPages = Math.ceil(sortedProducts.length / PRODUCTS_PER_PAGE)
@@ -215,8 +243,37 @@ export default function ProductsPage() {
       hasVariants: '',
       parentOnly: false,
       includeVariants: true,
+      warehouseId: '',
     })
   }
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setProductsPerPage(newItemsPerPage)
+    setCurrentPage(1)
+  }
+
+  const handleWarehouseChange = (warehouseId: string) => {
+    setSelectedWarehouseId(warehouseId)
+    setCurrentPage(1)
+    clearSelection()
+
+    // Update URL to reflect warehouse selection
+    const url = new URL(window.location.href)
+    if (warehouseId) {
+      url.searchParams.set('warehouse', warehouseId)
+    } else {
+      url.searchParams.delete('warehouse')
+    }
+    window.history.replaceState({}, '', url.toString())
+  }
+
+  // Get selected warehouse name for display
+  const selectedWarehouse = warehouses.find(w => w.id === selectedWarehouseId)
+  const warehouseDisplayName = selectedWarehouse
+    ? selectedWarehouse.name
+    : selectedWarehouseId === ''
+    ? 'All Warehouses'
+    : 'Unknown Warehouse'
 
   if (loading) {
     return (
@@ -228,6 +285,35 @@ export default function ProductsPage() {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
+      {/* Warehouse Selector */}
+      <div className="mb-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-900">Warehouse</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {selectedWarehouseId ? `Showing products from ${warehouseDisplayName}` : 'Showing products from all warehouses'}
+              </p>
+            </div>
+            <div className="w-64">
+              <WarehouseSelector
+                warehouses={warehouses.map(w => ({
+                  id: w.id,
+                  name: w.name,
+                  code: w.code,
+                  isDefault: w.isDefault,
+                  status: w.status,
+                  productCount: w.productCount
+                }))}
+                selectedWarehouseId={selectedWarehouseId}
+                onWarehouseChange={handleWarehouseChange}
+                showProductCount={true}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <ProductsToolbar
         selectedProductsCount={selectedProducts.size}
         onBulkAction={handleBulkAction}

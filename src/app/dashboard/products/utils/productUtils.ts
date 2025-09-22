@@ -1,158 +1,6 @@
+// File: app/dashboard/products/utils/productUtils.ts
+
 import { Product } from './productTypes'
-
-export function formatCurrency(amount: number, currency: string = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency
-  }).format(amount)
-}
-
-export function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
-}
-
-export function formatDateTime(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-export function formatStockStatus(status: string): string {
-  switch (status) {
-    case 'in_stock':
-      return 'In Stock'
-    case 'out_of_stock':
-      return 'Out of Stock'
-    case 'low_stock':
-      return 'Low Stock'
-    case 'backorder':
-      return 'Backorder'
-    default:
-      return status
-  }
-}
-
-export function formatProductType(type: string): string {
-  switch (type) {
-    case 'simple':
-      return 'Simple'
-    case 'variant':
-      return 'Variant'
-    case 'bundle':
-      return 'Bundle'
-    case 'configurable':
-      return 'Configurable'
-    default:
-      return type
-  }
-}
-
-export function formatVisibility(visibility: string): string {
-  switch (visibility) {
-    case 'visible':
-      return 'Visible'
-    case 'hidden':
-      return 'Hidden'
-    case 'catalog':
-      return 'Catalog Only'
-    case 'search':
-      return 'Search Only'
-    default:
-      return visibility
-  }
-}
-
-export function getStockLevel(product: Product): 'critical' | 'low' | 'normal' | 'good' {
-  if (!product.trackQuantity) return 'normal'
-
-  const threshold = product.stockThreshold || 10
-  const quantity = product.stockQuantity
-
-  if (quantity === 0) return 'critical'
-  if (quantity <= Math.floor(threshold * 0.5)) return 'critical'
-  if (quantity <= threshold) return 'low'
-  if (quantity <= threshold * 2) return 'normal'
-  return 'good'
-}
-
-export function calculateTotalVariantStock(product: Product): number {
-  if (!product.variants) return product.stockQuantity
-
-  return product.variants.reduce((total, variant) => {
-    return total + variant.stockQuantity
-  }, 0)
-}
-
-export function getMainImage(product: Product): string | undefined {
-  const mainImage = product.images.find(img => img.isMain)
-  return mainImage?.url || product.images[0]?.url
-}
-
-export function getVariantDisplayName(product: Product): string {
-  if (!product.variantAttributes || product.variantAttributes.length === 0) {
-    return product.name
-  }
-
-  const attributes = product.variantAttributes
-    .map(attr => attr.value)
-    .join(' / ')
-
-  return `${product.parentName || product.name} - ${attributes}`
-}
-
-export function groupProductsByParent(products: Product[]): { [key: string]: Product[] } {
-  const grouped: { [key: string]: Product[] } = {}
-
-  products.forEach(product => {
-    const key = product.parentId || product.id
-    if (!grouped[key]) {
-      grouped[key] = []
-    }
-    grouped[key].push(product)
-  })
-
-  return grouped
-}
-
-export function getParentProducts(products: Product[]): Product[] {
-  return products.filter(product => !product.parentId)
-}
-
-export function getVariantProducts(products: Product[]): Product[] {
-  return products.filter(product => product.parentId)
-}
-
-export function findProductById(products: Product[], id: string): Product | undefined {
-  return products.find(product => product.id === id)
-}
-
-export function findProductsBySku(products: Product[], sku: string): Product[] {
-  return products.filter(product =>
-    product.sku.toLowerCase().includes(sku.toLowerCase())
-  )
-}
-
-export function searchProducts(products: Product[], searchTerm: string): Product[] {
-  const term = searchTerm.toLowerCase()
-
-  return products.filter(product =>
-    product.name.toLowerCase().includes(term) ||
-    product.sku.toLowerCase().includes(term) ||
-    (product.description && product.description.toLowerCase().includes(term)) ||
-    (product.brand && product.brand.toLowerCase().includes(term)) ||
-    (product.vendor && product.vendor.toLowerCase().includes(term)) ||
-    product.tags.some(tag => tag.toLowerCase().includes(term)) ||
-    (product.barcode && product.barcode.includes(term))
-  )
-}
 
 export function generateSKU(baseName: string, variant?: { [key: string]: string }): string {
   // Remove special characters and spaces, convert to uppercase
@@ -195,13 +43,26 @@ export function isOutOfStock(product: Product): boolean {
   return product.stockQuantity === 0
 }
 
+// Fixed getUserId function with client-side check
 export function getUserId(): string {
-  let id = localStorage.getItem('userId')
-  if (!id) {
-    id = 'user_' + Math.random().toString(36).substr(2, 9)
-    localStorage.setItem('userId', id)
+  // Check if we're on the client side
+  if (typeof window === 'undefined') {
+    // Return a default ID for server-side rendering
+    return 'user_ssr_fallback'
   }
-  return id
+
+  try {
+    let id = localStorage.getItem('userId')
+    if (!id) {
+      id = 'user_' + Math.random().toString(36).substr(2, 9)
+      localStorage.setItem('userId', id)
+    }
+    return id
+  } catch (error) {
+    // Fallback if localStorage is not available
+    console.warn('localStorage not available:', error)
+    return 'user_fallback_' + Math.random().toString(36).substr(2, 9)
+  }
 }
 
 export function generateStorageKeys(userId: string) {
@@ -211,4 +72,149 @@ export function generateStorageKeys(userId: string) {
     filters: `products_filters_${userId}`,
     showFilters: `products_show_filters_${userId}`,
   }
+}
+/**
+ * Get the main image URL for a product
+ */
+export function getMainImage(product: Product): string | null {
+  // If product has images array, return the first one
+  if (product.images && product.images.length > 0) {
+    return product.images[0].url || product.images[0]
+  }
+
+  // If product has a single image property
+  if (product.image) {
+    return product.image
+  }
+
+  // If product has imageUrl property
+  if (product.imageUrl) {
+    return product.imageUrl
+  }
+
+  // No image found
+  return null
+}
+
+/**
+ * Get stock level information for a product
+ */
+export function getStockLevel(product: Product): {
+  level: string;
+  color: string;
+  quantity: number;
+} {
+  if (!product.trackQuantity) {
+    return {
+      level: 'Not Tracked',
+      color: 'text-gray-500',
+      quantity: 0
+    }
+  }
+
+  const quantity = product.stockQuantity || 0
+  const threshold = product.stockThreshold || 10
+
+  if (quantity === 0) {
+    return {
+      level: 'Out of Stock',
+      color: 'text-red-600',
+      quantity
+    }
+  } else if (quantity <= threshold) {
+    return {
+      level: 'Low Stock',
+      color: 'text-yellow-600',
+      quantity
+    }
+  } else {
+    return {
+      level: 'In Stock',
+      color: 'text-green-600',
+      quantity
+    }
+  }
+}
+
+/**
+ * Format stock status for display
+ */
+export function formatStockStatus(product: Product): string {
+  if (!product.trackQuantity) {
+    return 'Not Tracked'
+  }
+
+  const quantity = product.stockQuantity || 0
+  const threshold = product.stockThreshold || 10
+
+  if (quantity === 0) {
+    return 'Out of Stock'
+  } else if (quantity <= threshold) {
+    return 'Low Stock'
+  } else {
+    return 'In Stock'
+  }
+}
+
+/**
+ * Format product type for display
+ */
+export function formatProductType(type: string): string {
+  switch (type) {
+    case 'simple':
+      return 'Simple'
+    case 'variable':
+      return 'Variable'
+    case 'variant':
+      return 'Variant'
+    case 'grouped':
+      return 'Grouped'
+    case 'external':
+      return 'External'
+    case 'bundle':
+      return 'Bundle'
+    default:
+      return type || 'Simple'
+  }
+}
+
+/**
+ * Format visibility for display
+ */
+export function formatVisibility(visibility: string): string {
+  switch (visibility) {
+    case 'public':
+      return 'Public'
+    case 'private':
+      return 'Private'
+    case 'hidden':
+      return 'Hidden'
+    case 'draft':
+      return 'Draft'
+    default:
+      return visibility || 'Public'
+  }
+}
+
+/**
+ * Format currency amount
+ */
+export function formatCurrency(amount: number, currency: string = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency
+  }).format(amount || 0)
+}
+
+/**
+ * Format date for display
+ */
+export function formatDate(dateString: string): string {
+  if (!dateString) return ''
+
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
 }

@@ -1,11 +1,25 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Product, ProductFilterState } from '../utils/productTypes'
 import { DEFAULT_PRODUCT_FILTERS } from '../constants/productConstants'
+import { useSettings } from '../../shared/hooks/useSettings'
 
 export function useProductFilters(products: Product[]) {
+  const { settings } = useSettings()
   const [searchTerm, setSearchTerm] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState<ProductFilterState>(DEFAULT_PRODUCT_FILTERS)
+
+  const isStockManagementEnabled = settings.inventory.manageStock
+
+  // Clear stock-related filters when stock management is disabled
+  useEffect(() => {
+    if (!isStockManagementEnabled && filters.stockStatus) {
+      setFilters(prev => ({
+        ...prev,
+        stockStatus: ''
+      }))
+    }
+  }, [isStockManagementEnabled, filters.stockStatus])
 
   // Filter products based on current search and filter settings
   const filteredProducts = useMemo(() => {
@@ -28,8 +42,10 @@ export function useProductFilters(products: Product[]) {
       // Type filtering
       const matchesType = filters.type === '' || product.type === filters.type
 
-      // Stock status filtering
-      const matchesStockStatus = filters.stockStatus === '' || product.stockStatus === filters.stockStatus
+      // Stock status filtering - only apply if stock management is enabled
+      const matchesStockStatus = !isStockManagementEnabled ||
+        filters.stockStatus === '' ||
+        product.stockStatus === filters.stockStatus
 
       // Category filtering
       const matchesCategory = filters.category === '' || product.category === filters.category
@@ -39,6 +55,9 @@ export function useProductFilters(products: Product[]) {
 
       // Brand filtering
       const matchesBrand = filters.brand === '' || product.brand === filters.brand
+
+      // Warehouse filtering
+      const matchesWarehouse = filters.warehouseId === '' || product.warehouseId === filters.warehouseId
 
       // Price range filtering
       let matchesPriceRange = true
@@ -80,12 +99,13 @@ export function useProductFilters(products: Product[]) {
              matchesCategory &&
              matchesVendor &&
              matchesBrand &&
+             matchesWarehouse &&
              matchesPriceRange &&
              matchesTags &&
              matchesHasVariants &&
              matchesParentChild
     })
-  }, [products, searchTerm, filters])
+  }, [products, searchTerm, filters, isStockManagementEnabled])
 
   // Get unique values for filter dropdowns - Fixed with Array.from() for Vercel compatibility
   const filterOptions = useMemo(() => {
@@ -94,17 +114,60 @@ export function useProductFilters(products: Product[]) {
       vendors: Array.from(new Set(products.map(p => p.vendor).filter(Boolean))),
       brands: Array.from(new Set(products.map(p => p.brand).filter(Boolean))),
       tags: Array.from(new Set(products.flatMap(p => p.tags))),
+      warehouses: Array.from(new Set(products.map(p => ({ id: p.warehouseId, name: p.warehouseName })).filter(w => w.id && w.name))),
       statuses: ['active', 'inactive', 'draft', 'archived'],
       visibilities: ['visible', 'hidden', 'catalog', 'search'],
       types: ['simple', 'variant', 'bundle', 'configurable'],
-      stockStatuses: ['in_stock', 'out_of_stock', 'low_stock', 'backorder']
+      // Only include stock statuses if stock management is enabled
+      stockStatuses: isStockManagementEnabled ? ['in_stock', 'out_of_stock', 'low_stock', 'backorder'] : []
     }
-  }, [products])
+  }, [products, isStockManagementEnabled])
 
   // Helper function to reset filters to defaults
   const resetFilters = () => {
     setSearchTerm('')
-    setFilters(DEFAULT_PRODUCT_FILTERS)
+    const newFilters = { ...DEFAULT_PRODUCT_FILTERS }
+
+    // Clear stock status if stock management is disabled
+    if (!isStockManagementEnabled) {
+      newFilters.stockStatus = ''
+    }
+
+    setFilters(newFilters)
+  }
+
+  // Custom setter that handles stock management state
+  const setFiltersWithStockValidation = (newFilters: ProductFilterState) => {
+    // If stock management is disabled, ensure stock status is cleared
+    if (!isStockManagementEnabled) {
+      newFilters = {
+        ...newFilters,
+        stockStatus: ''
+      }
+    }
+
+    setFilters(newFilters)
+  }
+
+  // Get filter summary that accounts for stock management state
+  const getActiveFilterCount = () => {
+    let count = 0
+    if (searchTerm) count++
+    if (filters.status) count++
+    if (filters.visibility) count++
+    if (filters.type) count++
+    if (isStockManagementEnabled && filters.stockStatus) count++
+    if (filters.category) count++
+    if (filters.vendor) count++
+    if (filters.brand) count++
+    if (filters.warehouseId) count++
+    if (filters.priceMin || filters.priceMax) count++
+    if (filters.hasVariants) count++
+    if (filters.parentOnly) count++
+    if (!filters.includeVariants) count++
+    if (filters.tags.length > 0) count++
+
+    return count
   }
 
   return {
@@ -113,9 +176,11 @@ export function useProductFilters(products: Product[]) {
     showFilters,
     setShowFilters,
     filters,
-    setFilters,
+    setFilters: setFiltersWithStockValidation,
     filteredProducts,
     filterOptions,
-    resetFilters
+    resetFilters,
+    getActiveFilterCount,
+    isStockManagementEnabled
   }
 }

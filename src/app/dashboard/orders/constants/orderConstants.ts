@@ -1,4 +1,5 @@
-// orderConstants.ts
+// File: app/dashboard/orders/constants/orderConstants.ts
+
 import { ColumnConfig } from '../utils/orderTypes'
 
 export const STATUS_COLORS = {
@@ -29,6 +30,7 @@ export const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'status', field: 'status', label: 'Status', sortable: true, visible: true },
   { id: 'totalAmount', field: 'totalAmount', label: 'Total', sortable: true, visible: true },
   { id: 'platform', field: 'platform', label: 'Platform', sortable: true, visible: true },
+  { id: 'warehouseName', field: 'warehouseName', label: 'Warehouse', sortable: true, visible: true }, // NEW: Add warehouse column
   { id: 'requestedShipping', field: 'requestedShipping', label: 'Shipping Method', sortable: true, visible: true },
   { id: 'actions', field: 'actions', label: 'Actions', sortable: false, visible: true },
 
@@ -47,13 +49,20 @@ export const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'orderYear', field: 'orderYear', label: 'Order Year', sortable: true, visible: false },
 ]
 
+// Warehouse-specific columns (for warehouse orders pages - hide warehouse column)
+export const WAREHOUSE_ORDER_COLUMNS: ColumnConfig[] = DEFAULT_COLUMNS.map(col =>
+  col.field === 'warehouseName' ? { ...col, visible: false } : col
+)
+
+// Updated to support arrays for multi-select filters and warehouse filter
 export const DEFAULT_FILTERS = {
-  status: '',
-  fulfillmentStatus: '',
-  platform: '',
-  dateRange: '',
-  startDate: '',
-  endDate: ''
+  status: [],                    // Array, not string
+  fulfillmentStatus: [],         // Array, not string
+  platform: [],                 // Array, not string
+  dateRange: '',                 // String
+  startDate: '',                 // String
+  endDate: '',                   // String
+  warehouseId: ''               // String
 }
 
 export const DEFAULT_SORT = {
@@ -74,3 +83,32 @@ export const DEFAULT_COMPANY_INFO = {
 }
 
 export const ITEMS_PER_PAGE = 20
+
+// Available filter options
+export const FILTER_OPTIONS = {
+  STATUS: [
+    { value: 'PENDING', label: 'Pending' },
+    { value: 'PROCESSING', label: 'Processing' },
+    { value: 'SHIPPED', label: 'Shipped' },
+    { value: 'DELIVERED', label: 'Delivered' },
+    { value: 'CANCELLED', label: 'Cancelled' },
+    { value: 'REFUNDED', label: 'Refunded' }
+  ],
+  FULFILLMENT_STATUS: [
+    { value: 'PENDING', label: 'Pending' },
+    { value: 'ASSIGNED', label: 'Assigned' },
+    { value: 'PICKING', label: 'Picking' },
+    { value: 'PACKED', label: 'Packed' },
+    { value: 'READY_TO_SHIP', label: 'Ready to Ship' },
+    { value: 'SHIPPED', label: 'Shipped' },
+    { value: 'DELIVERED', label: 'Delivered' }
+  ],
+  PLATFORM: [
+    { value: 'Shopify', label: 'Shopify' },
+    { value: 'WooCommerce', label: 'WooCommerce' },
+    { value: 'BigCommerce', label: 'BigCommerce' },
+    { value: 'Magento', label: 'Magento' },
+    { value: 'Amazon', label: 'Amazon' },
+    { value: 'eBay', label: 'eBay' }
+  ]
+}

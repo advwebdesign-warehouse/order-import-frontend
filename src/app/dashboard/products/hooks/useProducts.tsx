@@ -3,7 +3,7 @@ import { Product } from '../utils/productTypes'
 
 // Mock data with parent/child relationships
 const mockProducts: Product[] = [
-  // Parent product (configurable)
+  // Parent product (configurable) - Warehouse 1
   {
     id: '1',
     sku: 'TSH-001',
@@ -72,10 +72,23 @@ const mockProducts: Product[] = [
     publishedAt: '2025-01-02T10:00:00Z',
     vendor: 'Premium Clothing Co.',
     brand: 'PremiumWear',
-    barcode: '1234567890123'
+    barcode: '1234567890123',
+    // Warehouse data
+    warehouseId: '1',
+    warehouseName: 'Warehouse 1',
+    warehouseStock: [
+      {
+        warehouseId: '1',
+        warehouseName: 'Warehouse 1',
+        stockQuantity: 150,
+        reservedQuantity: 10,
+        availableQuantity: 140,
+        location: 'A1-B2'
+      }
+    ]
   },
 
-  // Variant products (children)
+  // Variant products (children) - Warehouse 1
   {
     id: '2',
     sku: 'TSH-001-BL-S',
@@ -114,7 +127,20 @@ const mockProducts: Product[] = [
     updatedAt: '2025-09-15T14:30:00Z',
     vendor: 'Premium Clothing Co.',
     brand: 'PremiumWear',
-    barcode: '1234567890124'
+    barcode: '1234567890124',
+    // Warehouse data
+    warehouseId: '1',
+    warehouseName: 'Warehouse 1',
+    warehouseStock: [
+      {
+        warehouseId: '1',
+        warehouseName: 'Warehouse 1',
+        stockQuantity: 25,
+        reservedQuantity: 2,
+        availableQuantity: 23,
+        location: 'A1-B2-S1'
+      }
+    ]
   },
 
   {
@@ -155,10 +181,23 @@ const mockProducts: Product[] = [
     updatedAt: '2025-09-15T14:30:00Z',
     vendor: 'Premium Clothing Co.',
     brand: 'PremiumWear',
-    barcode: '1234567890125'
+    barcode: '1234567890125',
+    // Warehouse data
+    warehouseId: '1',
+    warehouseName: 'Warehouse 1',
+    warehouseStock: [
+      {
+        warehouseId: '1',
+        warehouseName: 'Warehouse 1',
+        stockQuantity: 30,
+        reservedQuantity: 3,
+        availableQuantity: 27,
+        location: 'A1-B2-M1'
+      }
+    ]
   },
 
-  // Simple product
+  // Simple product - East Coast Warehouse
   {
     id: '4',
     sku: 'MUG-001',
@@ -200,10 +239,23 @@ const mockProducts: Product[] = [
     vendor: 'Drinkware Plus',
     brand: 'CeramicPro',
     barcode: '2345678901234',
-    upc: '023456789012'
+    upc: '023456789012',
+    // Warehouse data
+    warehouseId: '2',
+    warehouseName: 'East Coast Warehouse',
+    warehouseStock: [
+      {
+        warehouseId: '2',
+        warehouseName: 'East Coast Warehouse',
+        stockQuantity: 75,
+        reservedQuantity: 5,
+        availableQuantity: 70,
+        location: 'B2-C1'
+      }
+    ]
   },
 
-  // Another simple product with low stock
+  // Another simple product with low stock - European Hub
   {
     id: '5',
     sku: 'NOTE-001',
@@ -238,10 +290,23 @@ const mockProducts: Product[] = [
     publishedAt: '2025-02-02T10:00:00Z',
     vendor: 'Stationery World',
     brand: 'LeatherCraft',
-    barcode: '3456789012345'
+    barcode: '3456789012345',
+    // Warehouse data
+    warehouseId: '3',
+    warehouseName: 'European Hub',
+    warehouseStock: [
+      {
+        warehouseId: '3',
+        warehouseName: 'European Hub',
+        stockQuantity: 8,
+        reservedQuantity: 1,
+        availableQuantity: 7,
+        location: 'C3-D2'
+      }
+    ]
   },
 
-  // Draft product
+  // Draft product - Warehouse 1
   {
     id: '6',
     sku: 'PEN-001',
@@ -273,11 +338,24 @@ const mockProducts: Product[] = [
     createdAt: '2025-09-10T10:00:00Z',
     updatedAt: '2025-09-16T11:45:00Z',
     vendor: 'Writing Tools Inc.',
-    brand: 'PenMaster'
+    brand: 'PenMaster',
+    // Warehouse data
+    warehouseId: '1',
+    warehouseName: 'Warehouse 1',
+    warehouseStock: [
+      {
+        warehouseId: '1',
+        warehouseName: 'Warehouse 1',
+        stockQuantity: 0,
+        reservedQuantity: 0,
+        availableQuantity: 0,
+        location: 'A3-B1'
+      }
+    ]
   }
 ]
 
-export function useProducts() {
+export function useProducts(warehouseId?: string) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -287,13 +365,19 @@ export function useProducts() {
     const fetchProducts = async () => {
       try {
         setLoading(true)
-        // In real app: const response = await fetch('/api/products')
+        // In real app: const response = await fetch(`/api/products?warehouseId=${warehouseId || ''}`)
         // const products = await response.json()
 
         // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 1000))
 
-        setProducts(mockProducts)
+        // Filter by warehouse if specified
+        let filteredProducts = mockProducts
+        if (warehouseId) {
+          filteredProducts = mockProducts.filter(product => product.warehouseId === warehouseId)
+        }
+
+        setProducts(filteredProducts)
         setError(null)
       } catch (err) {
         setError('Failed to fetch products')
@@ -304,19 +388,39 @@ export function useProducts() {
     }
 
     fetchProducts()
-  }, [])
+  }, [warehouseId])
 
   const refetchProducts = async () => {
     setLoading(true)
     await new Promise(resolve => setTimeout(resolve, 500))
-    setProducts([...mockProducts]) // Force re-render with fresh data
+
+    // Filter by warehouse if specified
+    let filteredProducts = mockProducts
+    if (warehouseId) {
+      filteredProducts = mockProducts.filter(product => product.warehouseId === warehouseId)
+    }
+
+    setProducts([...filteredProducts]) // Force re-render with fresh data
     setLoading(false)
+  }
+
+  // Get products by warehouse
+  const getProductsByWarehouse = (targetWarehouseId: string): Product[] => {
+    return mockProducts.filter(product => product.warehouseId === targetWarehouseId)
+  }
+
+  // Get warehouse stock for a product
+  const getWarehouseStock = (productId: string, targetWarehouseId: string) => {
+    const product = products.find(p => p.id === productId)
+    return product?.warehouseStock?.find(stock => stock.warehouseId === targetWarehouseId)
   }
 
   return {
     products,
     loading,
     error,
-    refetchProducts
+    refetchProducts,
+    getProductsByWarehouse,
+    getWarehouseStock
   }
 }

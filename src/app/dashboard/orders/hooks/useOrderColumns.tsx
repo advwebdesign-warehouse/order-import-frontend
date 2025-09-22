@@ -1,77 +1,118 @@
+// File: app/dashboard/orders/hooks/useOrderColumns.tsx
+
 import { useState, useEffect, useMemo } from 'react'
 import { Order, ColumnConfig, SortState } from '../utils/orderTypes'
-import { DEFAULT_COLUMNS, DEFAULT_SORT } from '../constants/orderConstants'
-import { getUserId, generateStorageKeys } from '../utils/orderUtils'
+import { DEFAULT_COLUMNS, WAREHOUSE_ORDER_COLUMNS, DEFAULT_SORT } from '../constants/orderConstants'
 
-export function useOrderColumns(orders: Order[]) {
-  const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_COLUMNS)
+// Generate user-specific storage keys
+function getUserId(): string {
+  if (typeof window === 'undefined') {
+    return 'user_ssr_fallback'
+  }
+
+  try {
+    let id = localStorage.getItem('userId')
+    if (!id) {
+      id = 'user_' + Math.random().toString(36).substr(2, 9)
+      localStorage.setItem('userId', id)
+    }
+    return id
+  } catch (error) {
+    console.warn('localStorage not available:', error)
+    return 'user_fallback_' + Math.random().toString(36).substr(2, 9)
+  }
+}
+
+export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
+  // Use warehouse columns for warehouse-specific pages
+  const initialColumns = useWarehouseColumns ? WAREHOUSE_ORDER_COLUMNS : DEFAULT_COLUMNS
+
+  const [columns, setColumns] = useState<ColumnConfig[]>(initialColumns)
   const [sortConfig, setSortConfig] = useState<SortState>(DEFAULT_SORT)
   const [initialized, setInitialized] = useState(false)
 
   const userId = getUserId()
-  const storageKeys = generateStorageKeys(userId)
+  const storageKeys = {
+    columns: `orderColumns_${userId}${useWarehouseColumns ? '_warehouse' : ''}`,
+    sortConfig: `orderSort_${userId}${useWarehouseColumns ? '_warehouse' : ''}`
+  }
 
   // Load saved settings on mount
   useEffect(() => {
-    try {
-      const savedSort = localStorage.getItem(storageKeys.sortConfig)
-      const savedColumns = localStorage.getItem(storageKeys.columns)
+    if (typeof window === 'undefined') {
+      setInitialized(true)
+      return
+    }
 
+    try {
+      // Load sort config
+      const savedSort = localStorage.getItem(storageKeys.sortConfig)
       if (savedSort) {
-        setSortConfig(JSON.parse(savedSort))
+        const parsedSort = JSON.parse(savedSort)
+        setSortConfig(parsedSort)
       }
 
+      // Load column config
+      const savedColumns = localStorage.getItem(storageKeys.columns)
       if (savedColumns) {
         const parsedColumns = JSON.parse(savedColumns)
-        // Ensure all default columns exist, merge with saved preferences
-        const mergedColumns = DEFAULT_COLUMNS.map(defaultCol => {
-          const savedCol = parsedColumns.find((col: ColumnConfig) => col.id === defaultCol.id)
-          return savedCol ? { ...defaultCol, ...savedCol } : defaultCol
-        })
 
-        // Preserve the order from saved columns
-        const orderedColumns = []
+        // Merge with defaults to handle new columns that might have been added
+        const mergedColumns = []
+
+        // First, add saved columns in their saved order
         for (const savedCol of parsedColumns) {
-          const foundCol = mergedColumns.find(col => col.id === savedCol.id)
-          if (foundCol) {
-            orderedColumns.push(foundCol)
+          const defaultCol = initialColumns.find(col => col.id === savedCol.id)
+          if (defaultCol) {
+            mergedColumns.push({
+              ...defaultCol,
+              ...savedCol // Override with saved preferences
+            })
           }
         }
-        // Add any new columns that weren't in the saved set
-        for (const defaultCol of DEFAULT_COLUMNS) {
-          if (!orderedColumns.find(col => col.id === defaultCol.id)) {
-            orderedColumns.push(defaultCol)
+
+        // Then add any new default columns that weren't in saved config
+        for (const defaultCol of initialColumns) {
+          if (!mergedColumns.find(col => col.id === defaultCol.id)) {
+            mergedColumns.push(defaultCol)
           }
         }
-        setColumns(orderedColumns)
+
+        setColumns(mergedColumns)
+      } else {
+        setColumns(initialColumns)
       }
     } catch (error) {
       console.error('Error loading column settings:', error)
+      // On error, use defaults
+      setColumns(initialColumns)
+      setSortConfig(DEFAULT_SORT)
     } finally {
       setInitialized(true)
     }
-  }, [storageKeys.sortConfig, storageKeys.columns])
+  }, [storageKeys.columns, storageKeys.sortConfig, useWarehouseColumns])
 
-  // Save settings when they change
+  // Save column settings when they change
   useEffect(() => {
-    if (initialized) {
-      try {
-        localStorage.setItem(storageKeys.sortConfig, JSON.stringify(sortConfig))
-      } catch (error) {
-        console.error('Error saving sort config:', error)
-      }
-    }
-  }, [sortConfig, initialized, storageKeys.sortConfig])
-
-  useEffect(() => {
-    if (initialized) {
+    if (initialized && typeof window !== 'undefined') {
       try {
         localStorage.setItem(storageKeys.columns, JSON.stringify(columns))
       } catch (error) {
-        console.error('Error saving columns config:', error)
+        console.error('Error saving column settings:', error)
       }
     }
   }, [columns, initialized, storageKeys.columns])
+
+  // Save sort settings when they change
+  useEffect(() => {
+    if (initialized && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(storageKeys.sortConfig, JSON.stringify(sortConfig))
+      } catch (error) {
+        console.error('Error saving sort settings:', error)
+      }
+    }
+  }, [sortConfig, initialized, storageKeys.sortConfig])
 
   // Sort orders based on current sort config
   const sortedOrders = useMemo(() => {
@@ -81,7 +122,7 @@ export function useOrderColumns(orders: Order[]) {
       let aValue: any
       let bValue: any
 
-      // Get values based on field, with proper fallbacks
+      // Get values based on field, using the ACTUAL field names from the data
       switch (sortConfig.field) {
         case 'orderNumber':
           aValue = a.orderNumber || ''
@@ -95,146 +136,100 @@ export function useOrderColumns(orders: Order[]) {
           aValue = a.status || ''
           bValue = b.status || ''
           break
-        case 'fulfillmentStatus':
-          aValue = a.fulfillmentStatus || ''
-          bValue = b.fulfillmentStatus || ''
-          break
-        case 'platform':
-          aValue = a.platform || ''
-          bValue = b.platform || ''
-          break
-        case 'country':
-          aValue = a.country || ''
-          bValue = b.country || ''
-          break
-        case 'countryName':
-          aValue = a.country || ''
-          bValue = b.country || ''
-          break
-        case 'countryCode':
-          aValue = a.countryCode || ''
-          bValue = b.countryCode || ''
-          break
-        case 'currency':
-          aValue = a.currency || ''
-          bValue = b.currency || ''
-          break
-        case 'shippingFirstName':
-          aValue = a.shippingFirstName || ''
-          bValue = b.shippingFirstName || ''
-          break
-        case 'shippingLastName':
-          aValue = a.shippingLastName || ''
-          bValue = b.shippingLastName || ''
-          break
-        case 'shippingFullName':
-          aValue = `${a.shippingFirstName} ${a.shippingLastName}`
-          bValue = `${b.shippingFirstName} ${b.shippingLastName}`
-          break
-        case 'requestedShipping':
-          aValue = a.requestedShipping || ''
-          bValue = b.requestedShipping || ''
-          break
         case 'totalAmount':
           aValue = Number(a.totalAmount) || 0
           bValue = Number(b.totalAmount) || 0
-          break
-        case 'itemCount':
-          aValue = Number(a.itemCount) || 0
-          bValue = Number(b.itemCount) || 0
           break
         case 'orderDate':
           aValue = new Date(a.orderDate).getTime() || 0
           bValue = new Date(b.orderDate).getTime() || 0
           break
-        case 'orderTime':
-          aValue = new Date(a.orderDate).getTime() || 0
-          bValue = new Date(b.orderDate).getTime() || 0
+        case 'fulfillmentStatus':
+          aValue = a.fulfillmentStatus || ''
+          bValue = b.fulfillmentStatus || ''
           break
-        case 'orderDay':
-          aValue = new Date(a.orderDate).getDay() || 0
-          bValue = new Date(b.orderDate).getDay() || 0
+        case 'itemCount':
+          aValue = a.itemCount || 0
+          bValue = b.itemCount || 0
           break
-        case 'orderMonth':
-          aValue = new Date(a.orderDate).getMonth() || 0
-          bValue = new Date(b.orderDate).getMonth() || 0
+        case 'platform':
+          aValue = a.platform || ''
+          bValue = b.platform || ''
           break
-        case 'orderYear':
-          aValue = new Date(a.orderDate).getFullYear() || 0
-          bValue = new Date(b.orderDate).getFullYear() || 0
+        case 'requestedShipping':
+          aValue = a.requestedShipping || ''
+          bValue = b.requestedShipping || ''
+          break
+        case 'warehouseName':
+          aValue = a.warehouseName || ''
+          bValue = b.warehouseName || ''
+          break
+        case 'country':
+          aValue = a.country || ''
+          bValue = b.country || ''
           break
         default:
-          // Fallback for any other field
           aValue = String(a[sortConfig.field as keyof Order] || '')
           bValue = String(b[sortConfig.field as keyof Order] || '')
       }
 
-      // Handle different data types for comparison
-      if (sortConfig.field === 'orderDate' || sortConfig.field === 'orderTime') {
-        // Already converted to timestamps above
-        if (sortConfig.direction === 'asc') {
-          return aValue - bValue
-        } else {
-          return bValue - aValue
-        }
-      } else if (sortConfig.field === 'totalAmount' || sortConfig.field === 'itemCount' ||
-                 sortConfig.field === 'orderDay' || sortConfig.field === 'orderMonth' || sortConfig.field === 'orderYear') {
-        // Numeric comparison
-        if (sortConfig.direction === 'asc') {
-          return aValue - bValue
-        } else {
-          return bValue - aValue
-        }
-      } else {
-        // String comparison (case insensitive)
-        aValue = String(aValue).toLowerCase()
-        bValue = String(bValue).toLowerCase()
+      // Handle numeric comparisons
+      if (sortConfig.field === 'totalAmount' || sortConfig.field === 'itemCount') {
+        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
 
-        if (sortConfig.direction === 'asc') {
-          return aValue.localeCompare(bValue)
-        } else {
-          return bValue.localeCompare(aValue)
-        }
+      // Handle date comparisons
+      if (sortConfig.field === 'orderDate') {
+        return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
+
+      // Convert to strings for comparison
+      const aStr = String(aValue).toLowerCase()
+      const bStr = String(bValue).toLowerCase()
+
+      if (sortConfig.direction === 'asc') {
+        return aStr < bStr ? -1 : aStr > bStr ? 1 : 0
+      } else {
+        return aStr > bStr ? -1 : aStr < bStr ? 1 : 0
       }
     })
   }, [orders, sortConfig])
 
   // Handle sorting
   const handleSort = (field: string) => {
-    setSortConfig(prevSort => {
-      const newDirection = prevSort.field === field && prevSort.direction === 'asc' ? 'desc' : 'asc'
-      return {
-        field,
-        direction: newDirection
-      }
-    })
+    setSortConfig(prev => ({
+      field,
+      direction: prev.field === field && prev.direction === 'asc' ? 'desc' : 'asc'
+    }))
   }
 
-  // Handle column visibility changes
+  // Handle column visibility
   const handleColumnVisibilityChange = (columnId: string, visible: boolean) => {
-    setColumns(prevColumns => {
-      return prevColumns.map(col =>
+    setColumns(prev =>
+      prev.map(col =>
         col.id === columnId ? { ...col, visible } : col
       )
-    })
+    )
   }
 
-  // Handle column reordering (for drag & drop)
+  // Handle column reordering
   const handleColumnReorder = (newColumns: ColumnConfig[]) => {
     setColumns(newColumns)
   }
 
   // Reset to defaults
   const resetToDefaults = () => {
+    setColumns(initialColumns)
     setSortConfig(DEFAULT_SORT)
-    setColumns(DEFAULT_COLUMNS)
 
-    // Clear localStorage
-    try {
-      localStorage.removeItem(storageKeys.sortConfig)
-      localStorage.removeItem(storageKeys.columns)
-    } catch (error) {
-      console.error('Error clearing column settings:', error)
+    // Also clear from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(storageKeys.columns)
+        localStorage.removeItem(storageKeys.sortConfig)
+      } catch (error) {
+        console.error('Error clearing column settings:', error)
+      }
     }
   }
 
@@ -245,6 +240,7 @@ export function useOrderColumns(orders: Order[]) {
     handleSort,
     handleColumnVisibilityChange,
     handleColumnReorder,
-    resetToDefaults
+    resetToDefaults,
+    isLoading: !initialized
   }
 }
