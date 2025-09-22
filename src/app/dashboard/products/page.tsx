@@ -1,3 +1,5 @@
+// File: app/dashboard/products/page.tsx (lines 1-30 and 215-221)
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -12,11 +14,11 @@ import { useProductFilters } from './hooks/useProductFilters'
 import { useProductSelection } from './hooks/useProductSelection'
 import { useProductColumns } from './hooks/useProductColumns'
 
-
 // Shared components
 import { ColumnConfig } from '../shared/components/ColumnSettings'
 import { usePagination } from '../shared/hooks/usePagination'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
+import { useSettings } from '../shared/hooks/useSettings'  // ADDED: Import useSettings
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
@@ -119,6 +121,10 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
 
+  // Get settings for stock management
+  const { settings } = useSettings()  // ADDED: Get settings
+  const isStockManagementEnabled = settings?.inventory?.manageStock || false  // ADDED: Extract stock management setting
+
   // Get URL parameters for warehouse filtering
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -217,7 +223,7 @@ export default function ProductsPage() {
       ? sortedProducts.filter(product => selectedProducts.has(product.id))
       : sortedProducts
 
-    exportProductsToCSV(productsToExport, columns.filter(col => col.visible))
+    exportProductsToCSV(productsToExport, columns.filter(col => col.visible), isStockManagementEnabled)  // FIXED: Added third parameter
   }
 
   const handleResetLayout = () => {
