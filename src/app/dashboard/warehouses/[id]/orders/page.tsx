@@ -309,6 +309,7 @@ export default function WarehouseOrdersPage() {
         onResetLayout={handleResetLayout}
         columns={columns}
         onColumnVisibilityChange={handleColumnVisibilityChange}
+        onColumnReorder={handleColumnReorder}
         itemsPerPage={ordersPerPage || 20}
         onItemsPerPageChange={handleItemsPerPageChange}
         maxPickingOrders={maxPickingOrders}
