@@ -92,6 +92,7 @@ export interface ProductFilterState {
   hasVariants: string
   parentOnly: boolean
   includeVariants: boolean
+  warehouseId?: string
 }
 
 export interface ProductSortState {
