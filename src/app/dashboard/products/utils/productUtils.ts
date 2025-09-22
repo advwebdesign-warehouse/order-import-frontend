@@ -79,7 +79,7 @@ export function generateStorageKeys(userId: string) {
 export function getMainImage(product: Product): string | null {
   // If product has images array, return the first one
   if (product.images && product.images.length > 0) {
-    return product.images[0].url || product.images[0]
+    return product.images[0].url || null
   }
 
   // If product has a single image property
