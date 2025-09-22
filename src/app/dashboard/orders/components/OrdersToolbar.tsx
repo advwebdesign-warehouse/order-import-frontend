@@ -12,6 +12,7 @@ interface OrdersToolbarProps {
   onResetLayout: () => void
   columns: ColumnConfig[]
   onColumnVisibilityChange: (columnId: string, visible: boolean) => void
+  onColumnReorder: (newColumns: ColumnConfig[]) => void  // ADDED THIS LINE
 
   // Screen Options props
   itemsPerPage: number
@@ -29,6 +30,7 @@ export default function OrdersToolbar({
   onResetLayout,
   columns,
   onColumnVisibilityChange,
+  onColumnReorder,  // ADDED THIS LINE
   itemsPerPage,
   onItemsPerPageChange,
   maxPickingOrders,
