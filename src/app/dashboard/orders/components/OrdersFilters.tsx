@@ -4,12 +4,16 @@
 
 import { Fragment } from 'react'
 import { Listbox, Transition } from '@headlessui/react'
-import { ChevronUpDownIcon, CheckIcon, XMarkIcon } from '@heroicons/react/20/solid'
+import { ChevronUpDownIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/20/solid'
 import { FilterState } from '../utils/orderTypes'
 import { FILTER_OPTIONS } from '../constants/orderConstants'
 import { useWarehouses } from '../../warehouses/context/WarehouseContext'
 
 interface OrdersFiltersProps {
+  searchTerm: string  // ADDED
+  onSearchChange: (value: string) => void  // ADDED
+  showFilters: boolean  // ADDED
+  onToggleFilters: () => void  // ADDED
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   onClearAllFilters: () => void
@@ -17,6 +21,10 @@ interface OrdersFiltersProps {
 }
 
 export default function OrdersFilters({
+  searchTerm,  // ADDED
+  onSearchChange,  // ADDED
+  showFilters,  // ADDED
+  onToggleFilters,  // ADDED
   filters,
   onFiltersChange,
   onClearAllFilters,
@@ -215,196 +223,239 @@ export default function OrdersFilters({
     (!hideWarehouseFilter && safeFilters.warehouseId)
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-gray-900">Filters</h3>
-        {hasActiveFilters && (
-          <button
-            onClick={onClearAllFilters}
-            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <XMarkIcon className="h-4 w-4 mr-1" />
-            Clear All
-          </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {/* Status Filter */}
-        <MultiSelectFilter
-          label="Status"
-          values={safeFilters.status}
-          options={FILTER_OPTIONS.STATUS}
-          field="status"
-        />
-
-        {/* Fulfillment Status Filter */}
-        <MultiSelectFilter
-          label="Fulfillment Status"
-          values={safeFilters.fulfillmentStatus}
-          options={FILTER_OPTIONS.FULFILLMENT_STATUS}
-          field="fulfillmentStatus"
-        />
-
-        {/* Platform Filter */}
-        <MultiSelectFilter
-          label="Platform"
-          values={safeFilters.platform}
-          options={FILTER_OPTIONS.PLATFORM}
-          field="platform"
-        />
-
-        {/* Warehouse Filter - Only show if not hidden */}
-        {!hideWarehouseFilter && (
-          <SingleSelectFilter
-            label="Warehouse"
-            value={safeFilters.warehouseId}
-            options={warehouseOptions}
-            field="warehouseId"
-            placeholder="All Warehouses"
-          />
-        )}
-
-        {/* Date Range Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-          <select
-            value={safeFilters.dateRange}
-            onChange={(e) => handleSingleSelectChange('dateRange', e.target.value)}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-          >
-            <option value="">All Dates</option>
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="last7days">Last 7 Days</option>
-            <option value="last30days">Last 30 Days</option>
-            <option value="last90days">Last 90 Days</option>
-            <option value="thismonth">This Month</option>
-            <option value="lastmonth">Last Month</option>
-            <option value="custom">Custom Range</option>
-          </select>
+    <div className="mt-4 space-y-4">
+      {/* Search Bar and Filter Toggle */}
+      <div className="flex gap-4">
+        <div className="flex-1">
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="block w-full rounded-md border-gray-300 pl-10 pr-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              placeholder="Search orders by customer, order number, email..."
+            />
+          </div>
         </div>
-
-        {/* Custom Date Range */}
-        {safeFilters.dateRange === 'custom' && (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-              <input
-                type="date"
-                value={safeFilters.startDate}
-                onChange={(e) => handleSingleSelectChange('startDate', e.target.value)}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-              <input
-                type="date"
-                value={safeFilters.endDate}
-                onChange={(e) => handleSingleSelectChange('endDate', e.target.value)}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-          </>
-        )}
+        <button
+          onClick={onToggleFilters}
+          className={`inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
+            showFilters
+              ? 'border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100'
+              : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+          }`}
+        >
+          <FunnelIcon className="h-5 w-5 mr-2" />
+          Filters
+          {hasActiveFilters && (
+            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-indigo-600 text-white rounded-full">
+              {(safeFilters.status?.length || 0) +
+               (safeFilters.fulfillmentStatus?.length || 0) +
+               (safeFilters.platform?.length || 0) +
+               (safeFilters.dateRange ? 1 : 0) +
+               (safeFilters.warehouseId ? 1 : 0)}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Active Filters Display */}
-      {hasActiveFilters && (
-        <div className="border-t pt-4">
-          <div className="flex flex-wrap gap-2">
-            {/* Status filters - Safe array access */}
-            {safeFilters.status.map(status => (
-              <span key={status} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                Status: {FILTER_OPTIONS.STATUS.find(s => s.value === status)?.label || status}
-                <button
-                  onClick={() => handleMultiSelectChange('status', status)}
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-blue-400 hover:bg-blue-200 hover:text-blue-500"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-
-            {/* Fulfillment Status filters - Safe array access */}
-            {safeFilters.fulfillmentStatus.map(status => (
-              <span key={status} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Fulfillment: {FILTER_OPTIONS.FULFILLMENT_STATUS.find(s => s.value === status)?.label || status}
-                <button
-                  onClick={() => handleMultiSelectChange('fulfillmentStatus', status)}
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-green-400 hover:bg-green-200 hover:text-green-500"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-
-            {/* Platform filters - Safe array access */}
-            {safeFilters.platform.map(platform => (
-              <span key={platform} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                Platform: {FILTER_OPTIONS.PLATFORM.find(p => p.value === platform)?.label || platform}
-                <button
-                  onClick={() => handleMultiSelectChange('platform', platform)}
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-purple-400 hover:bg-purple-200 hover:text-purple-500"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-
-            {/* Date Range filter - SAFE RENDERING */}
-            {safeFilters.dateRange && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                Range: {getDateRangeLabel(safeFilters.dateRange)}
-                <button
-                  onClick={() => handleSingleSelectChange('dateRange', '')}
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-yellow-400 hover:bg-yellow-200 hover:text-yellow-500"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-
-            {/* Start Date filter - SAFE RENDERING */}
-            {safeFilters.startDate && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                From: {renderFilterValue(safeFilters.startDate)}
-                <button
-                  onClick={() => handleSingleSelectChange('startDate', '')}
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-orange-400 hover:bg-orange-200 hover:text-orange-500"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-
-            {/* End Date filter - SAFE RENDERING */}
-            {safeFilters.endDate && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                To: {renderFilterValue(safeFilters.endDate)}
-                <button
-                  onClick={() => handleSingleSelectChange('endDate', '')}
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-red-400 hover:bg-red-200 hover:text-red-500"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              </span>
-            )}
-
-            {/* Warehouse filter - SAFE RENDERING */}
-            {!hideWarehouseFilter && safeFilters.warehouseId && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                Warehouse: {warehouses.find(w => w.id === safeFilters.warehouseId)?.name || safeFilters.warehouseId}
-                <button
-                  onClick={() => handleSingleSelectChange('warehouseId', '')}
-                  className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-indigo-400 hover:bg-indigo-200 hover:text-indigo-500"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              </span>
+      {/* Filters Panel - Collapsible */}
+      {showFilters && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-900">Filters</h3>
+            {hasActiveFilters && (
+              <button
+                onClick={onClearAllFilters}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                <XMarkIcon className="h-4 w-4 mr-1" />
+                Clear All
+              </button>
             )}
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {/* Status Filter */}
+            <MultiSelectFilter
+              label="Status"
+              values={safeFilters.status}
+              options={FILTER_OPTIONS.STATUS}
+              field="status"
+            />
+
+            {/* Fulfillment Status Filter */}
+            <MultiSelectFilter
+              label="Fulfillment Status"
+              values={safeFilters.fulfillmentStatus}
+              options={FILTER_OPTIONS.FULFILLMENT_STATUS}
+              field="fulfillmentStatus"
+            />
+
+            {/* Platform Filter */}
+            <MultiSelectFilter
+              label="Platform"
+              values={safeFilters.platform}
+              options={FILTER_OPTIONS.PLATFORM}
+              field="platform"
+            />
+
+            {/* Warehouse Filter - Only show if not hidden */}
+            {!hideWarehouseFilter && (
+              <SingleSelectFilter
+                label="Warehouse"
+                value={safeFilters.warehouseId}
+                options={warehouseOptions}
+                field="warehouseId"
+                placeholder="All Warehouses"
+              />
+            )}
+
+            {/* Date Range Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+              <select
+                value={safeFilters.dateRange}
+                onChange={(e) => handleSingleSelectChange('dateRange', e.target.value)}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="">All Dates</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="last7days">Last 7 Days</option>
+                <option value="last30days">Last 30 Days</option>
+                <option value="last90days">Last 90 Days</option>
+                <option value="thismonth">This Month</option>
+                <option value="lastmonth">Last Month</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+
+            {/* Custom Date Range */}
+            {safeFilters.dateRange === 'custom' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={safeFilters.startDate}
+                    onChange={(e) => handleSingleSelectChange('startDate', e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={safeFilters.endDate}
+                    onChange={(e) => handleSingleSelectChange('endDate', e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Active Filters Display */}
+          {hasActiveFilters && (
+            <div className="border-t pt-4">
+              <div className="flex flex-wrap gap-2">
+                {/* Status filters - Safe array access */}
+                {safeFilters.status.map(status => (
+                  <span key={status} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Status: {FILTER_OPTIONS.STATUS.find(s => s.value === status)?.label || status}
+                    <button
+                      onClick={() => handleMultiSelectChange('status', status)}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-blue-400 hover:bg-blue-200 hover:text-blue-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+
+                {/* Fulfillment Status filters - Safe array access */}
+                {safeFilters.fulfillmentStatus.map(status => (
+                  <span key={status} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Fulfillment: {FILTER_OPTIONS.FULFILLMENT_STATUS.find(s => s.value === status)?.label || status}
+                    <button
+                      onClick={() => handleMultiSelectChange('fulfillmentStatus', status)}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-green-400 hover:bg-green-200 hover:text-green-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+
+                {/* Platform filters - Safe array access */}
+                {safeFilters.platform.map(platform => (
+                  <span key={platform} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    Platform: {FILTER_OPTIONS.PLATFORM.find(p => p.value === platform)?.label || platform}
+                    <button
+                      onClick={() => handleMultiSelectChange('platform', platform)}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-purple-400 hover:bg-purple-200 hover:text-purple-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+
+                {/* Date Range filter - SAFE RENDERING */}
+                {safeFilters.dateRange && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    Range: {getDateRangeLabel(safeFilters.dateRange)}
+                    <button
+                      onClick={() => handleSingleSelectChange('dateRange', '')}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-yellow-400 hover:bg-yellow-200 hover:text-yellow-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+
+                {/* Start Date filter - SAFE RENDERING */}
+                {safeFilters.startDate && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                    From: {renderFilterValue(safeFilters.startDate)}
+                    <button
+                      onClick={() => handleSingleSelectChange('startDate', '')}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-orange-400 hover:bg-orange-200 hover:text-orange-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+
+                {/* End Date filter - SAFE RENDERING */}
+                {safeFilters.endDate && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    To: {renderFilterValue(safeFilters.endDate)}
+                    <button
+                      onClick={() => handleSingleSelectChange('endDate', '')}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-red-400 hover:bg-red-200 hover:text-red-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+
+                {/* Warehouse filter - SAFE RENDERING */}
+                {!hideWarehouseFilter && safeFilters.warehouseId && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                    Warehouse: {warehouses.find(w => w.id === safeFilters.warehouseId)?.name || safeFilters.warehouseId}
+                    <button
+                      onClick={() => handleSingleSelectChange('warehouseId', '')}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-indigo-400 hover:bg-indigo-200 hover:text-indigo-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
