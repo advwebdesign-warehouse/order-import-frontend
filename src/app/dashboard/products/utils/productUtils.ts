@@ -76,25 +76,15 @@ export function generateStorageKeys(userId: string) {
 /**
  * Get the main image URL for a product
  */
-export function getMainImage(product: Product): string | null {
-  // If product has images array, return the first one
-  if (product.images && product.images.length > 0) {
-    return product.images[0].url || null
-  }
+ export function getMainImage(product: Product): string | null {
+   // If product has images array, return the first one's URL
+   if (product.images && product.images.length > 0) {
+     return product.images[0].url || null
+   }
 
-  // If product has a single image property
-  if (product.image) {
-    return product.image
-  }
-
-  // If product has imageUrl property
-  if (product.imageUrl) {
-    return product.imageUrl
-  }
-
-  // No image found
-  return null
-}
+   // No image found
+   return null
+ }
 
 /**
  * Get stock level information for a product
