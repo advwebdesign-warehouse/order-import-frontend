@@ -1,4 +1,5 @@
-// orderTypes.ts
+// File: app/dashboard/orders/utils/orderTypes.ts
+
 export interface Order {
   id: string
   orderNumber: string
@@ -16,6 +17,9 @@ export interface Order {
   country: string
   countryCode: string
   requestedShipping: string
+  // Add warehouse support
+  warehouseId?: string
+  warehouseName?: string
 }
 
 export interface OrderItem {
