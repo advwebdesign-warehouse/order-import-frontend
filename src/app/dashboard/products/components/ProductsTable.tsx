@@ -299,10 +299,10 @@ export default function ProductsTable({
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STOCK_STATUS_COLORS[product.stockStatus as keyof typeof STOCK_STATUS_COLORS]}`}>
               {formatStockStatus(product)}
             </span>
-            {stockLevel === 'critical' && (
-              <span className="ml-2 text-red-500" title="Critical stock level">⚠️</span>
+            {stockLevel.level === 'Out of Stock' && (
+              <span className="ml-2 text-red-500" title="Out of stock">⚠️</span>
             )}
-            {stockLevel === 'low' && (
+            {stockLevel.level === 'Low Stock' && (
               <span className="ml-2 text-yellow-500" title="Low stock level">⚠️</span>
             )}
           </div>
