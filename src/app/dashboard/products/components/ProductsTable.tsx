@@ -297,7 +297,7 @@ export default function ProductsTable({
         return (
           <div className="flex items-center">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STOCK_STATUS_COLORS[product.stockStatus as keyof typeof STOCK_STATUS_COLORS]}`}>
-              {formatStockStatus(product.stockStatus)}
+              {formatStockStatus(product)}
             </span>
             {stockLevel === 'critical' && (
               <span className="ml-2 text-red-500" title="Critical stock level">⚠️</span>
