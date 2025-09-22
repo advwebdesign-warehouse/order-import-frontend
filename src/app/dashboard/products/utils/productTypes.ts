@@ -1,4 +1,17 @@
-// productTypes.ts
+// File: app/dashboard/products/utils/productTypes.ts
+
+export interface WarehouseStock {
+  warehouseId: string
+  warehouseName: string
+  stockQuantity: number
+  reservedQuantity?: number
+  availableQuantity?: number
+  reorderPoint?: number
+  maxStock?: number
+  location?: string  // Shelf/bin location in warehouse
+  lastUpdated?: string
+}
+
 export interface Product {
   id: string
   sku: string
