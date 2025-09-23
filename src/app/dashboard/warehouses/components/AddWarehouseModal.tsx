@@ -4,7 +4,7 @@
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
-import { Warehouse } from '../utils/warehouseTypes'
+import { Warehouse, DEFAULT_ORDER_STATUS_SETTINGS } from '../utils/warehouseTypes'
 
 interface AddWarehouseModalProps {
   isOpen: boolean
@@ -53,7 +53,8 @@ export default function AddWarehouseModal({
       allowBackorders: false,
       trackInventory: true,
       autoFulfill: false,
-      priority: 1
+      priority: 1,
+      orderStatusSettings: DEFAULT_ORDER_STATUS_SETTINGS
     },
     status: 'active' as 'active' | 'inactive',
     isDefault: false
@@ -114,7 +115,8 @@ export default function AddWarehouseModal({
             allowBackorders: false,
             trackInventory: true,
             autoFulfill: false,
-            priority: 1
+            priority: 1,
+            orderStatusSettings: DEFAULT_ORDER_STATUS_SETTINGS
           },
           status: 'active',
           isDefault: !hasDefault // First warehouse becomes default

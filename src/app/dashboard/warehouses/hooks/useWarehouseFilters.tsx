@@ -5,7 +5,8 @@ import { Warehouse, WarehouseFilterState } from '../utils/warehouseTypes'
 const DEFAULT_FILTERS: WarehouseFilterState = {
   search: '',
   status: '',
-  country: ''
+  country: '',
+  hasLayout: false
 }
 
 export function useWarehouseFilters(warehouses: Warehouse[]) {

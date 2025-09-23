@@ -1,7 +1,7 @@
-// app/dashboard/warehouses/page.tsx
+// File path: app/dashboard/warehouses/page.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import WarehousesToolbar from './components/WarehousesToolbar'
 import WarehousesTable from './components/WarehousesTable'
@@ -17,7 +17,20 @@ import { useWarehouseColumns } from './hooks/useWarehouseColumns'
 // Types
 import { Warehouse } from './utils/warehouseTypes'
 
-export default function WarehousesPage() {
+// Loading component for Suspense fallback
+function WarehousesLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-96">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading warehouses...</p>
+      </div>
+    </div>
+  )
+}
+
+// Main content component
+function WarehousesContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -169,7 +182,8 @@ export default function WarehousesPage() {
     setFilters({
       search: '',
       status: '',
-      country: ''
+      country: '',
+      hasLayout: false
     })
   }
 
@@ -244,5 +258,14 @@ export default function WarehousesPage() {
         />
       )}
     </div>
+  )
+}
+
+// Export the page wrapped in Suspense
+export default function WarehousesPage() {
+  return (
+    <Suspense fallback={<WarehousesLoading />}>
+      <WarehousesContent />
+    </Suspense>
   )
 }
