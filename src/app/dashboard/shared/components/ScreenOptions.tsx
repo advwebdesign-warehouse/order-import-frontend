@@ -1,9 +1,9 @@
-// File: app/dashboard/shared/components/ScreenOptions.tsx
+// File path: app/dashboard/shared/components/ScreenOptions.tsx
 
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { ChevronDownIcon, ChevronUpIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { ChevronDownIcon, ChevronUpIcon, ArrowPathIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 interface ScreenOptionsProps {
   // Pagination
@@ -58,16 +58,8 @@ export default function ScreenOptions({
   className = ''
 }: ScreenOptionsProps) {
   const [isOpen, setIsOpen] = useState(false)
-  // Add fallback for undefined itemsPerPage
-  const safeItemsPerPage = itemsPerPage || 20
-  const [localItemsPerPage, setLocalItemsPerPage] = useState(safeItemsPerPage.toString())
   const [customPickingLimit, setCustomPickingLimit] = useState('100')
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Update local state when itemsPerPage prop changes
-  useEffect(() => {
-    setLocalItemsPerPage((itemsPerPage || 20).toString())
-  }, [itemsPerPage])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -86,24 +78,10 @@ export default function ScreenOptions({
     }
   }, [isOpen])
 
-  const handleApply = () => {
-    const newValue = parseInt(localItemsPerPage)
+  const handleItemsPerPageChange = (value: string) => {
+    const newValue = parseInt(value)
     if (newValue && newValue > 0 && newValue <= 1000) {
       onItemsPerPageChange(newValue)
-      setIsOpen(false)
-    }
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleApply()
-    }
-  }
-
-  const handleResetLayout = () => {
-    if (onResetLayout) {
-      onResetLayout()
-      setIsOpen(false)
     }
   }
 
@@ -111,7 +89,7 @@ export default function ScreenOptions({
     if (onMaxPickingOrdersChange) {
       if (value === 'custom') {
         // When switching to custom, use current custom limit value
-        onMaxPickingOrdersChange(`custom:${currentCustomValue}`)
+        onMaxPickingOrdersChange(`custom:${customPickingLimit}`)
       } else {
         onMaxPickingOrdersChange(value)
       }
@@ -122,9 +100,16 @@ export default function ScreenOptions({
     if (value === '' || /^\d+$/.test(value)) {
       setCustomPickingLimit(value)
       // Always update the parent state immediately when custom value changes
-      if (onMaxPickingOrdersChange) {
+      if (onMaxPickingOrdersChange && value !== '') {
         onMaxPickingOrdersChange(`custom:${value}`)
       }
+    }
+  }
+
+  const handleResetLayout = () => {
+    if (onResetLayout) {
+      onResetLayout()
+      setIsOpen(false)
     }
   }
 
@@ -133,6 +118,16 @@ export default function ScreenOptions({
   const currentCustomValue = maxPickingOrders?.startsWith('custom:')
     ? maxPickingOrders.split(':')[1] || customPickingLimit
     : customPickingLimit
+
+  // Initialize custom value from props
+  useEffect(() => {
+    if (maxPickingOrders?.startsWith('custom:')) {
+      const customValue = maxPickingOrders.split(':')[1]
+      if (customValue) {
+        setCustomPickingLimit(customValue)
+      }
+    }
+  }, [maxPickingOrders])
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
@@ -153,6 +148,17 @@ export default function ScreenOptions({
       {isOpen && (
         <div className="absolute right-0 z-20 mt-2 w-80 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
           <div className="p-4 space-y-6">
+            {/* Header with close button */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-gray-900">Screen Options</h3>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
             {/* Columns Section */}
             {columns && columns.length > 0 && (
               <div>
@@ -185,9 +191,8 @@ export default function ScreenOptions({
                       type="number"
                       min="1"
                       max="1000"
-                      value={localItemsPerPage}
-                      onChange={(e) => setLocalItemsPerPage(e.target.value)}
-                      onKeyPress={handleKeyPress}
+                      value={itemsPerPage || 20}
+                      onChange={(e) => handleItemsPerPageChange(e.target.value)}
                       className="w-16 rounded-md border-0 py-1 px-2 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600"
                     />
                   </div>
@@ -197,13 +202,9 @@ export default function ScreenOptions({
                     {itemsPerPageOptions.map((option) => (
                       <button
                         key={option}
-                        onClick={() => {
-                          setLocalItemsPerPage(option.toString())
-                          onItemsPerPageChange(option)
-                          setIsOpen(false)
-                        }}
+                        onClick={() => onItemsPerPageChange(option)}
                         className={`px-2 py-1 text-xs rounded ${
-                          option === safeItemsPerPage
+                          option === itemsPerPage
                             ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
                             : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
                         }`}
@@ -295,11 +296,10 @@ export default function ScreenOptions({
 
             {/* Reset Layout Section */}
             {onResetLayout && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-3">Layout</h3>
+              <div className="pt-4 border-t border-gray-200">
                 <button
                   onClick={handleResetLayout}
-                  className="inline-flex items-center gap-x-2 rounded-md bg-gray-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  className="w-full inline-flex justify-center items-center gap-x-2 rounded-md bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
                   title="Reset column order, sorting, and filters to defaults"
                 >
                   <ArrowPathIcon className="h-4 w-4" />
@@ -307,22 +307,6 @@ export default function ScreenOptions({
                 </button>
               </div>
             )}
-
-            {/* Apply Button */}
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-200">
-              <button
-                onClick={() => setIsOpen(false)}
-                className="px-3 py-1 text-sm text-gray-700 hover:text-gray-900"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleApply}
-                className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700"
-              >
-                Apply
-              </button>
-            </div>
           </div>
         </div>
       )}

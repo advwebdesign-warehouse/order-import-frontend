@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect  } from 'react'
 import { useParams } from 'next/navigation'
 import { useWarehouses } from '../../context/WarehouseContext'
 import OrderDetailsModal from '../../../orders/OrderDetailsModal'
@@ -103,7 +103,20 @@ export default function WarehouseOrdersPage() {
   const [showItemsToShip, setShowItemsToShip] = useState(false)
 
   // Max picking orders setting
-  const [maxPickingOrders, setMaxPickingOrders] = useState('all')
+  const [maxPickingOrders, setMaxPickingOrders] = useState<string>(() => {
+    // Load from localStorage on initialization, using warehouseId for unique keys
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`maxPickingOrders_${warehouseId}`)
+      return saved || 'all'
+    }
+    return 'all'
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && warehouseId) {
+      localStorage.setItem(`maxPickingOrders_${warehouseId}`, maxPickingOrders)
+    }
+  }, [maxPickingOrders, warehouseId])
 
   // Custom hooks for state management
   const { orders, loading } = useWarehouseOrders(warehouseId)

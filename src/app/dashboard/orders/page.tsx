@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import OrderDetailsModal from './OrderDetailsModal'
 import PackingSlip from './PackingSlip'
 import OrdersToolbar from './components/OrdersToolbar'
@@ -108,6 +108,20 @@ export default function OrdersPage() {
   const [showPackingSlip, setShowPackingSlip] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [maxPickingOrders, setMaxPickingOrders] = useState<string>(() => {
+    // Load from localStorage on initialization
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('maxPickingOrders_main')
+      return saved || 'all'
+    }
+    return 'all'
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('maxPickingOrders_main', maxPickingOrders)
+    }
+  }, [maxPickingOrders])
 
   // Custom hooks for state management
   const { orders, loading } = useOrders()
@@ -206,6 +220,10 @@ export default function OrdersPage() {
     setCurrentPage(1) // Reset to first page
   }
 
+  const handleMaxPickingOrdersChange = (value: string) => {
+    setMaxPickingOrders(value)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
@@ -229,6 +247,8 @@ export default function OrdersPage() {
         onColumnReorder={handleColumnReorder}
         itemsPerPage={ordersPerPage || 20}
         onItemsPerPageChange={handleItemsPerPageChange}
+        maxPickingOrders={maxPickingOrders}
+        onMaxPickingOrdersChange={handleMaxPickingOrdersChange}
       />
 
       <OrdersFilters
