@@ -330,6 +330,10 @@ export default function WarehouseOrdersPage() {
       {showFilters && (
         <div className="mt-4">
           <OrdersFilters
+            searchTerm={searchTerm}  // ADDED THIS LINE
+            onSearchChange={setSearchTerm}  // ADDED THIS LINE
+            showFilters={showFilters}  // ADDED THIS LINE
+            onToggleFilters={() => setShowFilters(!showFilters)}  // ADDED THIS LINE
             filters={filters}
             onFiltersChange={setFilters}
             onClearAllFilters={handleClearAllFilters}
