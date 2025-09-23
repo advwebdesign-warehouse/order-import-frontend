@@ -57,6 +57,23 @@ export default function WarehouseLayoutPage() {
     return positions
   })
 
+  // Zone dimensions state - NEW
+  const [zoneDimensions, setZoneDimensions] = useState<{[key: string]: {width: number, height: number}}>(() => {
+    if (warehouse?.layout?.zoneDimensions) {
+      return warehouse.layout.zoneDimensions
+    }
+    // Default dimensions for any existing zones
+    const dimensions: {[key: string]: {width: number, height: number}} = {}
+    const currentZones = warehouse?.layout?.zones || []
+    currentZones.forEach((zone) => {
+      dimensions[zone.id] = {
+        width: 200,
+        height: 140
+      }
+    })
+    return dimensions
+  })
+
   // Modal states
   const [showZoneModal, setShowZoneModal] = useState(false)
   const [showAisleModal, setShowAisleModal] = useState(false)
@@ -74,7 +91,7 @@ export default function WarehouseLayoutPage() {
   const [selectedShelf, setSelectedShelf] = useState<Shelf | null>(null)
   const [selectedZoneInMap, setSelectedZoneInMap] = useState<string | null>(null)
 
-  // Load zones and positions from warehouse when warehouse data changes
+  // Load zones, positions, and dimensions from warehouse when warehouse data changes
   useEffect(() => {
     if (warehouse?.layout?.zones) {
       setZones(warehouse.layout.zones)
@@ -92,12 +109,28 @@ export default function WarehouseLayoutPage() {
           }
         })
         setZonePositions(positions)
-        // Save the default positions
-        persistZones(warehouse.layout.zones, positions)
+      }
+
+      // Update dimensions if they exist in warehouse data - NEW
+      if (warehouse.layout.zoneDimensions) {
+        setZoneDimensions(warehouse.layout.zoneDimensions)
+      } else {
+        // Generate default dimensions for existing zones
+        const dimensions: {[key: string]: {width: number, height: number}} = {}
+        warehouse.layout.zones.forEach((zone) => {
+          dimensions[zone.id] = {
+            width: 200,
+            height: 140
+          }
+        })
+        setZoneDimensions(dimensions)
+        // Save the default dimensions - use zonePositions state instead of undefined positions
+        persistZones(warehouse.layout.zones, warehouse.layout.zonePositions || zonePositions, dimensions)
       }
     } else if (warehouse) {
       setZones([])
       setZonePositions({})
+      setZoneDimensions({})
     }
   }, [warehouse])
 
@@ -110,11 +143,27 @@ export default function WarehouseLayoutPage() {
   const handleZonePositionsUpdate = async (positions: {[key: string]: {x: number, y: number}}) => {
     // Persist positions to database when dragging completes
     setZonePositions(positions)
-    await persistZones(zones, positions)
+    await persistZones(zones, positions, zoneDimensions)
   }
 
-  // Function to persist zones to warehouse
-  const persistZones = async (updatedZones: Zone[], updatedPositions?: {[key: string]: {x: number, y: number}}) => {
+  // Zone dimensions handlers - NEW
+  const handleZoneDimensionsChange = (dimensions: {[key: string]: {width: number, height: number}}) => {
+    // Update local state for live feedback during resizing
+    setZoneDimensions(dimensions)
+  }
+
+  const handleZoneDimensionsUpdate = async (dimensions: {[key: string]: {width: number, height: number}}) => {
+    // Persist dimensions to database when resizing completes
+    setZoneDimensions(dimensions)
+    await persistZones(zones, zonePositions, dimensions)
+  }
+
+  // Function to persist zones to warehouse - UPDATED to include dimensions
+  const persistZones = async (
+    updatedZones: Zone[],
+    updatedPositions?: {[key: string]: {x: number, y: number}},
+    updatedDimensions?: {[key: string]: {width: number, height: number}}
+  ) => {
     if (!warehouse) return
 
     try {
@@ -127,6 +176,7 @@ export default function WarehouseLayoutPage() {
 
       updatedLayout.zones = updatedZones
       updatedLayout.zonePositions = updatedPositions || zonePositions
+      updatedLayout.zoneDimensions = updatedDimensions || zoneDimensions // NEW
       updatedLayout.updatedAt = new Date().toISOString()
 
       await updateWarehouse(warehouseId, {
@@ -197,7 +247,7 @@ export default function WarehouseLayoutPage() {
       }
       updatedZones = [...zones, newZone]
 
-      // Add default position for new zone
+      // Add default position and dimensions for new zone
       const newPosition = {
         x: (updatedZones.length - 1) % 3 * 250 + 50,
         y: Math.floor((updatedZones.length - 1) / 3) * 200 + 50
@@ -206,8 +256,13 @@ export default function WarehouseLayoutPage() {
         ...zonePositions,
         [newZone.id]: newPosition
       }
+      const updatedDimensions = {
+        ...zoneDimensions,
+        [newZone.id]: { width: 200, height: 140 } // Default dimensions for new zone
+      }
       setZonePositions(updatedPositions)
-      await persistZones(updatedZones, updatedPositions)
+      setZoneDimensions(updatedDimensions)
+      await persistZones(updatedZones, updatedPositions, updatedDimensions)
       return
     }
 
@@ -221,13 +276,16 @@ export default function WarehouseLayoutPage() {
     }
 
     const updatedZones = zones.filter(z => z.id !== zone.id)
-    // Remove the zone's position
+    // Remove the zone's position and dimensions
     const updatedPositions = { ...zonePositions }
     delete updatedPositions[zone.id]
+    const updatedDimensions = { ...zoneDimensions }
+    delete updatedDimensions[zone.id]
 
     setZones(updatedZones)
     setZonePositions(updatedPositions)
-    await persistZones(updatedZones, updatedPositions)
+    setZoneDimensions(updatedDimensions)
+    await persistZones(updatedZones, updatedPositions, updatedDimensions)
   }
 
   // Aisle handlers
@@ -584,9 +642,12 @@ export default function WarehouseLayoutPage() {
           <VisualLayoutMap
             zones={zones}
             zonePositions={zonePositions}
+            zoneDimensions={zoneDimensions}
             selectedZoneId={selectedZoneInMap}
             onZonePositionsChange={handleZonePositionsChange}
             onZonePositionsUpdate={handleZonePositionsUpdate}
+            onZoneDimensionsChange={handleZoneDimensionsChange}
+            onZoneDimensionsUpdate={handleZoneDimensionsUpdate}
             onZoneSelect={setSelectedZoneInMap}
             onEditZone={handleEditZone}
             onManageAisles={(zone) => {

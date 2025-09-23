@@ -115,7 +115,8 @@ export type OrderStatus = typeof AVAILABLE_ORDER_STATUSES[number]
 // NEW: Warehouse Layout Types
 export interface WarehouseLayout {
   zones: Zone[]
-  zonePositions?: {[key: string]: {x: number, y: number}} // NEW: Visual layout positions
+  zonePositions?: {[key: string]: {x: number, y: number}} // Visual layout positions
+  zoneDimensions?: {[key: string]: {width: number, height: number}} // NEW: Zone dimensions for resizing
   defaultLocationFormat: LocationFormat
   createdAt: string
   updatedAt: string
