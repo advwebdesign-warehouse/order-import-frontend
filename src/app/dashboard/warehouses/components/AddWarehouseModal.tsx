@@ -71,7 +71,15 @@ export default function AddWarehouseModal({
           name: warehouse.name,
           code: warehouse.code,
           description: warehouse.description || '',
-          address: { ...warehouse.address },
+          address: {
+            address1: warehouse.address.address1,
+            address2: warehouse.address.address2 || '',  // Provide default empty string if undefined
+            city: warehouse.address.city,
+            state: warehouse.address.state,
+            zip: warehouse.address.zip,
+            country: warehouse.address.country,
+            countryCode: warehouse.address.countryCode
+          },
           contactInfo: { ...warehouse.contactInfo },
           settings: { ...warehouse.settings },
           status: warehouse.status,
