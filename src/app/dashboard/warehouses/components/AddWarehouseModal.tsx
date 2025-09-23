@@ -80,7 +80,11 @@ export default function AddWarehouseModal({
             country: warehouse.address.country,
             countryCode: warehouse.address.countryCode
           },
-          contactInfo: { ...warehouse.contactInfo },
+          contactInfo: {
+            managerName: warehouse.contactInfo.managerName || '',  // Handle optional field
+            phone: warehouse.contactInfo.phone || '',  // Handle optional field
+            email: warehouse.contactInfo.email || ''  // Handle optional field
+          },
           settings: { ...warehouse.settings },
           status: warehouse.status,
           isDefault: warehouse.isDefault
