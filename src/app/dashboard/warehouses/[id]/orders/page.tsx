@@ -309,7 +309,7 @@ export default function WarehouseOrdersPage() {
         onResetLayout={handleResetLayout}
         columns={columns}
         onColumnVisibilityChange={handleColumnVisibilityChange}
-        onColumnReorder={handleColumnReorder}
+        onColumnReorder={handleColumnReorder}  // ADDED THIS LINE
         itemsPerPage={ordersPerPage || 20}
         onItemsPerPageChange={handleItemsPerPageChange}
         maxPickingOrders={maxPickingOrders}
@@ -351,7 +351,7 @@ export default function WarehouseOrdersPage() {
           selectedOrders={selectedOrders}
           onSort={handleSort}
           onSelectOrder={handleSelectOrder}
-          onSelectAll={handleSelectAll}
+          onSelectAll={() => handleSelectAll(currentOrders)}  // FIXED: Pass currentOrders
           onViewOrder={handleViewOrderDetails}
           onPrintPackingSlip={handlePrintSinglePackingSlip}
           onColumnVisibilityChange={handleColumnVisibilityChange}
