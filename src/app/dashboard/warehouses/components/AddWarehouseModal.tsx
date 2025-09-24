@@ -50,9 +50,9 @@ export default function AddWarehouseModal({
       email: ''
     },
     settings: {
-      allowBackorders: false,
-      trackInventory: true,
-      autoFulfill: false,
+      allowBackorders: false,  // Keep in settings but not in UI
+      trackInventory: true,    // Keep in settings but not in UI
+      autoFulfill: false,      // Keep in settings but not in UI
       priority: 1,
       orderStatusSettings: DEFAULT_ORDER_STATUS_SETTINGS
     },
@@ -112,9 +112,9 @@ export default function AddWarehouseModal({
             email: ''
           },
           settings: {
-            allowBackorders: false,
-            trackInventory: true,
-            autoFulfill: false,
+            allowBackorders: false,  // Set default values even though not in UI
+            trackInventory: true,    // Set default values even though not in UI
+            autoFulfill: false,      // Set default values even though not in UI
             priority: 1,
             orderStatusSettings: DEFAULT_ORDER_STATUS_SETTINGS
           },
@@ -530,7 +530,7 @@ export default function AddWarehouseModal({
                             </div>
                           </div>
 
-                          <div className="space-y-3">
+                          <div>
                             <label className="flex items-center">
                               <input
                                 type="checkbox"
@@ -539,45 +539,6 @@ export default function AddWarehouseModal({
                                 className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                               />
                               <span className="ml-2 text-sm text-gray-700">Set as default warehouse</span>
-                            </label>
-
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={formData.settings.trackInventory}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  settings: { ...formData.settings, trackInventory: e.target.checked }
-                                })}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Track inventory</span>
-                            </label>
-
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={formData.settings.allowBackorders}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  settings: { ...formData.settings, allowBackorders: e.target.checked }
-                                })}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Allow backorders</span>
-                            </label>
-
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={formData.settings.autoFulfill}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  settings: { ...formData.settings, autoFulfill: e.target.checked }
-                                })}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Auto-fulfill orders</span>
                             </label>
                           </div>
                         </div>

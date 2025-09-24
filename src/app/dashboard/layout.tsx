@@ -1,7 +1,7 @@
 //file path: app/dashboard/layout.tsx
 'use client'
 
-import { Fragment, useState, useEffect } from 'react'
+import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import {
   Bars3Icon,
@@ -12,23 +12,16 @@ import {
   Cog6ToothIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  PlusIcon,
-  Squares2X2Icon,
 } from '@heroicons/react/24/outline'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useWarehouses } from './warehouses/context/WarehouseContext'
 import DashboardProviders from './providers'
 
-// Navigation item interface
+// Navigation item interface - simplified
 interface NavigationItem {
   name: string
-  href?: string
+  href: string
   icon: any
-  expandable?: boolean
-  children?: NavigationItem[]
 }
 
 function DashboardLayoutContent({
@@ -37,38 +30,7 @@ function DashboardLayoutContent({
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set(['warehouses']))
   const pathname = usePathname()
-  const { warehouses, loading } = useWarehouses()
-
-  // Add warehouse names to expanded items when warehouses are loaded
-  useEffect(() => {
-    if (warehouses.length > 0) {
-      setExpandedItems(prev => {
-        const newExpanded = new Set(prev)
-        warehouses.forEach(warehouse => {
-          newExpanded.add(warehouse.name.toLowerCase())
-        })
-        return newExpanded
-      })
-    }
-  }, [warehouses])
-
-  const toggleExpanded = (itemName: string) => {
-    // Prevent warehouses and individual warehouse items from being collapsed
-    if (itemName.toLowerCase() === 'warehouses' ||
-        warehouses.some(w => w.name.toLowerCase() === itemName.toLowerCase())) {
-      return
-    }
-
-    const newExpanded = new Set(expandedItems)
-    if (newExpanded.has(itemName)) {
-      newExpanded.delete(itemName)
-    } else {
-      newExpanded.add(itemName)
-    }
-    setExpandedItems(newExpanded)
-  }
 
   const isCurrentPage = (href: string): boolean => {
     if (href === '/dashboard') {
@@ -77,163 +39,32 @@ function DashboardLayoutContent({
     return pathname.startsWith(href)
   }
 
-  // Build navigation with dynamic warehouse submenu
-  const buildNavigation = (): NavigationItem[] => {
-    const baseNavigation: NavigationItem[] = [
-      { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-      { name: 'Products', href: '/dashboard/products', icon: CubeIcon },
-    ]
+  // Simple flat navigation - no expandable items or submenus
+  const navigation: NavigationItem[] = [
+    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+    { name: 'Products', href: '/dashboard/products', icon: CubeIcon },
+    { name: 'Orders', href: '/dashboard/orders', icon: ShoppingBagIcon },
+    { name: 'Warehouses', href: '/dashboard/warehouses', icon: BuildingOffice2Icon },
+    { name: 'Integrations', href: '/dashboard/integrations', icon: Cog6ToothIcon },
+    { name: 'Settings', href: '/dashboard/settings', icon: WrenchScrewdriverIcon }
+  ]
 
-    // Handle warehouses navigation - always clickable and expandable
-    const warehouseChildren: NavigationItem[] = []
-
-    if (warehouses.length === 1) {
-      // Single warehouse - show layout and orders
-      const warehouse = warehouses[0]
-      warehouseChildren.push(
-        {
-          name: 'Layout',
-          href: `/dashboard/warehouses/${warehouse.id}/layout`,
-          icon: Squares2X2Icon,
-        },
-        {
-          name: 'Orders',
-          href: `/dashboard/warehouses/${warehouse.id}/orders`,
-          icon: ShoppingBagIcon,
-        },
-        {
-          name: 'Add Warehouse',
-          href: '/dashboard/warehouses?action=add',
-          icon: PlusIcon,
-        }
-      )
-    } else if (warehouses.length > 1) {
-      // Multiple warehouses - show each warehouse with layout and orders
-      warehouseChildren.push(
-        ...warehouses
-          .filter(w => w.status === 'active')
-          .map(warehouse => ({
-            name: warehouse.name,
-            href: `/dashboard/warehouses/${warehouse.id}`, // Make warehouse clickable (goes to overview)
-            icon: BuildingOffice2Icon,
-            expandable: true,
-            children: [
-              {
-                name: 'Layout',
-                href: `/dashboard/warehouses/${warehouse.id}/layout`,
-                icon: Squares2X2Icon,
-              },
-              {
-                name: 'Orders',
-                href: `/dashboard/warehouses/${warehouse.id}/orders`,
-                icon: ShoppingBagIcon,
-              }
-            ]
-          })),
-        {
-          name: 'Add Warehouse',
-          href: '/dashboard/warehouses?action=add',
-          icon: PlusIcon,
-        }
-      )
-    } else {
-      // No warehouses - still show Add Warehouse option
-      warehouseChildren.push({
-        name: 'Add Warehouse',
-        href: '/dashboard/warehouses?action=add',
-        icon: PlusIcon,
-      })
-    }
-
-    // Always make Warehouses clickable (goes to main warehouses page) and expandable
-    baseNavigation.push({
-      name: 'Warehouses',
-      href: '/dashboard/warehouses', // Main warehouses page (formerly "All Warehouses")
-      icon: BuildingOffice2Icon,
-      expandable: warehouseChildren.length > 0,
-      children: warehouseChildren,
-    })
-
-    baseNavigation.push(
-      { name: 'Integrations', href: '/dashboard/integrations', icon: Cog6ToothIcon },
-      { name: 'Settings', href: '/dashboard/settings', icon: WrenchScrewdriverIcon }
-    )
-
-    return baseNavigation
-  }
-
-  const navigation = buildNavigation()
-
-  const renderNavigationItem = (item: NavigationItem, level: number = 0) => {
-    const isExpanded = expandedItems.has(item.name.toLowerCase())
-    const hasChildren = item.children && item.children.length > 0
-    const isActive = item.href ? isCurrentPage(item.href) : false
-    const hasActiveChild = hasChildren && item.children!.some(child =>
-      child.href ? isCurrentPage(child.href) : child.children?.some(grandchild =>
-        grandchild.href ? isCurrentPage(grandchild.href) : false
-      )
-    )
-
-    const paddingLeft = level === 0 ? 'pl-3' : level === 1 ? 'pl-8' : 'pl-12'
+  const renderNavigationItem = (item: NavigationItem) => {
+    const isActive = isCurrentPage(item.href)
 
     return (
-      <div key={item.name}>
-        <div
-          className={`${paddingLeft} pr-3 py-2 flex items-center justify-between group cursor-pointer hover:bg-gray-100 ${
-            isActive || hasActiveChild ? 'bg-indigo-50 border-r-2 border-indigo-500' : ''
-          }`}
-          onClick={() => {
-            // Handle click for expandable items
-            const isWarehouse = warehouses.some(w => w.name.toLowerCase() === item.name.toLowerCase())
-            if (hasChildren && item.name.toLowerCase() !== 'warehouses' && !isWarehouse) {
-              toggleExpanded(item.name.toLowerCase())
-            } else if (item.href) {
-              setSidebarOpen(false)
-            }
-          }}
-        >
-          {item.href ? (
-            <Link href={item.href} className="flex items-center flex-1" onClick={(e) => {
-              const isWarehouse = warehouses.some(w => w.name.toLowerCase() === item.name.toLowerCase())
-              if (hasChildren && (item.name.toLowerCase() === 'warehouses' || isWarehouse)) {
-                // For warehouses and individual warehouse items, allow both navigation and expansion
-                e.stopPropagation()
-                setSidebarOpen(false)
-              }
-            }}>
-              <item.icon className="h-5 w-5 mr-3 text-gray-600" />
-              <span className="text-sm font-medium text-gray-700">{item.name}</span>
-            </Link>
-          ) : (
-            <div className="flex items-center flex-1">
-              <item.icon className="h-5 w-5 mr-3 text-gray-600" />
-              <span className="text-sm font-medium text-gray-700">{item.name}</span>
-            </div>
-          )}
-
-          {hasChildren && (
-            <div className="flex-shrink-0">
-              {item.name.toLowerCase() === 'warehouses' || warehouses.some(w => w.name.toLowerCase() === item.name.toLowerCase()) ? (
-                // Always show expanded for warehouses and individual warehouse items
-                <ChevronDownIcon className="h-4 w-4 text-gray-400" />
-              ) : (
-                // Normal expand/collapse for other items
-                isExpanded ? (
-                  <ChevronDownIcon className="h-4 w-4 text-gray-400" />
-                ) : (
-                  <ChevronRightIcon className="h-4 w-4 text-gray-400" />
-                )
-              )}
-            </div>
-          )}
-        </div>
-
-        {hasChildren && (item.name.toLowerCase() === 'warehouses' || warehouses.some(w => w.name.toLowerCase() === item.name.toLowerCase()) || isExpanded) && (
-          <div className="space-y-1">
-            {item.children!.map((child) => renderNavigationItem(child, level + 1))}
-          </div>
-        )}
-      </div>
+      <Link
+        key={item.name}
+        href={item.href}
+        className={`
+          pl-3 pr-3 py-2 flex items-center cursor-pointer hover:bg-gray-100
+          ${isActive ? 'bg-indigo-50 border-r-2 border-indigo-500' : ''}
+        `}
+        onClick={() => setSidebarOpen(false)}
+      >
+        <item.icon className="h-5 w-5 mr-3 text-gray-600" />
+        <span className="text-sm font-medium text-gray-700">{item.name}</span>
+      </Link>
     )
   }
 

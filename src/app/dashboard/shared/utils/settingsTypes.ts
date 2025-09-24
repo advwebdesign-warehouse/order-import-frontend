@@ -1,4 +1,4 @@
-// app/dashboard/shared/utils/settingsTypes.ts
+//file path: app/dashboard/shared/utils/settingsTypes.ts
 export interface PaginationSettings {
   ordersPerPage: number
   productsPerPage: number
@@ -79,7 +79,7 @@ export interface UserSettings {
   performance: PerformanceSettings
 }
 
-// Default settings
+// Default settings - UPDATED: manageStock is now false by default
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   pagination: {
     ordersPerPage: 20,
@@ -98,7 +98,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
     showCurrencySymbol: true
   },
   inventory: {
-    manageStock: true,
+    manageStock: false, // CHANGED: Set to false by default
     trackQuantity: true,
     showStockWarnings: true,
     lowStockThreshold: 10,

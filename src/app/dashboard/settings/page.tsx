@@ -1,4 +1,4 @@
-// app/dashboard/settings/page.tsx
+//file path: app/dashboard/settings/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -11,7 +11,8 @@ import {
   BellIcon,
   BoltIcon,
   CheckIcon,
-  CubeIcon
+  CubeIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline'
 import { UserSettings, DEFAULT_USER_SETTINGS, PAGINATION_OPTIONS, CURRENCY_OPTIONS } from '../shared/utils/settingsTypes'
 import { useSettings } from '../shared/hooks/useSettings'
@@ -70,311 +71,12 @@ export default function SettingsPage() {
     }
   }
 
-  const renderPaginationSettings = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Items Per Page</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Orders per page</label>
-            <select
-              value={settings.pagination.ordersPerPage}
-              onChange={(e) => handleSettingChange('pagination', 'ordersPerPage', parseInt(e.target.value))}
-              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-            >
-              {PAGINATION_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Products per page</label>
-            <select
-              value={settings.pagination.productsPerPage}
-              onChange={(e) => handleSettingChange('pagination', 'productsPerPage', parseInt(e.target.value))}
-              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-            >
-              {PAGINATION_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Pagination Options</h3>
-        <div className="space-y-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.pagination.showPaginationInfo}
-              onChange={(e) => handleSettingChange('pagination', 'showPaginationInfo', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Show pagination information (e.g., "Showing 1-20 of 100")</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.pagination.showJumpToPage}
-              onChange={(e) => handleSettingChange('pagination', 'showJumpToPage', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Enable "Jump to page" functionality</span>
-          </label>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderDisplaySettings = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Date & Time Format</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date format</label>
-            <select
-              value={settings.display.dateFormat}
-              onChange={(e) => handleSettingChange('display', 'dateFormat', e.target.value)}
-              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-            >
-              <option value="US">US Format (MM/DD/YYYY)</option>
-              <option value="EU">EU Format (DD/MM/YYYY)</option>
-              <option value="ISO">ISO Format (YYYY-MM-DD)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Time format</label>
-            <select
-              value={settings.display.timeFormat}
-              onChange={(e) => handleSettingChange('display', 'timeFormat', e.target.value)}
-              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-            >
-              <option value="12h">12-hour (3:30 PM)</option>
-              <option value="24h">24-hour (15:30)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Currency Settings</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Default currency</label>
-            <select
-              value={settings.display.currency}
-              onChange={(e) => handleSettingChange('display', 'currency', e.target.value)}
-              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-            >
-              {CURRENCY_OPTIONS.map(currency => (
-                <option key={currency.value} value={currency.value}>{currency.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Currency position</label>
-            <select
-              value={settings.display.currencyPosition}
-              onChange={(e) => handleSettingChange('display', 'currencyPosition', e.target.value)}
-              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-            >
-              <option value="before">Before amount ($100.00)</option>
-              <option value="after">After amount (100.00 $)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderInventorySettings = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Stock Management</h3>
-        <div className="space-y-4">
-          <label className="flex items-start">
-            <input
-              type="checkbox"
-              checked={settings.inventory.manageStock}
-              onChange={(e) => handleSettingChange('inventory', 'manageStock', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-1"
-            />
-            <div className="ml-3">
-              <div className="text-sm font-medium text-gray-700">Enable stock management</div>
-              <div className="text-xs text-gray-500">Show stock status and quantity columns in products table</div>
-            </div>
-          </label>
-
-          {settings.inventory.manageStock && (
-            <div className="ml-7 space-y-4 border-l-2 border-indigo-200 pl-4">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={settings.inventory.trackQuantity}
-                  onChange={(e) => handleSettingChange('inventory', 'trackQuantity', e.target.checked)}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <span className="ml-2 text-sm text-gray-700">Track product quantities</span>
-              </label>
-
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={settings.inventory.showStockWarnings}
-                  onChange={(e) => handleSettingChange('inventory', 'showStockWarnings', e.target.checked)}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <span className="ml-2 text-sm text-gray-700">Show low stock warnings</span>
-              </label>
-
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={settings.inventory.enableBackorders}
-                  onChange={(e) => handleSettingChange('inventory', 'enableBackorders', e.target.checked)}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <span className="ml-2 text-sm text-gray-700">Allow backorders when out of stock</span>
-              </label>
-
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={settings.inventory.autoUpdateStock}
-                  onChange={(e) => handleSettingChange('inventory', 'autoUpdateStock', e.target.checked)}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <span className="ml-2 text-sm text-gray-700">Automatically update stock when orders are placed</span>
-              </label>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Low stock threshold
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="1000"
-                  value={settings.inventory.lowStockThreshold}
-                  onChange={(e) => handleSettingChange('inventory', 'lowStockThreshold', parseInt(e.target.value) || 0)}
-                  className="block w-32 rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                />
-                <p className="mt-1 text-xs text-gray-500">Products with quantity at or below this number will show low stock warnings</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {!settings.inventory.manageStock && (
-        <div className="rounded-md bg-blue-50 p-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h4 className="text-sm font-medium text-blue-800">Stock Management Disabled</h4>
-              <p className="mt-1 text-sm text-blue-700">
-                When stock management is disabled, the Stock Status and Quantity columns will be hidden from the products table.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-
-  const renderTableSettings = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Table Behavior</h3>
-        <div className="space-y-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.table.enableColumnReordering}
-              onChange={(e) => handleSettingChange('table', 'enableColumnReordering', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Enable column reordering (drag & drop)</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.table.saveColumnState}
-              onChange={(e) => handleSettingChange('table', 'saveColumnState', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Remember column visibility and order</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.table.stickyHeaders}
-              onChange={(e) => handleSettingChange('table', 'stickyHeaders', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Sticky table headers when scrolling</span>
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Visual Options</h3>
-        <div className="space-y-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.table.alternateRowColors}
-              onChange={(e) => handleSettingChange('table', 'alternateRowColors', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Alternate row colors (zebra striping)</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.table.compactMode}
-              onChange={(e) => handleSettingChange('table', 'compactMode', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Compact mode (smaller row height)</span>
-          </label>
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={settings.table.showRowNumbers}
-              onChange={(e) => handleSettingChange('table', 'showRowNumbers', e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-            />
-            <span className="ml-2 text-sm text-gray-700">Show row numbers</span>
-          </label>
-        </div>
-      </div>
-    </div>
-  )
-
-  const renderCurrentTab = () => {
-    switch (activeTab) {
-      case 'pagination':
-        return renderPaginationSettings()
-      case 'display':
-        return renderDisplaySettings()
-      case 'inventory':
-        return renderInventorySettings()
-      case 'table':
-        return renderTableSettings()
-      default:
-        return <div className="text-center py-8 text-gray-500">Settings panel for {activeTab} coming soon...</div>
-    }
-  }
-
   return (
-    <div className="px-4 sm:px-6 lg:px-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="sm:flex sm:items-center">
         <div className="sm:flex-auto">
-          <h1 className="text-2xl font-semibold leading-6 text-gray-900">Settings</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
           <p className="mt-2 text-sm text-gray-700">
             Configure your preferences for orders, products, and general application behavior.
           </p>
@@ -400,7 +102,7 @@ export default function SettingsPage() {
 
       {/* Success Message */}
       {showSuccessMessage && (
-        <div className="mt-4 rounded-md bg-green-50 p-4">
+        <div className="rounded-md bg-green-50 p-4">
           <div className="flex">
             <CheckIcon className="h-5 w-5 text-green-400" />
             <div className="ml-3">
@@ -441,10 +143,14 @@ export default function SettingsPage() {
                       activeTab === tab.id
                         ? 'border-indigo-500 text-indigo-600'
                         : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                    } flex items-center gap-2 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium`}
+                    } group inline-flex items-center border-b-2 px-1 py-4 text-sm font-medium`}
                   >
-                    <Icon className="h-5 w-5" />
-                    {tab.name}
+                    <Icon className={`${
+                      activeTab === tab.id
+                        ? 'text-indigo-500'
+                        : 'text-gray-400 group-hover:text-gray-500'
+                    } -ml-0.5 mr-2 h-5 w-5`} />
+                    <span>{tab.name}</span>
                   </button>
                 )
               })}
@@ -454,21 +160,207 @@ export default function SettingsPage() {
 
         {/* Tab Content */}
         <div className="mt-8">
-          <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl">
-            <div className="px-4 py-6 sm:p-8">
-              {renderCurrentTab()}
+          {/* Inventory Tab - UPDATED */}
+          {activeTab === 'inventory' && (
+            <div className="space-y-6 max-w-3xl">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Stock Management</h3>
+                <div className="space-y-4 mt-4">
+                  {/* Enable Stock Management - DISABLED with Coming Soon */}
+                  <label className="flex items-start opacity-60 cursor-not-allowed">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      disabled={true}
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-1 cursor-not-allowed"
+                    />
+                    <div className="ml-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-500">Enable stock management</span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          <ClockIcon className="h-3 w-3" />
+                          Coming Soon
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500">Show stock status and quantity columns in products table</div>
+                    </div>
+                  </label>
 
-              {/* Section Reset Button */}
-              <div className="mt-8 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => handleResetSection(activeTab as keyof UserSettings)}
-                  className="text-sm text-red-600 hover:text-red-800"
-                >
-                  Reset {SETTINGS_TABS.find(t => t.id === activeTab)?.name} to defaults
-                </button>
+                  {/* Other inventory settings - all disabled when stock management is disabled */}
+                  <div className="ml-7 space-y-4 border-l-2 border-gray-200 pl-4 opacity-50">
+                    <label className="flex items-center cursor-not-allowed">
+                      <input
+                        type="checkbox"
+                        checked={settings.inventory.trackQuantity}
+                        disabled={true}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-not-allowed"
+                      />
+                      <span className="ml-2 text-sm text-gray-500">Track product quantities</span>
+                    </label>
+
+                    <label className="flex items-center cursor-not-allowed">
+                      <input
+                        type="checkbox"
+                        checked={settings.inventory.showStockWarnings}
+                        disabled={true}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-not-allowed"
+                      />
+                      <span className="ml-2 text-sm text-gray-500">Show low stock warnings</span>
+                    </label>
+
+                    <label className="flex items-center cursor-not-allowed">
+                      <input
+                        type="checkbox"
+                        checked={settings.inventory.enableBackorders}
+                        disabled={true}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-not-allowed"
+                      />
+                      <span className="ml-2 text-sm text-gray-500">Allow backorders when out of stock</span>
+                    </label>
+
+                    <label className="flex items-center cursor-not-allowed">
+                      <input
+                        type="checkbox"
+                        checked={settings.inventory.autoUpdateStock}
+                        disabled={true}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-not-allowed"
+                      />
+                      <span className="ml-2 text-sm text-gray-500">Automatically update stock when orders are placed</span>
+                    </label>
+
+                    <div className="cursor-not-allowed">
+                      <label className="block text-sm font-medium text-gray-500 mb-2">
+                        Low stock threshold
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="1000"
+                        value={settings.inventory.lowStockThreshold}
+                        disabled={true}
+                        className="block w-32 rounded-md border-0 py-1.5 text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300 cursor-not-allowed bg-gray-50 sm:text-sm sm:leading-6"
+                      />
+                      <p className="mt-1 text-xs text-gray-400">Products with quantity at or below this number will show low stock warnings</p>
+                    </div>
+                  </div>
+
+                  {/* Info message about stock management */}
+                  <div className="rounded-md bg-blue-50 p-4 mt-6">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <CubeIcon className="h-5 w-5 text-blue-400" />
+                      </div>
+                      <div className="ml-3">
+                        <h4 className="text-sm font-medium text-blue-800">Stock Management Coming Soon</h4>
+                        <p className="mt-1 text-sm text-blue-700">
+                          Advanced inventory tracking, warehouse layouts, and stock management features are currently under development and will be available in a future update.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Pagination Tab */}
+          {activeTab === 'pagination' && (
+            <div className="space-y-6 max-w-3xl">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Pagination Settings</h3>
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Orders per page</label>
+                    <select
+                      value={settings.pagination.ordersPerPage}
+                      onChange={(e) => handleSettingChange('pagination', 'ordersPerPage', parseInt(e.target.value))}
+                      className="mt-1 block w-32 rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                    >
+                      {PAGINATION_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Products per page</label>
+                    <select
+                      value={settings.pagination.productsPerPage}
+                      onChange={(e) => handleSettingChange('pagination', 'productsPerPage', parseInt(e.target.value))}
+                      className="mt-1 block w-32 rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                    >
+                      {PAGINATION_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={settings.pagination.showPaginationInfo}
+                      onChange={(e) => handleSettingChange('pagination', 'showPaginationInfo', e.target.checked)}
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Show pagination info</span>
+                  </label>
+
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={settings.pagination.showJumpToPage}
+                      onChange={(e) => handleSettingChange('pagination', 'showJumpToPage', e.target.checked)}
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Show jump to page</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add other tab content sections here as needed */}
+          {activeTab === 'display' && (
+            <div className="space-y-6 max-w-3xl">
+              <h3 className="text-lg font-medium text-gray-900">Display Settings</h3>
+              <p className="text-sm text-gray-600">Configure how dates, times, and currency are displayed.</p>
+            </div>
+          )}
+
+          {activeTab === 'table' && (
+            <div className="space-y-6 max-w-3xl">
+              <h3 className="text-lg font-medium text-gray-900">Table Settings</h3>
+              <p className="text-sm text-gray-600">Customize table behavior and appearance.</p>
+            </div>
+          )}
+
+          {activeTab === 'filters' && (
+            <div className="space-y-6 max-w-3xl">
+              <h3 className="text-lg font-medium text-gray-900">Filter Settings</h3>
+              <p className="text-sm text-gray-600">Configure filter behavior and defaults.</p>
+            </div>
+          )}
+
+          {activeTab === 'export' && (
+            <div className="space-y-6 max-w-3xl">
+              <h3 className="text-lg font-medium text-gray-900">Export Settings</h3>
+              <p className="text-sm text-gray-600">Set default export formats and options.</p>
+            </div>
+          )}
+
+          {activeTab === 'notifications' && (
+            <div className="space-y-6 max-w-3xl">
+              <h3 className="text-lg font-medium text-gray-900">Notification Settings</h3>
+              <p className="text-sm text-gray-600">Control how and when you receive notifications.</p>
+            </div>
+          )}
+
+          {activeTab === 'performance' && (
+            <div className="space-y-6 max-w-3xl">
+              <h3 className="text-lg font-medium text-gray-900">Performance Settings</h3>
+              <p className="text-sm text-gray-600">Optimize application performance and loading.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

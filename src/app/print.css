@@ -1,0 +1,276 @@
+/* file path: print.css */
+
+/* Global print styles to remove browser chrome and scrollbars */
+@media print {
+  /* Remove page margins and browser-added headers/footers */
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  /* Hide scrollbars */
+  html, body {
+    overflow: visible !important;
+    height: auto !important;
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* Reset body for print */
+  body {
+    margin: 0 !important;
+    padding: 15px !important;
+    background: white !important;
+  }
+
+  /* Hide specific page elements we don't want in print */
+  /* Target the sticky header with maximum specificity */
+  body > div > div > div > div.sticky,
+  body div.sticky.top-0,
+  div.sticky.top-0.z-40,
+  .sticky.top-0.z-40,
+  div.sticky.top-0,
+  .sticky.top-0,
+  .z-40.flex.h-16,
+  div[class*="sticky"][class*="top-0"],
+  div[class*="z-40"][class*="h-16"],
+  div.flex.h-16.shrink-0,
+  div.border-b.border-gray-200.bg-white.shadow-sm:not(.print-modal div),
+  [class*="sticky"]:not(.print-modal *),
+  [class*="fixed"]:not(.print-modal *),
+  .top-0:not(.print-modal *),
+  .z-40:not(.print-modal *),
+  .z-50:not(.print-modal),
+  nav,
+  header,
+  aside,
+  footer,
+  .sidebar,
+  .navbar,
+  .toolbar,
+  .navigation,
+  .breadcrumb,
+  [role="navigation"],
+  [role="banner"],
+  [role="complementary"],
+  main > div:not(.print-modal),
+  .print-modal ~ *:not(.print-modal),
+  body > div:not(.print-modal) button,
+  body > div:not(.print-modal) input,
+  body > div:not(.print-modal) select,
+  [class*="toolbar"],
+  [class*="Toolbar"],
+  [class*="header"]:not(.print-modal *),
+  [class*="Header"]:not(.print-modal *),
+  [class*="navigation"],
+  [class*="Navigation"],
+  [class*="sidebar"],
+  [class*="Sidebar"],
+  h1:not(.print-modal h1),
+  h2:not(.print-modal h2),
+  form:not(.print-modal form),
+  [type="search"]:not(.print-modal [type="search"]),
+  [type="checkbox"]:not(.print-modal [type="checkbox"]) {
+    display: none !important;
+  }
+
+  /* Hide elements with print-hidden class */
+  .print-hidden {
+    display: none !important;
+  }
+
+  /* Ensure the modal content is visible */
+  .print-modal,
+  .print-content,
+  [role="dialog"] {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    transform: none !important;
+    opacity: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Reduce spacing in print header */
+  .print-modal h1 {
+    margin-bottom: 0.5rem !important;
+    margin-top: 0 !important;
+  }
+
+  .print-modal .px-6.py-4 {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  .print-modal .border-b {
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* Text colors for print */
+  .print-text-gray-800 {
+    color: #1f2937 !important;
+  }
+
+  .print-text-gray-900 {
+    color: #111827 !important;
+  }
+
+  /* Ensure checkboxes are visible and properly styled */
+  .print-modal input[type="checkbox"],
+  .print-content input[type="checkbox"],
+  input[type="checkbox"] {
+    display: inline-block !important;
+    visibility: visible !important;
+    -webkit-appearance: checkbox !important;
+    -moz-appearance: checkbox !important;
+    appearance: checkbox !important;
+    width: 16px !important;
+    height: 16px !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    opacity: 1 !important;
+    position: relative !important;
+    margin: 0 !important;
+    vertical-align: middle !important;
+  }
+
+  /* Remove backgrounds in print */
+  .bg-gray-50,
+  .bg-blue-50,
+  .bg-green-50,
+  .bg-yellow-50,
+  .bg-purple-50,
+  .bg-indigo-100,
+  .bg-blue-100,
+  .bg-yellow-100,
+  .bg-gray-100,
+  .bg-green-100 {
+    background-color: white !important;
+  }
+
+  /* Force white background for print */
+  .print-bg-white {
+    background-color: white !important;
+  }
+
+  /* Remove colored text in badges for print */
+  .text-blue-800,
+  .text-yellow-800,
+  .text-indigo-800,
+  .text-green-600,
+  .text-purple-600 {
+    color: #000 !important;
+  }
+
+  /* Remove shadows for cleaner print */
+  .shadow-xl,
+  .shadow-lg,
+  .shadow-md,
+  .shadow-sm,
+  .shadow {
+    box-shadow: none !important;
+  }
+
+  /* Remove rounded corners */
+  .rounded-lg,
+  .rounded-md,
+  .rounded-2xl,
+  .rounded-full {
+    border-radius: 0 !important;
+  }
+
+  /* Ensure tables print properly */
+  table {
+    page-break-inside: avoid;
+    width: 100% !important;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Ensure two-column layout in print */
+  .print-w-half {
+    width: 50% !important;
+  }
+
+  .print-block {
+    display: block !important;
+  }
+
+  /* Border adjustments */
+  .print-border {
+    border-width: 1px !important;
+  }
+
+  .print-border-gray-200 {
+    border-color: #e5e7eb !important;
+  }
+
+  .print-border-gray-400 {
+    border-color: #9ca3af !important;
+  }
+
+  .print-border-r {
+    border-right-width: 1px !important;
+  }
+
+  /* Ensure appearance-auto works in print */
+  .print-appearance-auto {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    -moz-appearance: checkbox !important;
+  }
+
+  /* Page break controls */
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .no-page-break,
+  .print-break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Ensure print-specific rounded none */
+  .print-rounded-none {
+    border-radius: 0 !important;
+  }
+
+  /* Ensure proper overflow handling */
+  .print-overflow-visible {
+    overflow: visible !important;
+  }
+
+  /* Transform and position resets */
+  .print-transform-none {
+    transform: none !important;
+  }
+
+  .print-shadow-none {
+    box-shadow: none !important;
+  }
+
+  .print-max-w-none {
+    max-width: none !important;
+  }
+
+  .print-p-0 {
+    padding: 0 !important;
+  }
+
+  .print-h-auto {
+    height: auto !important;
+  }
+}

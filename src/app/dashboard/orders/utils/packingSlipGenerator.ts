@@ -1,3 +1,4 @@
+// File: app/dashboard/orders/utils/packingSlipGenerator.ts
 import { OrderWithDetails } from './orderTypes'
 import { DEFAULT_COMPANY_INFO } from '../constants/orderConstants'
 import { formatDateForPackingSlip, calculateTotalWeight } from './orderUtils'
@@ -12,7 +13,7 @@ export function printMultiplePackingSlips(orders: OrderWithDetails[]) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Packing Slips - ${orders.length} Orders</title>
+          <title>Packing Slips</title>
           <meta charset="utf-8">
           <style>
             ${getPackingSlipCSS()}
@@ -52,15 +53,14 @@ export function generatePackingSlipHTML(order: OrderWithDetails): string {
         </div>
         <div class="slip-info">
           <h2>PACKING SLIP</h2>
-          <div><strong>Date:</strong> ${formatDateForPackingSlip(new Date().toISOString())}</div>
           <div><strong>Order #:</strong> ${order.orderNumber}</div>
           <div><strong>Platform:</strong> ${order.platform}</div>
         </div>
       </div>
 
-      <div class="addresses">
+      <div class="addresses-row">
         <div class="address-block">
-          <h3>🏠 Ship To</h3>
+          <h3>📦 Ship To</h3>
           <div class="address-content">
             <strong>${order.shippingAddress.firstName} ${order.shippingAddress.lastName}</strong><br/>
             ${order.shippingAddress.address1}<br/>
@@ -71,7 +71,7 @@ export function generatePackingSlipHTML(order: OrderWithDetails): string {
         </div>
 
         <div class="address-block">
-          <h3>📦 Order Information</h3>
+          <h3>📋 Order Information</h3>
           <div class="address-content">
             <div><strong>Order Date:</strong> ${formatDateForPackingSlip(order.orderDate)}</div>
             <div><strong>Shipping Method:</strong> ${order.shippingMethod}</div>
@@ -158,6 +158,24 @@ export function generatePackingSlipHTML(order: OrderWithDetails): string {
 
 function getPackingSlipCSS(): string {
   return `
+    /* Remove browser chrome in print */
+    @page {
+      margin: 0;
+      size: auto;
+    }
+
+    /* Hide scrollbars */
+    html, body {
+      overflow: hidden !important;
+      -ms-overflow-style: none !important;
+      scrollbar-width: none !important;
+    }
+
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      display: none !important;
+    }
+
     body {
       font-family: system-ui, -apple-system, sans-serif;
       margin: 0;
@@ -165,12 +183,14 @@ function getPackingSlipCSS(): string {
       font-size: 14px;
       line-height: 1.4;
     }
+
     .packing-slip {
       margin-bottom: 40px;
       border: 1px solid #ddd;
       padding: 20px;
       background: white;
     }
+
     .header {
       display: flex;
       justify-content: space-between;
@@ -179,31 +199,39 @@ function getPackingSlipCSS(): string {
       border-bottom: 2px solid #333;
       padding-bottom: 20px;
     }
+
     .company-info h1 {
       margin: 0 0 10px 0;
       font-size: 24px;
       font-weight: bold;
     }
+
     .company-info div {
       margin: 2px 0;
       color: #666;
     }
+
     .slip-info {
       text-align: right;
     }
+
     .slip-info h2 {
       margin: 0 0 10px 0;
       font-size: 20px;
       font-weight: bold;
     }
-    .addresses {
+
+    /* Updated: Ship To and Order Information on same row */
+    .addresses-row {
       display: flex;
       gap: 40px;
       margin-bottom: 30px;
     }
+
     .address-block {
       flex: 1;
     }
+
     .address-block h3 {
       margin: 0 0 10px 0;
       font-weight: bold;
@@ -211,25 +239,31 @@ function getPackingSlipCSS(): string {
       border-bottom: 1px solid #eee;
       padding-bottom: 5px;
     }
+
     .address-content {
       background: #f9f9f9;
       padding: 15px;
       border-radius: 4px;
+      min-height: 120px;
     }
+
     table {
       width: 100%;
       border-collapse: collapse;
       margin: 20px 0;
     }
+
     th, td {
       border: 1px solid #ddd;
       padding: 8px;
       text-align: left;
     }
+
     th {
       background: #f5f5f5;
       font-weight: bold;
     }
+
     .qty-badge {
       background: #e0e7ff;
       color: #3730a3;
@@ -240,6 +274,7 @@ function getPackingSlipCSS(): string {
       display: inline-block;
       min-width: 24px;
     }
+
     .notes {
       background: #fef3c7;
       border: 1px solid #f59e0b;
@@ -247,6 +282,7 @@ function getPackingSlipCSS(): string {
       border-radius: 4px;
       margin: 20px 0;
     }
+
     .footer {
       display: flex;
       gap: 40px;
@@ -254,38 +290,55 @@ function getPackingSlipCSS(): string {
       padding-top: 20px;
       border-top: 1px solid #ddd;
     }
+
     .checklist {
       flex: 1;
     }
+
     .checklist h4 {
       margin: 0 0 10px 0;
       font-weight: bold;
     }
+
     .checklist ul {
       list-style: none;
       padding: 0;
       margin: 0;
     }
+
     .checklist li {
       margin: 5px 0;
       padding: 5px 0;
       border-bottom: 1px dotted #ccc;
     }
+
     .signature-area {
       flex: 1;
     }
+
     .signature-line {
       border-bottom: 1px solid #333;
       width: 200px;
       margin: 20px 0 5px 0;
     }
+
     @media print {
-      body { padding: 0; }
+      @page {
+        margin: 0;
+        size: auto;
+      }
+
+      body {
+        padding: 15px;
+        margin: 0;
+      }
+
       .packing-slip {
         border: none;
         page-break-after: always;
         margin-bottom: 0;
       }
+
       .packing-slip:last-child {
         page-break-after: avoid;
       }

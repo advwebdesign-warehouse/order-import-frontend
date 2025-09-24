@@ -1,7 +1,7 @@
 // File: app/dashboard/orders/components/OrdersToolbar.tsx
 'use client'
 
-import { ArrowDownTrayIcon, PrinterIcon } from '@heroicons/react/24/outline'
+import { ArrowDownTrayIcon, PrinterIcon, ListBulletIcon } from '@heroicons/react/24/outline'
 import { ColumnConfig } from '../utils/orderTypes'
 import ScreenOptions from '../../shared/components/ScreenOptions'
 
@@ -21,6 +21,11 @@ interface OrdersToolbarProps {
   // Max picking orders props
   maxPickingOrders?: string
   onMaxPickingOrdersChange?: (value: string) => void
+
+  // Picking List props
+  showItemsToShip?: boolean
+  onShowPickingList?: () => void
+  itemsToShipCount?: number
 }
 
 export default function OrdersToolbar({
@@ -34,7 +39,10 @@ export default function OrdersToolbar({
   itemsPerPage,
   onItemsPerPageChange,
   maxPickingOrders,
-  onMaxPickingOrdersChange
+  onMaxPickingOrdersChange,
+  showItemsToShip,
+  onShowPickingList,
+  itemsToShipCount
 }: OrdersToolbarProps) {
   // Convert ColumnConfig to format expected by ScreenOptions
   const screenOptionsColumns = columns.map(col => ({
@@ -83,13 +91,20 @@ export default function OrdersToolbar({
             </button>
           )}
 
-          <button
-            onClick={onResetLayout}
-            className="inline-flex items-center gap-x-2 rounded-md bg-gray-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-600"
-            title="Reset column order, sorting, and filters to defaults"
-          >
-            Reset Layout
-          </button>
+          {/* Show Picking List button when orders are selected OR items to ship checkbox is checked */}
+          {(selectedOrdersCount > 0 || showItemsToShip) && onShowPickingList && (
+            <button
+              onClick={onShowPickingList}
+              className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+            >
+              <ListBulletIcon className="h-4 w-4" />
+              {selectedOrdersCount > 0 ? (
+                <>Picking List ({selectedOrdersCount} orders)</>
+              ) : (
+                <>Picking List ({itemsToShipCount || 0} items)</>
+              )}
+            </button>
+          )}
 
           <button
             onClick={onExport}

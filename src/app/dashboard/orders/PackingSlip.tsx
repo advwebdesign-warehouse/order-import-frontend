@@ -1,3 +1,4 @@
+// File: app/dashboard/orders/PackingSlip.tsx
 'use client'
 
 import { Fragment } from 'react'
@@ -123,7 +124,7 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog as="div" className="relative z-50 print-modal" onClose={onClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -133,11 +134,11 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity print:hidden" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 overflow-y-auto">
-          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+        <div className="fixed inset-0 z-10 overflow-y-auto print:overflow-visible">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0 print:p-0">
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -147,7 +148,7 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl print:transform-none print:shadow-none print:rounded-none print:max-w-none">
                 {/* Header with actions - hidden in print */}
                 <div className="print:hidden flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
                   <h2 className="text-lg font-medium text-gray-900">Packing Slip Preview</h2>
@@ -176,7 +177,7 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
                 </div>
 
                 {/* Packing Slip Content */}
-                <div className="p-8 print:p-6">
+                <div className="p-8 print:p-6 print-content">
                   {/* Header */}
                   <div className="flex justify-between items-start mb-8 print:mb-6">
                     <div>
@@ -193,15 +194,15 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
                     <div className="text-right">
                       <h2 className="text-2xl font-bold text-gray-900 print:text-xl">PACKING SLIP</h2>
                       <div className="mt-2 text-sm text-gray-600">
-                        <div className="font-medium">Date: {formatDate(new Date().toISOString())}</div>
+                        {/* Removed Date field */}
                         <div>Order #{order.orderNumber}</div>
                         <div>Platform: {order.platform}</div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Shipping Information */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 print:mb-6">
+                  {/* Shipping Information - Updated to same row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 print:mb-6 print:grid-cols-2">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
                         <ReactCountryFlag
@@ -262,7 +263,7 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
                   {/* Items Table */}
                   <div className="mb-8 print:mb-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Items to Pack</h3>
-                    <div className="overflow-hidden border border-gray-200 rounded-lg">
+                    <div className="overflow-hidden border border-gray-200 rounded-lg print:rounded-none">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50 print:bg-gray-100">
                           <tr>
@@ -281,7 +282,7 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
                             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Weight (kg)
                             </th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider print:hidden">
+                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Packed
                             </th>
                           </tr>
@@ -319,17 +320,17 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
                                 {item.variant || '-'}
                               </td>
                               <td className="px-4 py-4 text-center">
-                                <span className="inline-flex items-center justify-center w-8 h-8 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">
+                                <span className="inline-flex items-center justify-center w-8 h-8 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium print:bg-gray-100 print:text-gray-800">
                                   {item.quantity}
                                 </span>
                               </td>
                               <td className="px-4 py-4 text-right text-sm text-gray-900">
                                 {item.weight ? (item.weight * item.quantity).toFixed(2) : '-'}
                               </td>
-                              <td className="px-4 py-4 text-center print:hidden">
+                              <td className="px-4 py-4 text-center">
                                 <input
                                   type="checkbox"
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded print:border-gray-400"
                                 />
                               </td>
                             </tr>
@@ -351,7 +352,7 @@ export default function PackingSlip({ isOpen, onClose, order, companyInfo }: Pac
 
                   {/* Footer */}
                   <div className="border-t border-gray-200 pt-6 print:pt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-600">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-600 print:grid-cols-3">
                       <div>
                         <h4 className="font-semibold text-gray-900 mb-2">Packing Checklist</h4>
                         <ul className="space-y-1">
