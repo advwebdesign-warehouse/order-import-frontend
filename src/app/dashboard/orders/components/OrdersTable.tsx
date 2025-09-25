@@ -10,6 +10,7 @@ import {
   ChevronDownIcon,
   Bars3Icon
 } from '@heroicons/react/24/outline'
+import ReactCountryFlag from "react-country-flag"
 import {
   DndContext,
   closestCenter,
@@ -35,6 +36,26 @@ import {
   STATUS_COLORS,
   FULFILLMENT_COLORS
 } from '../constants/orderConstants'
+
+// Date extraction utility functions
+const extractDateParts = (dateString: string) => {
+  const date = new Date(dateString)
+
+  return {
+    time: date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }),
+    day: date.toLocaleDateString('en-US', {
+      weekday: 'long'
+    }),
+    month: date.toLocaleDateString('en-US', {
+      month: 'long'
+    }),
+    year: date.getFullYear().toString()
+  }
+}
 
 interface OrdersTableProps {
   orders: Order[]
@@ -67,6 +88,9 @@ function SortableHeader({ column, children }: { column: ColumnConfig; children: 
     opacity: isDragging ? 0.5 : 1,
   }
 
+  // Don't make select and actions columns draggable
+  const isDraggable = column.id !== 'select' && column.id !== 'actions'
+
   return (
     <th
       ref={setNodeRef}
@@ -76,7 +100,7 @@ function SortableHeader({ column, children }: { column: ColumnConfig; children: 
     >
       <div className="flex items-center justify-between">
         {children}
-        {column.sortable && (
+        {isDraggable && (
           <div
             {...listeners}
             className="cursor-grab hover:cursor-grabbing flex items-center ml-2"
@@ -197,6 +221,39 @@ export default function OrdersTable({
           </div>
         )
 
+      // Date-specific columns using extraction function
+      case 'orderTime':
+        const timeData = extractDateParts(order.orderDate)
+        return (
+          <div className="text-sm text-gray-900">
+            {timeData.time}
+          </div>
+        )
+
+      case 'orderDay':
+        const dayData = extractDateParts(order.orderDate)
+        return (
+          <div className="text-sm text-gray-900">
+            {dayData.day}
+          </div>
+        )
+
+      case 'orderMonth':
+        const monthData = extractDateParts(order.orderDate)
+        return (
+          <div className="text-sm text-gray-900">
+            {monthData.month}
+          </div>
+        )
+
+      case 'orderYear':
+        const yearData = extractDateParts(order.orderDate)
+        return (
+          <div className="text-sm text-gray-900">
+            {yearData.year}
+          </div>
+        )
+
       case 'customerName':
         return (
           <div>
@@ -257,8 +314,59 @@ export default function OrdersTable({
           </div>
         )
 
-      case 'shippingAddress':
+      // Country-related columns
       case 'country':
+        // Show only the flag
+        return (
+          <div className="flex justify-center">
+            <ReactCountryFlag
+              countryCode={order.countryCode}
+              svg
+              style={{ width: '24px', height: '18px' }}
+            />
+          </div>
+        )
+
+      case 'countryName':
+        // Show country name
+        return (
+          <div className="text-sm text-gray-900">
+            {order.country}
+          </div>
+        )
+
+      case 'countryCode':
+        // Show country code
+        return (
+          <div className="text-sm text-gray-700 font-mono">
+            {order.countryCode}
+          </div>
+        )
+
+      // Shipping name columns
+      case 'shippingFirstName':
+        return (
+          <div className="text-sm text-gray-900">
+            {order.shippingFirstName}
+          </div>
+        )
+
+      case 'shippingLastName':
+        return (
+          <div className="text-sm text-gray-900">
+            {order.shippingLastName}
+          </div>
+        )
+
+      case 'shippingFullName':  // FIXED: Changed from 'shippingName' to 'shippingFullName'
+        // Show full name (first + last)
+        return (
+          <div className="text-sm text-gray-900">
+            {`${order.shippingFirstName || ''} ${order.shippingLastName || ''}`.trim() || '-'}
+          </div>
+        )
+
+      case 'shippingAddress':
         return (
           <div className="text-sm text-gray-900">
             <div>{order.shippingFirstName} {order.shippingLastName}</div>

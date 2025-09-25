@@ -1,4 +1,4 @@
-// File: app/dashboard/shared/hooks/useSettings.ts
+//file path: app/dashboard/shared/hooks/useSettings.ts
 
 import { useState, useEffect } from 'react'
 import { UserSettings, DEFAULT_USER_SETTINGS } from '../utils/settingsTypes'
@@ -39,6 +39,12 @@ export function useSettings() {
       const savedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY)
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings)
+
+        // Remove display settings if they exist in saved data
+        if (parsed.display) {
+          delete parsed.display
+        }
+
         // Merge with defaults to handle new settings that might have been added
         const mergedSettings = mergeWithDefaults(parsed, DEFAULT_USER_SETTINGS)
         setSettings(mergedSettings)

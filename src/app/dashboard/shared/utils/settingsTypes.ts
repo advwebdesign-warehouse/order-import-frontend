@@ -6,17 +6,6 @@ export interface PaginationSettings {
   showJumpToPage: boolean
 }
 
-export interface DisplaySettings {
-  dateFormat: 'US' | 'EU' | 'ISO'
-  timeFormat: '12h' | '24h'
-  currency: string
-  currencyPosition: 'before' | 'after'
-  thousandsSeparator: ',' | '.' | ' '
-  decimalSeparator: '.' | ','
-  decimalPlaces: number
-  showCurrencySymbol: boolean
-}
-
 export interface InventorySettings {
   manageStock: boolean
   trackQuantity: boolean
@@ -70,7 +59,6 @@ export interface PerformanceSettings {
 
 export interface UserSettings {
   pagination: PaginationSettings
-  display: DisplaySettings
   inventory: InventorySettings
   table: TableSettings
   filters: FilterSettings
@@ -79,7 +67,7 @@ export interface UserSettings {
   performance: PerformanceSettings
 }
 
-// Default settings - UPDATED: manageStock is now false by default
+// Default settings
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   pagination: {
     ordersPerPage: 20,
@@ -87,18 +75,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
     showPaginationInfo: true,
     showJumpToPage: true
   },
-  display: {
-    dateFormat: 'US',
-    timeFormat: '12h',
-    currency: 'USD',
-    currencyPosition: 'before',
-    thousandsSeparator: ',',
-    decimalSeparator: '.',
-    decimalPlaces: 2,
-    showCurrencySymbol: true
-  },
   inventory: {
-    manageStock: false, // CHANGED: Set to false by default
+    manageStock: false,
     trackQuantity: true,
     showStockWarnings: true,
     lowStockThreshold: 10,
@@ -150,13 +128,4 @@ export const PAGINATION_OPTIONS = [
   { value: 50, label: '50 items per page' },
   { value: 100, label: '100 items per page' },
   { value: 200, label: '200 items per page' }
-]
-
-export const CURRENCY_OPTIONS = [
-  { value: 'USD', label: 'US Dollar ($)', symbol: '$' },
-  { value: 'EUR', label: 'Euro (€)', symbol: '€' },
-  { value: 'GBP', label: 'British Pound (£)', symbol: '£' },
-  { value: 'CAD', label: 'Canadian Dollar (C$)', symbol: 'C$' },
-  { value: 'AUD', label: 'Australian Dollar (A$)', symbol: 'A$' },
-  { value: 'JPY', label: 'Japanese Yen (¥)', symbol: '¥' }
 ]

@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import OrderDetailsModal from './OrderDetailsModal'
 import PackingSlip from './PackingSlip'
+import PackingSlipModal from './components/PackingSlipModal'
 import PickingListModal from './components/PickingListModal'
 import OrdersToolbar from './components/OrdersToolbar'
 import OrdersFilters from './components/OrdersFilters'
@@ -72,6 +73,8 @@ const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
           return order.country || ''
         case 'countryCode':
           return order.countryCode || ''
+        case 'shippingFullName':
+          return `${order.shippingFirstName || ''} ${order.shippingLastName || ''}`.trim()
         case 'orderDate':
           return order.orderDate ? new Date(order.orderDate).toLocaleString() : ''
         case 'orderTime':
@@ -115,6 +118,7 @@ export default function OrdersPage() {
   // Modal states
   const [showOrderDetails, setShowOrderDetails] = useState(false)
   const [showPackingSlip, setShowPackingSlip] = useState(false)
+  const [showPackingSlipModal, setShowPackingSlipModal] = useState(false)
   const [showPickingList, setShowPickingList] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -157,6 +161,16 @@ export default function OrdersPage() {
     return new Set()
   })
 
+  // Persistent packing state - keyed by warehouse
+  const [packedOrders, setPackedOrders] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const packingKey = `packing_orders_${selectedWarehouseId || 'all'}`
+      const saved = localStorage.getItem(packingKey)
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    }
+    return new Set()
+  })
+
   // Save picking state to localStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -169,6 +183,14 @@ export default function OrdersPage() {
       localStorage.setItem(getPickingStateKey('orders'), JSON.stringify(Array.from(pickedOrders)))
     }
   }, [pickedOrders, selectedWarehouseId])
+
+  // Save packing state to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const packingKey = `packing_orders_${selectedWarehouseId || 'all'}`
+      localStorage.setItem(packingKey, JSON.stringify(Array.from(packedOrders)))
+    }
+  }, [packedOrders, selectedWarehouseId])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -184,6 +206,11 @@ export default function OrdersPage() {
 
       setPickedItems(savedItems ? new Set(JSON.parse(savedItems)) : new Set())
       setPickedOrders(savedOrders ? new Set(JSON.parse(savedOrders)) : new Set())
+
+      // Load packing state when warehouse changes
+      const packingKey = `packing_orders_${selectedWarehouseId || 'all'}`
+      const savedPackedOrders = localStorage.getItem(packingKey)
+      setPackedOrders(savedPackedOrders ? new Set(JSON.parse(savedPackedOrders)) : new Set())
     }
   }, [selectedWarehouseId])
 
@@ -215,21 +242,39 @@ export default function OrdersPage() {
     clearSelection
   } = useOrderSelection()
 
-  // Calculate ALL orders to ship (without limit for display)
+  // Calculate ALL orders to ship (exclude already shipped/delivered orders)
   const ordersToShip = useMemo(() => {
     const allOrders = warehouseFilteredOrders
 
     const processingOrders = allOrders.filter(order => {
-      // Check main status
-      if (order.status === 'PROCESSING') return true
+      // First, exclude orders that are already shipped, delivered, cancelled, or refunded
+      // Check both status and fulfillmentStatus
+      const excludedStatuses = ['SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']
+      const excludedFulfillmentStatuses = ['SHIPPED', 'DELIVERED', 'CANCELLED']
 
-      // Check fulfillment status for various "ready to ship" states
-      const fulfillmentStatus = order.fulfillmentStatus
-      if (fulfillmentStatus === 'PROCESSING' ||
-          fulfillmentStatus === 'PICKING' ||
-          fulfillmentStatus === 'PACKED' ||
-          fulfillmentStatus === 'READY_TO_SHIP' ||
-          fulfillmentStatus === 'ASSIGNED') {
+      if (excludedStatuses.includes(order.status) ||
+          excludedFulfillmentStatuses.includes(order.fulfillmentStatus)) {
+        return false
+      }
+
+      // Include orders that need to be shipped based on fulfillment status
+      const needsShippingFulfillmentStatuses = [
+        'PENDING',
+        'PROCESSING',
+        'PICKING',
+        'PACKING',
+        'PACKED',
+        'READY_TO_SHIP',
+        'ASSIGNED'
+      ]
+
+      // Include if fulfillment status indicates it needs shipping
+      if (needsShippingFulfillmentStatuses.includes(order.fulfillmentStatus)) {
+        return true
+      }
+
+      // Also include if main status is PROCESSING or PENDING (but only if not already excluded)
+      if (order.status === 'PROCESSING' || order.status === 'PENDING') {
         return true
       }
 
@@ -322,6 +367,19 @@ export default function OrdersPage() {
     })
   }
 
+  // Packing state handlers
+  const handleOrderPacked = (orderId: string) => {
+    setPackedOrders(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(orderId)) {
+        newSet.delete(orderId)
+      } else {
+        newSet.add(orderId)
+      }
+      return newSet
+    })
+  }
+
   // Event handlers
   const handleViewOrderDetails = (order: Order) => {
     const orderWithDetails = transformToDetailedOrder(order)
@@ -335,16 +393,8 @@ export default function OrdersPage() {
       return
     }
 
-    const selectedOrderIds = Array.from(selectedOrders)
-    const selectedOrdersList = warehouseFilteredOrders.filter(order => selectedOrderIds.includes(order.id))
-
-    if (selectedOrders.size === 1) {
-      const orderWithDetails = transformToDetailedOrder(selectedOrdersList[0])
-      setSelectedOrder(orderWithDetails)
-      setShowPackingSlip(true)
-    } else {
-      printMultiplePackingSlips(selectedOrdersList.map(transformToDetailedOrder))
-    }
+    // Show the packing slip modal instead of direct printing
+    setShowPackingSlipModal(true)
   }
 
   const handlePrintSinglePackingSlip = (order: Order) => {
@@ -432,9 +482,12 @@ export default function OrdersPage() {
   const handleClearPickingState = () => {
     setPickedItems(new Set())
     setPickedOrders(new Set())
+    setPackedOrders(new Set())
     if (typeof window !== 'undefined') {
       localStorage.removeItem(getPickingStateKey('items'))
       localStorage.removeItem(getPickingStateKey('orders'))
+      const packingKey = `packing_orders_${selectedWarehouseId || 'all'}`
+      localStorage.removeItem(packingKey)
     }
   }
 
@@ -526,7 +579,7 @@ export default function OrdersPage() {
                 className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
               />
               <span className="text-sm font-medium text-gray-700">
-                {itemsToShip} item{itemsToShip !== 1 ? 's' : ''} to ship
+                {itemsToShip} item{itemsToShip !== 1 ? 's' : ''} to pick
               </span>
             </label>
 
@@ -622,6 +675,17 @@ export default function OrdersPage() {
             setShowPackingSlip(false)
             setSelectedOrder(null)
           }}
+        />
+      )}
+
+      {showPackingSlipModal && selectedOrdersForPicking.length > 0 && (
+        <PackingSlipModal
+          orders={selectedOrdersForPicking}
+          isOpen={showPackingSlipModal}
+          onClose={() => setShowPackingSlipModal(false)}
+          warehouseName={selectedWarehouse ? selectedWarehouse.name : 'All Warehouses'}
+          packedOrders={packedOrders}
+          onOrderPacked={handleOrderPacked}
         />
       )}
 

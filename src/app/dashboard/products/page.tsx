@@ -70,7 +70,7 @@ const exportProductsToCSV = (products: Product[], columns: ColumnConfig[], isSto
         case 'weight':
           return product.weight ? product.weight.toString() : ''
         case 'dimensions':
-          return product.dimensions ? `${product.dimensions.length}×${product.dimensions.width}×${product.dimensions.height}` : ''
+          return product.dimensions ? `${product.dimensions.length}Ã—${product.dimensions.width}Ã—${product.dimensions.height}` : ''
         case 'tags':
           return product.tags.join(', ')
         case 'variants':

@@ -69,6 +69,8 @@ const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
           return order.country || ''
         case 'countryCode':
           return order.countryCode || ''
+        case 'shippingFullName':
+          return `${order.shippingFirstName || ''} ${order.shippingLastName || ''}`.trim()
         case 'orderDate':
           return order.orderDate ? new Date(order.orderDate).toLocaleString() : ''
         default:
@@ -171,11 +173,42 @@ export default function WarehouseOrdersPage() {
     clearSelection
   } = useOrderSelection()
 
-  // Calculate orders to ship (only PROCESSING orders)
+  // Calculate orders to ship (exclude already shipped/delivered orders)
   const ordersToShip = useMemo(() => {
-    return filteredOrders.filter(order =>
-      order.status === 'PROCESSING' || order.fulfillmentStatus === 'PROCESSING'
-    )
+    return filteredOrders.filter(order => {
+      // First, exclude orders that are already shipped, delivered, cancelled, or refunded
+      // Check both status and fulfillmentStatus
+      const excludedStatuses = ['SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']
+      const excludedFulfillmentStatuses = ['SHIPPED', 'DELIVERED', 'CANCELLED']
+
+      if (excludedStatuses.includes(order.status) ||
+          excludedFulfillmentStatuses.includes(order.fulfillmentStatus)) {
+        return false
+      }
+
+      // Include orders that need to be shipped based on fulfillment status
+      const needsShippingFulfillmentStatuses = [
+        'PENDING',
+        'PROCESSING',
+        'PICKING',
+        'PACKING',
+        'PACKED',
+        'READY_TO_SHIP',
+        'ASSIGNED'
+      ]
+
+      // Include if fulfillment status indicates it needs shipping
+      if (needsShippingFulfillmentStatuses.includes(order.fulfillmentStatus)) {
+        return true
+      }
+
+      // Also include if main status is PROCESSING or PENDING (but only if not already excluded)
+      if (order.status === 'PROCESSING' || order.status === 'PENDING') {
+        return true
+      }
+
+      return false
+    })
   }, [filteredOrders])
 
   // Calculate total items to ship from processing orders only
@@ -421,7 +454,7 @@ export default function WarehouseOrdersPage() {
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
             />
             <span className="text-sm font-medium text-gray-700">
-              {itemsToShip} item{itemsToShip !== 1 ? 's' : ''} to ship
+              {itemsToShip} item{itemsToShip !== 1 ? 's' : ''} to pick
             </span>
           </label>
 

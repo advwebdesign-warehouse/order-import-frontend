@@ -84,10 +84,10 @@ export default function OrdersToolbar({
           {selectedOrdersCount > 0 && (
             <button
               onClick={onPrintPackingSlips}
-              className="inline-flex items-center gap-x-2 rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
+              className="inline-flex items-center gap-x-2 rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500"
             >
               <PrinterIcon className="h-4 w-4" />
-              Print Packing Slips ({selectedOrdersCount})
+              Packing Slips ({selectedOrdersCount})
             </button>
           )}
 
@@ -95,7 +95,7 @@ export default function OrdersToolbar({
           {(selectedOrdersCount > 0 || showItemsToShip) && onShowPickingList && (
             <button
               onClick={onShowPickingList}
-              className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
             >
               <ListBulletIcon className="h-4 w-4" />
               {selectedOrdersCount > 0 ? (
@@ -108,7 +108,7 @@ export default function OrdersToolbar({
 
           <button
             onClick={onExport}
-            className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+            className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
           >
             <ArrowDownTrayIcon className="h-4 w-4" />
             Export Orders
