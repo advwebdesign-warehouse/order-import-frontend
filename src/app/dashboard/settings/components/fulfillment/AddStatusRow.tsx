@@ -15,7 +15,8 @@ export default function AddStatusRow({ onAdd, onCancel }: AddStatusRowProps) {
   const [newStatus, setNewStatus] = useState<Partial<FulfillmentStatus>>({
     label: '',
     color: 'bg-gray-100 text-gray-800',
-    needsShipping: true
+    needsShipping: true,
+    needsPicking: true
   })
 
   const handleAdd = () => {
@@ -24,14 +25,18 @@ export default function AddStatusRow({ onAdd, onCancel }: AddStatusRowProps) {
     setNewStatus({
       label: '',
       color: 'bg-gray-100 text-gray-800',
-      needsShipping: true
+      needsShipping: true,
+      needsPicking: true
     })
   }
 
   return (
     <tr className="bg-yellow-50">
       <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-        New
+        <div className="flex items-center">
+          <div className="w-5 h-5" /> {/* Placeholder for drag handle */}
+          <span className="ml-3 text-gray-500">New</span>
+        </div>
       </td>
       <td className="whitespace-nowrap px-3 py-4 text-sm">
         <input
@@ -66,6 +71,14 @@ export default function AddStatusRow({ onAdd, onCancel }: AddStatusRowProps) {
           type="checkbox"
           checked={newStatus.needsShipping || false}
           onChange={(e) => setNewStatus({ ...newStatus, needsShipping: e.target.checked })}
+          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+        />
+      </td>
+      <td className="whitespace-nowrap px-3 py-4 text-sm">
+        <input
+          type="checkbox"
+          checked={newStatus.needsPicking ?? true}
+          onChange={(e) => setNewStatus({ ...newStatus, needsPicking: e.target.checked })}
           className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
         />
       </td>

@@ -79,7 +79,8 @@ export default function SettingsPage() {
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'fulfillment':
-        return <FulfillmentTab onChanges={setHasChanges} />
+        // Fulfillment tab handles its own saving, don't pass onChanges
+        return <FulfillmentTab />
       case 'notifications':
         return (
           <NotificationsTab
@@ -92,12 +93,16 @@ export default function SettingsPage() {
     }
   }
 
+  // Only show save button for non-auto-save tabs
+  const showSaveButton = activeTab !== 'fulfillment' && hasChanges
+
   return (
     <div className="space-y-6">
       <SettingsHeader
-        hasChanges={hasChanges}
+        hasChanges={showSaveButton}
         onSave={handleSaveSettings}
         onResetAll={handleResetAll}
+        hideResetAll={activeTab === 'fulfillment'} // Hide reset all for fulfillment tab
       />
 
       {showSuccessMessage && <SuccessMessage />}

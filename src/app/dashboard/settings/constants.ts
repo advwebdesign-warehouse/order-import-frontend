@@ -11,16 +11,16 @@ export const SETTINGS_TABS: SettingsTab[] = [
 ]
 
 export const DEFAULT_FULFILLMENT_STATUSES: FulfillmentStatus[] = [
-  { id: '1', value: 'PENDING', label: 'Pending', color: 'bg-gray-100 text-gray-800', needsShipping: true, isSystem: true, sortOrder: 1 },
-  { id: '2', value: 'ASSIGNED', label: 'Assigned', color: 'bg-blue-100 text-blue-800', needsShipping: true, isSystem: false, sortOrder: 2 },
-  { id: '3', value: 'PROCESSING', label: 'Processing', color: 'bg-blue-100 text-blue-800', needsShipping: true, isSystem: true, sortOrder: 3 },
-  { id: '4', value: 'PICKING', label: 'Picking', color: 'bg-yellow-100 text-yellow-800', needsShipping: true, isSystem: false, sortOrder: 4 },
-  { id: '5', value: 'PACKING', label: 'Packing', color: 'bg-yellow-100 text-yellow-800', needsShipping: true, isSystem: false, sortOrder: 5 },
-  { id: '6', value: 'PACKED', label: 'Packed', color: 'bg-indigo-100 text-indigo-800', needsShipping: true, isSystem: false, sortOrder: 6 },
-  { id: '7', value: 'READY_TO_SHIP', label: 'Ready to Ship', color: 'bg-purple-100 text-purple-800', needsShipping: true, isSystem: false, sortOrder: 7 },
-  { id: '8', value: 'SHIPPED', label: 'Shipped', color: 'bg-green-100 text-green-800', needsShipping: false, isSystem: true, sortOrder: 8 },
-  { id: '9', value: 'DELIVERED', label: 'Delivered', color: 'bg-green-100 text-green-800', needsShipping: false, isSystem: true, sortOrder: 9 },
-  { id: '10', value: 'CANCELLED', label: 'Cancelled', color: 'bg-red-100 text-red-800', needsShipping: false, isSystem: true, sortOrder: 10 },
+  { id: '1', value: 'PENDING', label: 'Pending', color: 'bg-gray-100 text-gray-800', needsShipping: true, needsPicking: true, isSystem: true, sortOrder: 1 },
+  { id: '2', value: 'ASSIGNED', label: 'Assigned', color: 'bg-blue-100 text-blue-800', needsShipping: true, needsPicking: true, isSystem: false, sortOrder: 2 },
+  { id: '3', value: 'PROCESSING', label: 'Processing', color: 'bg-blue-100 text-blue-800', needsShipping: true, needsPicking: true, isSystem: true, sortOrder: 3 },
+  { id: '4', value: 'PICKING', label: 'Picking', color: 'bg-yellow-100 text-yellow-800', needsShipping: true, needsPicking: false, isSystem: false, sortOrder: 4 },
+  { id: '5', value: 'PACKING', label: 'Packing', color: 'bg-yellow-100 text-yellow-800', needsShipping: true, needsPicking: false, isSystem: false, sortOrder: 5 },
+  { id: '6', value: 'PACKED', label: 'Packed', color: 'bg-indigo-100 text-indigo-800', needsShipping: true, needsPicking: false, isSystem: false, sortOrder: 6 },
+  { id: '7', value: 'READY_TO_SHIP', label: 'Ready to Ship', color: 'bg-purple-100 text-purple-800', needsShipping: true, needsPicking: false, isSystem: false, sortOrder: 7 },
+  { id: '8', value: 'SHIPPED', label: 'Shipped', color: 'bg-green-100 text-green-800', needsShipping: false, needsPicking: false, isSystem: true, sortOrder: 8 },
+  { id: '9', value: 'DELIVERED', label: 'Delivered', color: 'bg-green-100 text-green-800', needsShipping: false, needsPicking: false, isSystem: true, sortOrder: 9 },
+  { id: '10', value: 'CANCELLED', label: 'Cancelled', color: 'bg-red-100 text-red-800', needsShipping: false, needsPicking: false, isSystem: true, sortOrder: 10 },
 ]
 
 export const AVAILABLE_COLORS: ColorOption[] = [

@@ -7,9 +7,10 @@ interface SettingsHeaderProps {
   hasChanges: boolean
   onSave: () => void
   onResetAll: () => void
+  hideResetAll?: boolean
 }
 
-export default function SettingsHeader({ hasChanges, onSave, onResetAll }: SettingsHeaderProps) {
+export default function SettingsHeader({ hasChanges, onSave, onResetAll, hideResetAll = false }: SettingsHeaderProps) {
   return (
     <div className="sm:flex sm:items-center">
       <div className="sm:flex-auto">
@@ -28,12 +29,14 @@ export default function SettingsHeader({ hasChanges, onSave, onResetAll }: Setti
             Save Changes
           </button>
         )}
-        <button
-          onClick={onResetAll}
-          className="inline-flex items-center gap-x-2 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500"
-        >
-          Reset All
-        </button>
+        {!hideResetAll && (
+          <button
+            onClick={onResetAll}
+            className="inline-flex items-center gap-x-2 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500"
+          >
+            Reset All
+          </button>
+        )}
       </div>
     </div>
   )

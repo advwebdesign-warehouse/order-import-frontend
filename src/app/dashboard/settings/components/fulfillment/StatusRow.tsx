@@ -3,13 +3,14 @@
 
 import { useState } from 'react'
 import {
-  ArrowUpIcon,
-  ArrowDownIcon,
+  Bars3Icon,
   PencilIcon,
   TrashIcon,
   CheckIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { FulfillmentStatus } from '../../types'
 import { AVAILABLE_COLORS } from '../../constants'
 
@@ -17,28 +18,37 @@ interface StatusRowProps {
   status: FulfillmentStatus
   index: number
   isEditing: boolean
-  canMoveUp: boolean
-  canMoveDown: boolean
   onEdit: () => void
   onCancelEdit: () => void
   onSave: (status: FulfillmentStatus) => void
   onDelete: (id: string) => void
-  onMove: (id: string, direction: 'up' | 'down') => void
 }
 
 export default function StatusRow({
   status,
   index,
   isEditing,
-  canMoveUp,
-  canMoveDown,
   onEdit,
   onCancelEdit,
   onSave,
-  onDelete,
-  onMove
+  onDelete
 }: StatusRowProps) {
   const [editingStatus, setEditingStatus] = useState<FulfillmentStatus>(status)
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: status.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
 
   const handleSave = () => {
     if (!editingStatus.label) return
@@ -54,24 +64,18 @@ export default function StatusRow({
   }
 
   return (
-    <tr>
+    <tr ref={setNodeRef} style={style}>
       <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center">
           <button
-            onClick={() => onMove(status.id, 'up')}
-            disabled={!canMoveUp}
-            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+            type="button"
+            className="cursor-move text-gray-400 hover:text-gray-600"
+            {...attributes}
+            {...listeners}
           >
-            <ArrowUpIcon className="h-4 w-4" />
+            <Bars3Icon className="h-5 w-5" />
           </button>
-          <button
-            onClick={() => onMove(status.id, 'down')}
-            disabled={!canMoveDown}
-            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-          >
-            <ArrowDownIcon className="h-4 w-4" />
-          </button>
-          <span className="ml-2">{index + 1}</span>
+          <span className="ml-3 text-gray-500">{index + 1}</span>
         </div>
       </td>
       <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-900">
@@ -124,6 +128,24 @@ export default function StatusRow({
               : 'bg-gray-100 text-gray-700'
           }`}>
             {status.needsShipping ? 'Yes' : 'No'}
+          </span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+        {isEditing ? (
+          <input
+            type="checkbox"
+            checked={editingStatus.needsPicking ?? true}
+            onChange={(e) => setEditingStatus({ ...editingStatus, needsPicking: e.target.checked })}
+            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+          />
+        ) : (
+          <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+            status.needsPicking
+              ? 'bg-green-100 text-green-700'
+              : 'bg-gray-100 text-gray-700'
+          }`}>
+            {status.needsPicking ? 'Yes' : 'No'}
           </span>
         )}
       </td>

@@ -5,6 +5,7 @@ export interface FulfillmentStatus {
   label: string
   color: string
   needsShipping: boolean
+  needsPicking: boolean
   isSystem: boolean
   sortOrder: number
 }
