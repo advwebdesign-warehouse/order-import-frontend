@@ -216,6 +216,26 @@ export default function WarehouseOrdersPage() {
     return ordersToShip.reduce((total, order) => total + (order.itemCount || 0), 0)
   }, [ordersToShip])
 
+  const remainingItemsToPick = useMemo(() => {
+    // If we don't have any picked items, return full count
+    if (pickedItems.size === 0) {
+      return itemsToShip
+    }
+
+    // Calculate how many items have been picked
+    const pickedCount = pickedItems.size
+
+    // Return remaining items
+    return Math.max(0, itemsToShip - pickedCount)
+  }, [itemsToShip, pickedItems])
+
+  // Auto-uncheck the items checkbox when all items are picked
+  useEffect(() => {
+    if (showItemsToShip && remainingItemsToPick === 0) {
+      setShowItemsToShip(false)
+    }
+  }, [remainingItemsToPick, showItemsToShip])
+
   // Calculate selected orders for picking list
   const selectedOrdersForPicking = useMemo(() => {
     const selectedOrderIds = Array.from(selectedOrders)
@@ -380,6 +400,28 @@ export default function WarehouseOrdersPage() {
 
   const handleItemsToShipChange = (checked: boolean) => {
     setShowItemsToShip(checked)
+
+    if (checked) {
+      // Only select orders if there are items left to pick
+      if (remainingItemsToPick > 0) {
+        const orderIdsToShip = ordersToShip.map(order => order.id)
+
+        orderIdsToShip.forEach(orderId => {
+          if (!selectedOrders.has(orderId)) {
+            handleSelectOrder(orderId)
+          }
+        })
+      }
+    } else {
+      // When unchecked, deselect orders
+      const orderIdsToShip = new Set(ordersToShip.map(order => order.id))
+
+      Array.from(selectedOrders).forEach(orderId => {
+        if (orderIdsToShip.has(orderId)) {
+          handleSelectOrder(orderId)
+        }
+      })
+    }
   }
 
   const handleShowPickingList = () => {
@@ -447,14 +489,20 @@ export default function WarehouseOrdersPage() {
 
           {/* Items to ship with checkbox */}
           <label className="flex items-center space-x-2 cursor-pointer h-10">
-            <input
+              <input
               type="checkbox"
               checked={showItemsToShip}
               onChange={(e) => handleItemsToShipChange(e.target.checked)}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              disabled={remainingItemsToPick === 0}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <span className="text-sm font-medium text-gray-700">
-              {itemsToShip} item{itemsToShip !== 1 ? 's' : ''} to pick
+            <span className={`text-sm font-medium ${remainingItemsToPick === 0 ? 'text-gray-400' : 'text-gray-700'}`}>
+              {remainingItemsToPick} item{remainingItemsToPick !== 1 ? 's' : ''} to pick
+              {pickedItems.size > 0 && (
+                <span className="text-xs text-gray-500 ml-1">
+                  ({pickedItems.size} picked)
+                </span>
+              )}
             </span>
           </label>
 
@@ -486,7 +534,7 @@ export default function WarehouseOrdersPage() {
         onMaxPickingOrdersChange={setMaxPickingOrders}
         showItemsToShip={showItemsToShip}
         onShowPickingList={handleShowPickingList}
-        itemsToShipCount={itemsToShip}
+        itemsToShipCount={remainingItemsToPick} // Changed from itemsToShip
       />
 
       {/* Show Filters Button */}
