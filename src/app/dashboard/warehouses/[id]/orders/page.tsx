@@ -1,4 +1,4 @@
-// File: app/dashboard/warehouses/[id]/orders/page.tsx
+// file path: app/dashboard/warehouses/[id]/orders/page.tsx
 
 'use client'
 
@@ -26,6 +26,7 @@ import { usePagination } from '../../../shared/hooks/usePagination'
 import { transformToDetailedOrder } from '../../../orders/utils/orderUtils'
 import { exportToCSV, ExportableItem } from '../../../shared/utils/csvExporter'
 import { printMultiplePackingSlips } from '../../../orders/utils/packingSlipGenerator'
+import { orderNeedsPicking, orderNeedsShippingDynamic } from '../../../orders/utils/orderConstants'
 
 // Types
 import { Order, OrderWithDetails, ColumnConfig } from '../../../orders/utils/orderTypes'
@@ -33,6 +34,7 @@ import { ITEMS_PER_PAGE } from '../../../orders/constants/orderConstants'
 
 // Settings
 import { useSettings } from '../../../shared/hooks/useSettings'
+import { useFulfillmentStatuses } from '../../../settings/hooks/useFulfillmentStatuses'
 
 // Helper function to export orders as CSV
 const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
@@ -92,6 +94,9 @@ export default function WarehouseOrdersPage() {
   const warehouseId = params.id as string
   const { warehouses } = useWarehouses()
   const warehouse = warehouses.find(w => w.id === warehouseId)
+
+  // Load fulfillment statuses from settings
+  const { statuses: fulfillmentStatuses, loading: fulfillmentLoading } = useFulfillmentStatuses()
 
   // Modal states
   const [showOrderDetails, setShowOrderDetails] = useState(false)
@@ -173,68 +178,31 @@ export default function WarehouseOrdersPage() {
     clearSelection
   } = useOrderSelection()
 
-  // Calculate orders to ship (exclude already shipped/delivered orders)
+  // Calculate orders to ship (using dynamic fulfillment settings)
   const ordersToShip = useMemo(() => {
     return filteredOrders.filter(order => {
-      // First, exclude orders that are already shipped, delivered, cancelled, or refunded
-      // Check both status and fulfillmentStatus
-      const excludedStatuses = ['SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED']
-      const excludedFulfillmentStatuses = ['SHIPPED', 'DELIVERED', 'CANCELLED']
-
-      if (excludedStatuses.includes(order.status) ||
-          excludedFulfillmentStatuses.includes(order.fulfillmentStatus)) {
-        return false
-      }
-
-      // Include orders that need to be shipped based on fulfillment status
-      const needsShippingFulfillmentStatuses = [
-        'PENDING',
-        'PROCESSING',
-        'PICKING',
-        'PACKING',
-        'PACKED',
-        'READY_TO_SHIP',
-        'ASSIGNED'
-      ]
-
-      // Include if fulfillment status indicates it needs shipping
-      if (needsShippingFulfillmentStatuses.includes(order.fulfillmentStatus)) {
-        return true
-      }
-
-      // Also include if main status is PROCESSING or PENDING (but only if not already excluded)
-      if (order.status === 'PROCESSING' || order.status === 'PENDING') {
-        return true
-      }
-
-      return false
+      // Use dynamic settings to determine if order needs shipping
+      return orderNeedsShippingDynamic(order, fulfillmentStatuses)
     })
-  }, [filteredOrders])
+  }, [filteredOrders, fulfillmentStatuses])
+
+  // Calculate orders that need PICKING (based on fulfillment settings)
+  const ordersToPick = useMemo(() => {
+    return ordersToShip.filter(order => {
+      // Use dynamic settings to determine if order needs picking
+      return orderNeedsPicking(order, fulfillmentStatuses)
+    })
+  }, [ordersToShip, fulfillmentStatuses])
 
   // Calculate total items to ship from processing orders only
   const itemsToShip = useMemo(() => {
     return ordersToShip.reduce((total, order) => total + (order.itemCount || 0), 0)
   }, [ordersToShip])
 
-  const remainingItemsToPick = useMemo(() => {
-    // If we don't have any picked items, return full count
-    if (pickedItems.size === 0) {
-      return itemsToShip
-    }
-
-    // Calculate how many items have been picked
-    const pickedCount = pickedItems.size
-
-    // Return remaining items
-    return Math.max(0, itemsToShip - pickedCount)
-  }, [itemsToShip, pickedItems])
-
-  // Auto-uncheck the items checkbox when all items are picked
-  useEffect(() => {
-    if (showItemsToShip && remainingItemsToPick === 0) {
-      setShowItemsToShip(false)
-    }
-  }, [remainingItemsToPick, showItemsToShip])
+  // Calculate total items to PICK (only from orders that need picking)
+  const itemsToPick = useMemo(() => {
+    return ordersToPick.reduce((total, order) => total + (order.itemCount || 0), 0)
+  }, [ordersToPick])
 
   // Calculate selected orders for picking list
   const selectedOrdersForPicking = useMemo(() => {
@@ -259,18 +227,75 @@ export default function WarehouseOrdersPage() {
       }
     }
 
-    // Apply limit if we have a valid number
+    // Apply limit if we have a valid number - use ordersToPick instead of ordersToShip
     if (limit && !isNaN(limit)) {
-      return ordersToShip.slice(0, limit)
+      return ordersToPick.slice(0, limit)
     }
 
-    return ordersToShip
-  }, [ordersToShip, maxPickingOrders])
+    return ordersToPick
+  }, [ordersToPick, maxPickingOrders])
 
   // Calculate items in limited orders for picking
   const itemsInLimitedOrders = useMemo(() => {
     return limitedOrdersForPicking.reduce((total, order) => total + (order.itemCount || 0), 0)
   }, [limitedOrdersForPicking])
+
+  // Transform orders to get actual items for picking calculations
+  const ordersWithDetailsForPicking = useMemo(() => {
+    const ordersToTransform = selectedOrders.size > 0 ? selectedOrdersForPicking : limitedOrdersForPicking
+    return ordersToTransform.map(order => transformToDetailedOrder(order))
+  }, [selectedOrders.size, selectedOrdersForPicking, limitedOrdersForPicking])
+
+  // Calculate consolidated items from actual order items
+  const consolidatedItemsForPicking = useMemo(() => {
+    const itemMap = new Map<string, { sku: string; totalQuantity: number }>()
+
+    ordersWithDetailsForPicking.forEach((order) => {
+      order.items.forEach(item => {
+        if (itemMap.has(item.sku)) {
+          const existing = itemMap.get(item.sku)!
+          existing.totalQuantity += item.quantity
+        } else {
+          itemMap.set(item.sku, {
+            sku: item.sku,
+            totalQuantity: item.quantity
+          })
+        }
+      })
+    })
+
+    return Array.from(itemMap.values())
+  }, [ordersWithDetailsForPicking])
+
+  // Calculate remaining items using actual quantities
+  const remainingItemsToPick = useMemo(() => {
+    // If we don't have any picked items, return full count
+    if (pickedItems.size === 0) {
+      return itemsToPick  // Changed from itemsToShip
+    }
+
+    // Calculate how many items have been picked by summing quantities from actual items
+    const pickedQuantity = consolidatedItemsForPicking
+      .filter(item => pickedItems.has(item.sku))
+      .reduce((sum, item) => sum + item.totalQuantity, 0)
+
+    // Return remaining items
+    return Math.max(0, itemsToPick - pickedQuantity)  // Changed from itemsToShip
+  }, [itemsToPick, pickedItems, consolidatedItemsForPicking])
+
+  // Calculate total picked quantity for display
+  const pickedItemsQuantity = useMemo(() => {
+    return consolidatedItemsForPicking
+      .filter(item => pickedItems.has(item.sku))
+      .reduce((sum, item) => sum + item.totalQuantity, 0)
+  }, [pickedItems, consolidatedItemsForPicking])
+
+  // Auto-uncheck the items checkbox when all items are picked
+  useEffect(() => {
+    if (showItemsToShip && remainingItemsToPick === 0) {
+      setShowItemsToShip(false)
+    }
+  }, [remainingItemsToPick, showItemsToShip])
 
   // Determine which orders to show in table based on checkbox state
   const ordersToDisplay = showOrdersToShip ? ordersToShip : filteredOrders
@@ -404,7 +429,8 @@ export default function WarehouseOrdersPage() {
     if (checked) {
       // Only select orders if there are items left to pick
       if (remainingItemsToPick > 0) {
-        const orderIdsToShip = ordersToShip.map(order => order.id)
+        // Use ordersToPick instead of ordersToShip - only select orders that need picking
+        const orderIdsToShip = ordersToPick.map(order => order.id)
 
         orderIdsToShip.forEach(orderId => {
           if (!selectedOrders.has(orderId)) {
@@ -413,8 +439,8 @@ export default function WarehouseOrdersPage() {
         })
       }
     } else {
-      // When unchecked, deselect orders
-      const orderIdsToShip = new Set(ordersToShip.map(order => order.id))
+      // When unchecked, deselect orders that need picking
+      const orderIdsToShip = new Set(ordersToPick.map(order => order.id))
 
       Array.from(selectedOrders).forEach(orderId => {
         if (orderIdsToShip.has(orderId)) {
@@ -438,7 +464,7 @@ export default function WarehouseOrdersPage() {
     }
   }
 
-  if (loading) {
+  if (loading || fulfillmentLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
@@ -498,9 +524,9 @@ export default function WarehouseOrdersPage() {
             />
             <span className={`text-sm font-medium ${remainingItemsToPick === 0 ? 'text-gray-400' : 'text-gray-700'}`}>
               {remainingItemsToPick} item{remainingItemsToPick !== 1 ? 's' : ''} to pick
-              {pickedItems.size > 0 && (
+              {pickedItemsQuantity > 0 && (
                 <span className="text-xs text-gray-500 ml-1">
-                  ({pickedItems.size} picked)
+                  ({pickedItemsQuantity} picked)
                 </span>
               )}
             </span>
@@ -513,7 +539,7 @@ export default function WarehouseOrdersPage() {
               className="text-xs text-gray-500 hover:text-red-600"
               title="Clear picking state (dev only)"
             >
-              Clear Picking ({pickedItems.size} items, {pickedOrders.size} orders)
+              Clear Picking ({pickedItemsQuantity} items, {pickedOrders.size} orders)
             </button>
           )}
         </div>
@@ -615,13 +641,13 @@ export default function WarehouseOrdersPage() {
       {/* Picking List Modal - Show selected orders if any, otherwise show limited orders to ship */}
       {showPickingList && (selectedOrdersForPicking.length > 0 || (showItemsToShip && limitedOrdersForPicking.length > 0)) && (
         <PickingListModal
-          orders={selectedOrdersForPicking.length > 0 ? selectedOrdersForPicking : limitedOrdersForPicking}
+          orders={ordersWithDetailsForPicking}
           isOpen={showPickingList}
           onClose={() => setShowPickingList(false)}
           warehouseName={warehouse.name}
           maxOrdersLimit={selectedOrdersForPicking.length > 0 ? "all" : maxPickingOrders}
           totalOrdersCount={selectedOrdersForPicking.length > 0 ? selectedOrdersForPicking.length : ordersToShip.length}
-          limitedOrdersCount={selectedOrdersForPicking.length > 0 ? selectedOrdersForPicking.length : limitedOrdersForPicking.length}
+          limitedOrdersCount={ordersWithDetailsForPicking.length}
           itemsCount={selectedOrdersForPicking.length > 0 ? itemsInSelectedOrders : itemsInLimitedOrders}
           pickedItems={pickedItems}
           pickedOrders={pickedOrders}
