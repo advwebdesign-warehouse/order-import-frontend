@@ -14,7 +14,7 @@ export const STATUS_COLORS = {
 
 export const FULFILLMENT_COLORS = {
   PENDING: 'bg-gray-100 text-gray-800',
-  PROCESSING: 'bg-cyan-100 text-cyan-800',
+  PROCESSING: 'bg-blue-100 text-blue-800',
   PICKING: 'bg-yellow-100 text-yellow-800',
   PACKING: 'bg-orange-100 text-orange-800',
   PACKED: 'bg-indigo-100 text-indigo-800',

@@ -73,6 +73,7 @@ interface OrdersTableProps {
   onColumnReorder?: (columns: ColumnConfig[]) => void
   onUpdateStatus?: (orderId: string, newStatus: string) => Promise<void>
   onUpdateFulfillmentStatus?: (orderId: string, newStatus: string) => Promise<void>
+  fulfillmentStatusOptions?: Array<{ value: string; label: string; color: string }>  // ADD THIS
 }
 
 // Sortable header component for drag-and-drop column reordering
@@ -130,7 +131,8 @@ export default function OrdersTable({
   onColumnVisibilityChange,
   onColumnReorder,
   onUpdateStatus,
-  onUpdateFulfillmentStatus
+  onUpdateFulfillmentStatus,
+  fulfillmentStatusOptions
 }: OrdersTableProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -309,7 +311,7 @@ export default function OrdersTable({
                 <EditableStatusCell
                   orderId={order.id}
                   currentValue={order.fulfillmentStatus}
-                  options={FULFILLMENT_STATUS_OPTIONS}
+                  options={fulfillmentStatusOptions || FULFILLMENT_STATUS_OPTIONS}
                   onUpdate={onUpdateFulfillmentStatus}
                   type="fulfillmentStatus"
                 />

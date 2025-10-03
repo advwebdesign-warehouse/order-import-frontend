@@ -54,7 +54,7 @@ export default function StatusRow({
     if (!editingStatus.label) return
     onSave({
       ...editingStatus,
-      value: editingStatus.label.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
+      code: editingStatus.label.toUpperCase().replace(/[^A-Z0-9]+/g, '_')
     })
   }
 
@@ -90,7 +90,7 @@ export default function StatusRow({
         ) : (
           <div>
             <div className="font-medium">{status.label}</div>
-            <div className="text-xs text-gray-500 font-mono">{status.value}</div>
+            <div className="text-xs text-gray-500 font-mono">{status.code}</div>
           </div>
         )}
       </td>
@@ -151,11 +151,11 @@ export default function StatusRow({
       </td>
       <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
         <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-          status.isSystem
+          status.type === 'system'
             ? 'bg-purple-100 text-purple-700'
             : 'bg-green-100 text-green-700'
         }`}>
-          {status.isSystem ? 'System' : 'Custom'}
+          {status.type === 'system' ? 'System' : 'Custom'}
         </span>
       </td>
       <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
@@ -182,7 +182,7 @@ export default function StatusRow({
             >
               <PencilIcon className="h-5 w-5" />
             </button>
-            {!status.isSystem && (
+            {status.type === 'custom' && (
               <button
                 onClick={() => onDelete(status.id)}
                 className="text-red-600 hover:text-red-900"

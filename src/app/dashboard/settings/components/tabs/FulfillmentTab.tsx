@@ -33,14 +33,38 @@ export default function FulfillmentTab({ onChanges }: FulfillmentTabProps) {
     if (savedStatuses) {
       try {
         const parsed = JSON.parse(savedStatuses)
-        // Migrate old data if needsPicking field doesn't exist
+        
+        // Migrate old data structure: rename 'value' to 'code'
         const migratedStatuses = parsed.map((status: any) => ({
           ...status,
+          code: status.code || status.value,
+          value: undefined,
           needsPicking: status.needsPicking !== undefined
             ? status.needsPicking
-            : ['PENDING', 'ASSIGNED', 'PROCESSING'].includes(status.value)
+            : ['PENDING', 'PROCESSING'].includes(status.code || status.value)
         }))
-        setStatuses(migratedStatuses)
+
+        // Clean up undefined properties
+        const cleanedStatuses = migratedStatuses.map((status: any) => {
+          const { value, ...rest } = status
+          return rest
+        })
+
+        // ✅ Deduplicate by code (keep first occurrence)
+        const seenCodes = new Set<string>()
+        const deduplicatedStatuses = cleanedStatuses.filter((status: any) => {
+          if (seenCodes.has(status.code)) {
+            console.warn(`⚠️ Duplicate status code removed: ${status.code}`)
+            return false
+          }
+          seenCodes.add(status.code)
+          return true
+        })
+
+        setStatuses(deduplicatedStatuses)
+
+        // Save deduplicated data back to localStorage
+        localStorage.setItem('fulfillmentStatuses', JSON.stringify(deduplicatedStatuses))
       } catch (error) {
         console.error('Error loading fulfillment statuses:', error)
         setStatuses(DEFAULT_FULFILLMENT_STATUSES)

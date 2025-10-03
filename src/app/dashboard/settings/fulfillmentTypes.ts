@@ -1,4 +1,4 @@
-//file path: app/dashboard/settings/types/fulfillmentTypes.ts
+//file path: app/dashboard/settings/fulfillmentTypes.ts
 
 export interface FulfillmentStatus {
   id: string
@@ -28,86 +28,75 @@ export const DEFAULT_FULFILLMENT_STATUSES: FulfillmentStatus[] = [
     order: 1,
     label: 'Pending',
     code: 'PENDING',
-    color: 'Pending',
+    color: 'bg-gray-100 text-gray-800',  // ✅ Actual Tailwind class
     needsShipping: true,
-    needsPicking: true,  // NEW: Add default value
+    needsPicking: true,
     type: 'system',
     isEditable: false
   },
   {
-    id: '2',
-    order: 2,
-    label: 'Assigned',
-    code: 'ASSIGNED',
-    color: 'Assigned',
-    needsShipping: true,
-    needsPicking: true,  // NEW: Add default value
-    type: 'custom',
-    isEditable: true
-  },
-  {
     id: '3',
-    order: 3,
+    order: 2,
     label: 'Processing',
     code: 'PROCESSING',
-    color: 'Processing',
+    color: 'bg-blue-100 text-blue-800',  // ✅ Actual Tailwind class
     needsShipping: true,
-    needsPicking: true,  // NEW: Add default value
+    needsPicking: true,
     type: 'system',
     isEditable: false
   },
   {
     id: '4',
-    order: 4,
+    order: 3,
     label: 'Picking',
     code: 'PICKING',
-    color: 'Picking',
+    color: 'bg-yellow-100 text-yellow-800',  // ✅ Actual Tailwind class
     needsShipping: true,
-    needsPicking: false,  // NEW: Already picked
+    needsPicking: false,
     type: 'custom',
     isEditable: true
   },
   {
     id: '5',
-    order: 5,
+    order: 4,
     label: 'Packing',
     code: 'PACKING',
-    color: 'Packing',
+    color: 'bg-orange-100 text-orange-800',  // ✅ Actual Tailwind class
     needsShipping: true,
-    needsPicking: false,  // NEW: Already picked
+    needsPicking: false,
     type: 'custom',
     isEditable: true
   },
   {
     id: '6',
-    order: 6,
+    order: 5,
     label: 'Packed',
     code: 'PACKED',
-    color: 'Packed',
+    color: 'bg-indigo-100 text-indigo-800',  // ✅ Actual Tailwind class
     needsShipping: true,
-    needsPicking: false,  // NEW: Already picked
+    needsPicking: false,
     type: 'custom',
     isEditable: true
   },
   {
     id: '7',
-    order: 7,
+    order: 6,
     label: 'Ready to Ship',
     code: 'READY_TO_SHIP',
-    color: 'Ready to Ship',
+    color: 'bg-purple-100 text-purple-800',  // ✅ Actual Tailwind class
     needsShipping: true,
-    needsPicking: false,  // NEW: Already picked
+    needsPicking: false,
     type: 'custom',
     isEditable: true
   },
   {
     id: '8',
-    order: 8,
+    order: 7,
     label: 'Shipped',
     code: 'SHIPPED',
-    color: 'Shipped',
+    color: 'bg-green-100 text-green-800',  // ✅ Actual Tailwind class
     needsShipping: false,
-    needsPicking: false,  // NEW: Already picked and shipped
+    needsPicking: false,
     type: 'system',
     isEditable: false
   }

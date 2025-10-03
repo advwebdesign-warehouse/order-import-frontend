@@ -30,7 +30,7 @@ import { orderNeedsPicking, orderNeedsShippingDynamic } from '../../../orders/ut
 
 // Types
 import { Order, OrderWithDetails, ColumnConfig } from '../../../orders/utils/orderTypes'
-import { ITEMS_PER_PAGE } from '../../../orders/constants/orderConstants'
+import { ITEMS_PER_PAGE, STATUS_COLORS, FULFILLMENT_COLORS } from '../../../orders/constants/orderConstants'
 
 // Settings
 import { useSettings } from '../../../shared/hooks/useSettings'
@@ -97,6 +97,14 @@ export default function WarehouseOrdersPage() {
 
   // Load fulfillment statuses from settings
   const { statuses: fulfillmentStatuses, loading: fulfillmentLoading } = useFulfillmentStatuses()
+
+  const fulfillmentStatusOptions = useMemo(() => {
+    return fulfillmentStatuses.map(status => ({
+      value: status.code,
+      label: status.label,
+      color: status.color  // ✅ Use color directly from settings
+    }))
+  }, [fulfillmentStatuses])
 
   // Modal states
   const [showOrderDetails, setShowOrderDetails] = useState(false)
@@ -723,8 +731,9 @@ export default function WarehouseOrdersPage() {
           onPrintPackingSlip={handlePrintSinglePackingSlip}
           onColumnVisibilityChange={handleColumnVisibilityChange}
           onColumnReorder={handleColumnReorder}
-          onUpdateStatus={updateStatus}                           // ADD THIS
-          onUpdateFulfillmentStatus={updateFulfillmentStatus}     // ADD THIS
+          onUpdateStatus={updateStatus}
+          onUpdateFulfillmentStatus={updateFulfillmentStatus}
+          fulfillmentStatusOptions={fulfillmentStatusOptions}
         />
       </div>
 

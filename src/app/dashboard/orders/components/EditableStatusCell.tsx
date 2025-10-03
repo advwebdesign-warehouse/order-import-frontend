@@ -30,8 +30,22 @@ export default function EditableStatusCell({
   const [isUpdating, setIsUpdating] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  // Find the current option by matching the value (code)
   const currentOption = options.find(opt => opt.value === currentValue)
+
+  // Fallback: create a formatted label from the code if option not found
+  const displayLabel = currentOption?.label || currentValue.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
   const colorClasses = currentOption?.color || 'bg-gray-100 text-gray-800'
+
+  // Debug: Log if option not found
+  useEffect(() => {
+    if (!currentOption && process.env.NODE_ENV === 'development') {
+      console.warn(`⚠️ No matching option found for ${type}:`, {
+        currentValue,
+        availableOptions: options.map(o => o.value)
+      })
+    }
+  }, [currentOption, currentValue, options, type])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -83,7 +97,7 @@ export default function EditableStatusCell({
           </>
         ) : (
           <>
-            {currentOption?.label || currentValue}
+            {displayLabel}
             <ChevronDownIcon className="h-3 w-3" />
           </>
         )}

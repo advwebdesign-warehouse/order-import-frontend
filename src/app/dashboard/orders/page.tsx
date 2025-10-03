@@ -1,7 +1,4 @@
 //file path: app/dashboard/orders/page.tsx
-// KEY CHANGES:
-// 1. Add updateStatus and updateFulfillmentStatus from useOrders hook
-// 2. Pass these functions to OrdersTable component
 
 'use client'
 
@@ -37,7 +34,7 @@ import { orderNeedsPicking, orderNeedsShippingDynamic } from './utils/orderConst
 
 // Types
 import { Order, OrderWithDetails } from './utils/orderTypes'
-import { ITEMS_PER_PAGE } from './constants/orderConstants'
+import { ITEMS_PER_PAGE, STATUS_COLORS, FULFILLMENT_COLORS } from './constants/orderConstants'
 
 //Settings
 import { useSettings } from '../shared/hooks/useSettings'
@@ -116,6 +113,14 @@ export default function OrdersPage() {
   const { warehouses, loading: warehousesLoading } = useWarehouses()
 
   const { statuses: fulfillmentStatuses, loading: fulfillmentLoading } = useFulfillmentStatuses()
+
+  const fulfillmentStatusOptions = useMemo(() => {
+    return fulfillmentStatuses.map(status => ({
+      value: status.code,
+      label: status.label,
+      color: status.color  // ✅ Use color directly from settings
+    }))
+  }, [fulfillmentStatuses])
 
   const [showOrderDetails, setShowOrderDetails] = useState(false)
   const [showPackingSlip, setShowPackingSlip] = useState(false)
@@ -735,7 +740,6 @@ export default function OrdersPage() {
         onClearAllFilters={handleClearAllFilters}
       />
 
-      {/* ✅ CHANGE 2: Pass the new update functions to OrdersTable */}
       <OrdersTable
         orders={currentOrders}
         columns={columns}
@@ -747,8 +751,9 @@ export default function OrdersPage() {
         onViewOrder={handleViewOrderDetails}
         onPrintPackingSlip={handlePrintSinglePackingSlip}
         onColumnReorder={handleColumnReorder}
-        onUpdateStatus={updateStatus}                           // NEW
-        onUpdateFulfillmentStatus={updateFulfillmentStatus}     // NEW
+        onUpdateStatus={updateStatus}
+        onUpdateFulfillmentStatus={updateFulfillmentStatus}
+        fulfillmentStatusOptions={fulfillmentStatusOptions}
       />
 
       <OrdersPagination

@@ -52,19 +52,19 @@ export default function FulfillmentStatusTable({
   const handleAddStatus = (newStatus: Partial<FulfillmentStatus>) => {
     if (!newStatus.label) return
 
-    // Use a stable ID generation approach
     const newId = `status-${statuses.length + 1}-${newStatus.label.toLowerCase().replace(/\s+/g, '-')}`
-    const maxSortOrder = Math.max(...statuses.map(s => s.sortOrder), 0)
+    const maxOrder = Math.max(...statuses.map(s => s.order), 0)
 
     const statusToAdd: FulfillmentStatus = {
       id: newId,
-      value: newStatus.label.toUpperCase().replace(/[^A-Z0-9]+/g, '_'),
+      order: maxOrder + 1,
+      code: newStatus.label.toUpperCase().replace(/[^A-Z0-9]+/g, '_'),
       label: newStatus.label!,
       color: newStatus.color!,
       needsShipping: newStatus.needsShipping!,
       needsPicking: newStatus.needsPicking ?? true,
-      isSystem: false,
-      sortOrder: maxSortOrder + 1
+      type: 'custom',
+      isEditable: true
     }
 
     onStatusesChange([...statuses, statusToAdd])
@@ -81,7 +81,7 @@ export default function FulfillmentStatusTable({
 
   const handleDeleteStatus = (id: string) => {
     const status = statuses.find(s => s.id === id)
-    if (status?.isSystem) {
+    if (status?.type === 'system') {
       alert('System statuses cannot be deleted')
       return
     }
@@ -100,18 +100,16 @@ export default function FulfillmentStatusTable({
 
       const newStatuses = arrayMove(statuses, oldIndex, newIndex)
 
-      // Update sort orders
       const updatedStatuses = newStatuses.map((status, index) => ({
         ...status,
-        sortOrder: index + 1
+        order: index + 1
       }))
 
-      // Call the same handler for all changes
       onStatusesChange(updatedStatuses)
     }
   }
 
-  const sortedStatuses = [...statuses].sort((a, b) => a.sortOrder - b.sortOrder)
+  const sortedStatuses = [...statuses].sort((a, b) => a.order - b.order)
 
   return (
     <DndContext
@@ -177,7 +175,6 @@ export default function FulfillmentStatusTable({
                 </tbody>
               </table>
 
-              {/* Saving indicator overlay */}
               {isSaving && (
                 <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
                   <div className="flex items-center text-sm text-gray-600 bg-white px-4 py-2 rounded-lg shadow-lg">
