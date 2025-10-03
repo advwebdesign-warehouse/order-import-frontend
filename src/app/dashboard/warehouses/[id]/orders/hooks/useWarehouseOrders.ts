@@ -799,10 +799,81 @@ export function useWarehouseOrders(warehouseId: string) {
     setOrders(warehouseOrders)
   }
 
+  // Add this function
+  const updateOrdersFulfillmentStatus = async (orderIds: string[], newStatus: string) => {
+    try {
+      // Update the orders in state
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          orderIds.includes(order.id)
+            ? { ...order, fulfillmentStatus: newStatus }
+            : order
+        )
+      )
+
+      // Also update the mock data for persistence
+      mockOrdersData.forEach(order => {
+        if (orderIds.includes(order.id)) {
+          order.fulfillmentStatus = newStatus
+        }
+      })
+
+      return true
+    } catch (err) {
+      console.error('Error updating orders:', err)
+      setError('Failed to update orders')
+      return false
+    }
+  }
+
+  const updateStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!response.ok) throw new Error('Failed to update order status')
+
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId ? { ...order, status: newStatus } : order
+        )
+      )
+    } catch (error) {
+      console.error('Error updating order status:', error)
+      throw error
+    }
+  }
+
+  const updateFulfillmentStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fulfillmentStatus: newStatus }),
+      })
+      if (!response.ok) throw new Error('Failed to update order fulfillment status')
+
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId ? { ...order, fulfillmentStatus: newStatus } : order
+        )
+      )
+    } catch (error) {
+      console.error('Error updating order fulfillment status:', error)
+      throw error
+    }
+  }
+
+  // Update return statement:
   return {
     orders,
     loading,
     error,
-    refreshOrders
+    refreshOrders,
+    updateOrdersFulfillmentStatus,
+    updateStatus,              // ADD THIS
+    updateFulfillmentStatus    // ADD THIS
   }
 }

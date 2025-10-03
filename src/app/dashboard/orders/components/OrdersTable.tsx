@@ -36,6 +36,8 @@ import {
   STATUS_COLORS,
   FULFILLMENT_COLORS
 } from '../constants/orderConstants'
+import EditableStatusCell from './EditableStatusCell'
+import { ORDER_STATUS_OPTIONS, FULFILLMENT_STATUS_OPTIONS } from '../constants/statusOptions'
 
 // Date extraction utility functions
 const extractDateParts = (dateString: string) => {
@@ -69,6 +71,8 @@ interface OrdersTableProps {
   onPrintPackingSlip: (order: Order) => void
   onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
   onColumnReorder?: (columns: ColumnConfig[]) => void
+  onUpdateStatus?: (orderId: string, newStatus: string) => Promise<void>
+  onUpdateFulfillmentStatus?: (orderId: string, newStatus: string) => Promise<void>
 }
 
 // Sortable header component for drag-and-drop column reordering
@@ -124,7 +128,9 @@ export default function OrdersTable({
   onViewOrder,
   onPrintPackingSlip,
   onColumnVisibilityChange,
-  onColumnReorder
+  onColumnReorder,
+  onUpdateStatus,
+  onUpdateFulfillmentStatus
 }: OrdersTableProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -276,19 +282,45 @@ export default function OrdersTable({
           </button>
         )
 
-      case 'status':
-        return (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[order.status as keyof typeof STATUS_COLORS]}`}>
-            {order.status}
-          </span>
-        )
+        case 'status':
+          // Use EditableStatusCell if update function provided
+          if (onUpdateStatus) {
+            return (
+              <EditableStatusCell
+                orderId={order.id}
+                currentValue={order.status}
+                options={ORDER_STATUS_OPTIONS}
+                onUpdate={onUpdateStatus}
+                type="status"
+              />
+            )
+          }
+          // Fallback to static badge
+          return (
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[order.status as keyof typeof STATUS_COLORS]}`}>
+              {order.status}
+            </span>
+          )
 
-      case 'fulfillmentStatus':
-        return (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${FULFILLMENT_COLORS[order.fulfillmentStatus as keyof typeof FULFILLMENT_COLORS]}`}>
-            {order.fulfillmentStatus.replace('_', ' ')}
-          </span>
-        )
+          case 'fulfillmentStatus':
+            // Use EditableStatusCell if update function provided
+            if (onUpdateFulfillmentStatus) {
+              return (
+                <EditableStatusCell
+                  orderId={order.id}
+                  currentValue={order.fulfillmentStatus}
+                  options={FULFILLMENT_STATUS_OPTIONS}
+                  onUpdate={onUpdateFulfillmentStatus}
+                  type="fulfillmentStatus"
+                />
+              )
+            }
+            // Fallback to static badge
+            return (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${FULFILLMENT_COLORS[order.fulfillmentStatus as keyof typeof FULFILLMENT_COLORS]}`}>
+                {order.fulfillmentStatus.replace('_', ' ')}
+              </span>
+            )
 
       case 'totalAmount':
         return (

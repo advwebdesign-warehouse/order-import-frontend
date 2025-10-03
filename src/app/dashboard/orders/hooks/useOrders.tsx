@@ -133,7 +133,7 @@ const mockOrdersData: Order[] = [
     totalAmount: 142.30,
     currency: 'USD',
     status: 'PROCESSING',
-    fulfillmentStatus: 'ASSIGNED',
+    fulfillmentStatus: 'PROCESSING',
     platform: 'Magento',
     orderDate: '2025-09-18T08:15:00Z',
     itemCount: 3,
@@ -244,10 +244,121 @@ export function useOrders() {
     setOrders([...mockOrdersData])
   }
 
+  // Add function to update order fulfillment status
+  const updateOrdersFulfillmentStatus = async (orderIds: string[], newStatus: string) => {
+    try {
+      // In a real app, this would be an API call:
+      // await fetch('/api/orders/bulk-update', {
+      //   method: 'POST',
+      //   body: JSON.stringify({ orderIds, fulfillmentStatus: newStatus })
+      // })
+
+      // Update the orders in state
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          orderIds.includes(order.id)
+            ? { ...order, fulfillmentStatus: newStatus }
+            : order
+        )
+      )
+
+      // Also update the mock data for persistence
+      mockOrdersData.forEach(order => {
+        if (orderIds.includes(order.id)) {
+          order.fulfillmentStatus = newStatus
+        }
+      })
+
+      return true
+    } catch (err) {
+      console.error('Error updating orders:', err)
+      setError('Failed to update orders')
+      return false
+    }
+  }
+
+    /**
+   * Update single order status
+   */
+  const updateStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update order status')
+      }
+
+      // Update local state
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId ? { ...order, status: newStatus } : order
+        )
+      )
+
+      // Update mock data
+      const orderIndex = mockOrdersData.findIndex(o => o.id === orderId)
+      if (orderIndex !== -1) {
+        mockOrdersData[orderIndex].status = newStatus
+      }
+
+      console.log(`Order ${orderId} status updated to ${newStatus}`)
+    } catch (error) {
+      console.error('Error updating order status:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update single order fulfillment status
+   */
+  const updateFulfillmentStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fulfillmentStatus: newStatus }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update order fulfillment status')
+      }
+
+      // Update local state
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId ? { ...order, fulfillmentStatus: newStatus } : order
+        )
+      )
+
+      // Update mock data
+      const orderIndex = mockOrdersData.findIndex(o => o.id === orderId)
+      if (orderIndex !== -1) {
+        mockOrdersData[orderIndex].fulfillmentStatus = newStatus
+      }
+
+      console.log(`Order ${orderId} fulfillment status updated to ${newStatus}`)
+    } catch (error) {
+      console.error('Error updating order fulfillment status:', error)
+      throw error
+    }
+  }
+
+  // Then UPDATE your return statement to include these:
   return {
     orders,
     loading,
     error,
-    refreshOrders
+    refreshOrders,
+    updateOrdersFulfillmentStatus,
+    updateStatus,              // ADD THIS
+    updateFulfillmentStatus    // ADD THIS
   }
 }

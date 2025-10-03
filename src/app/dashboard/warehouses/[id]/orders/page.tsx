@@ -160,7 +160,14 @@ export default function WarehouseOrdersPage() {
   }, [maxPickingOrders, warehouseId])
 
   // Custom hooks for state management
-  const { orders, loading } = useWarehouseOrders(warehouseId)
+  const {
+    orders,
+    loading,
+    updateOrdersFulfillmentStatus,
+    updateStatus,              // ADD THIS
+    updateFulfillmentStatus    // ADD THIS
+  } = useWarehouseOrders(warehouseId)
+
   const {
     searchTerm,
     setSearchTerm,
@@ -188,20 +195,37 @@ export default function WarehouseOrdersPage() {
 
   // Calculate orders that need PICKING (based on fulfillment settings)
   const ordersToPick = useMemo(() => {
-    return ordersToShip.filter(order => {
-      // Use dynamic settings to determine if order needs picking
+    return filteredOrders.filter(order => {
       return orderNeedsPicking(order, fulfillmentStatuses)
     })
-  }, [ordersToShip, fulfillmentStatuses])
+  }, [filteredOrders, fulfillmentStatuses])  // ✅ FIXED
 
   // Calculate total items to ship from processing orders only
   const itemsToShip = useMemo(() => {
-    return ordersToShip.reduce((total, order) => total + (order.itemCount || 0), 0)
+    const detailedOrders = ordersToShip.map(order => transformToDetailedOrder(order))
+
+    let totalQuantity = 0
+    detailedOrders.forEach(order => {
+      order.items.forEach(item => {
+        totalQuantity += item.quantity
+      })
+    })
+
+    return totalQuantity
   }, [ordersToShip])
 
   // Calculate total items to PICK (only from orders that need picking)
   const itemsToPick = useMemo(() => {
-    return ordersToPick.reduce((total, order) => total + (order.itemCount || 0), 0)
+    const detailedOrders = ordersToPick.map(order => transformToDetailedOrder(order))
+
+    let totalQuantity = 0
+    detailedOrders.forEach(order => {
+      order.items.forEach(item => {
+        totalQuantity += item.quantity
+      })
+    })
+
+    return totalQuantity
   }, [ordersToPick])
 
   // Calculate selected orders for picking list
@@ -212,10 +236,46 @@ export default function WarehouseOrdersPage() {
 
   // Calculate items in selected orders for picking
   const itemsInSelectedOrders = useMemo(() => {
-    return selectedOrdersForPicking.reduce((total, order) => total + (order.itemCount || 0), 0)
+    const detailedOrders = selectedOrdersForPicking.map(order => transformToDetailedOrder(order))
+
+    let totalQuantity = 0
+    detailedOrders.forEach(order => {
+      order.items.forEach(item => {
+        totalQuantity += item.quantity
+      })
+    })
+
+    return totalQuantity
   }, [selectedOrdersForPicking])
 
-  // Calculate LIMITED orders for picking list (apply max limit here for "all orders to ship" scenario)
+  // Calculate LIMITED orders for SHIPPING (for "orders to ship" checkbox)
+  const limitedOrdersForShipping = useMemo(() => {
+    // Parse max picking orders - handle both "5", "10", "20", "all" and "custom:X" formats
+    let limit = null
+    if (maxPickingOrders && maxPickingOrders !== 'all') {
+      if (maxPickingOrders.startsWith('custom:')) {
+        limit = parseInt(maxPickingOrders.replace('custom:', ''))
+      } else {
+        limit = parseInt(maxPickingOrders)
+      }
+    }
+
+    // Sort orders by date (oldest first) before applying limit
+    const sortedByDate = [...ordersToShip].sort((a, b) => {
+      const dateA = new Date(a.orderDate || 0).getTime()
+      const dateB = new Date(b.orderDate || 0).getTime()
+      return dateA - dateB // Oldest first (FIFO)
+    })
+
+    // Apply limit if we have a valid number
+    if (limit && !isNaN(limit)) {
+      return sortedByDate.slice(0, limit)
+    }
+
+    return sortedByDate
+  }, [ordersToShip, maxPickingOrders])
+
+  // Calculate LIMITED orders for PICKING (for "items to pick" checkbox)
   const limitedOrdersForPicking = useMemo(() => {
     // Parse max picking orders - handle both "5", "10", "20", "all" and "custom:X" formats
     let limit = null
@@ -227,23 +287,69 @@ export default function WarehouseOrdersPage() {
       }
     }
 
-    // Apply limit if we have a valid number - use ordersToPick instead of ordersToShip
+    // Sort orders by date (oldest first) before applying limit
+    const sortedByDate = [...ordersToPick].sort((a, b) => {
+      const dateA = new Date(a.orderDate || 0).getTime()
+      const dateB = new Date(b.orderDate || 0).getTime()
+      return dateA - dateB // Oldest first (FIFO)
+    })
+
+    // Apply limit if we have a valid number
     if (limit && !isNaN(limit)) {
-      return ordersToPick.slice(0, limit)
+      return sortedByDate.slice(0, limit)
     }
 
-    return ordersToPick
+    return sortedByDate
   }, [ordersToPick, maxPickingOrders])
 
-  // Calculate items in limited orders for picking
-  const itemsInLimitedOrders = useMemo(() => {
-    return limitedOrdersForPicking.reduce((total, order) => total + (order.itemCount || 0), 0)
+  // Calculate items in limited SHIPPING orders
+  const itemsInLimitedShippingOrders = useMemo(() => {
+    const detailedOrders = limitedOrdersForShipping.map(order => transformToDetailedOrder(order))
+
+    let totalQuantity = 0
+    detailedOrders.forEach(order => {
+      order.items.forEach(item => {
+        totalQuantity += item.quantity
+      })
+    })
+
+    return totalQuantity
+  }, [limitedOrdersForShipping])
+
+  // Calculate items in limited PICKING orders
+  const itemsInLimitedPickingOrders = useMemo(() => {
+    console.log('🔍 limitedOrdersForPicking:', limitedOrdersForPicking)
+
+    // Transform to detailed orders to get actual item quantities
+    const detailedOrders = limitedOrdersForPicking.map(order => transformToDetailedOrder(order))
+    console.log('🔍 detailedOrders:', detailedOrders)
+
+    let totalQuantity = 0
+    detailedOrders.forEach(order => {
+      order.items.forEach(item => {
+        console.log(`   - ${item.sku}: qty ${item.quantity}`)
+        totalQuantity += item.quantity
+      })
+    })
+
+    console.log('🔍 Total quantity:', totalQuantity)
+    return totalQuantity
   }, [limitedOrdersForPicking])
 
   // Transform orders to get actual items for picking calculations
   const ordersWithDetailsForPicking = useMemo(() => {
     const ordersToTransform = selectedOrders.size > 0 ? selectedOrdersForPicking : limitedOrdersForPicking
-    return ordersToTransform.map(order => transformToDetailedOrder(order))
+    const transformed = ordersToTransform.map(order => transformToDetailedOrder(order))
+
+    console.log('🎯 ordersWithDetailsForPicking:', transformed)
+    transformed.forEach(order => {
+      console.log(`   Order ${order.orderNumber}:`)
+      order.items.forEach(item => {
+        console.log(`      - ${item.name} (${item.sku}): qty ${item.quantity}`)
+      })
+    })
+
+    return transformed
   }, [selectedOrders.size, selectedOrdersForPicking, limitedOrdersForPicking])
 
   // Calculate consolidated items from actual order items
@@ -271,7 +377,7 @@ export default function WarehouseOrdersPage() {
   const remainingItemsToPick = useMemo(() => {
     // If we don't have any picked items, return full count
     if (pickedItems.size === 0) {
-      return itemsToPick  // Changed from itemsToShip
+      return itemsToPick
     }
 
     // Calculate how many items have been picked by summing quantities from actual items
@@ -280,7 +386,7 @@ export default function WarehouseOrdersPage() {
       .reduce((sum, item) => sum + item.totalQuantity, 0)
 
     // Return remaining items
-    return Math.max(0, itemsToPick - pickedQuantity)  // Changed from itemsToShip
+    return Math.max(0, itemsToPick - pickedQuantity)
   }, [itemsToPick, pickedItems, consolidatedItemsForPicking])
 
   // Calculate total picked quantity for display
@@ -376,6 +482,16 @@ export default function WarehouseOrdersPage() {
     clearSelection()
   }
 
+  const handleUpdateFulfillmentStatus = async (orderIds: string[], status: string) => {
+    const success = await updateOrdersFulfillmentStatus(orderIds, status)
+
+    if (success) {
+      alert(`Successfully updated ${orderIds.length} order(s) to ${status} status`)
+    } else {
+      alert('Failed to update orders. Please try again.')
+    }
+  }
+
   const handleItemsPerPageChange = (newValue: number) => {
     setOrdersPerPage(newValue)
     setCurrentPage(1)
@@ -402,8 +518,8 @@ export default function WarehouseOrdersPage() {
     setShowOrdersToShip(checked)
 
     if (checked) {
-      // Only select orders that aren't already selected
-      const orderIdsToShip = ordersToShip.map(order => order.id)
+      // Select limited SHIPPING orders based on max picking orders setting
+      const orderIdsToShip = limitedOrdersForShipping.map(order => order.id)
 
       orderIdsToShip.forEach(orderId => {
         if (!selectedOrders.has(orderId)) {
@@ -411,8 +527,8 @@ export default function WarehouseOrdersPage() {
         }
       })
     } else {
-      // When unchecked, only deselect orders that are in the "orders to ship" list
-      const orderIdsToShip = new Set(ordersToShip.map(order => order.id))
+      // When unchecked, only deselect orders that are in the "limited orders to ship" list
+      const orderIdsToShip = new Set(limitedOrdersForShipping.map(order => order.id))
 
       Array.from(selectedOrders).forEach(orderId => {
         if (orderIdsToShip.has(orderId)) {
@@ -427,10 +543,9 @@ export default function WarehouseOrdersPage() {
     setShowItemsToShip(checked)
 
     if (checked) {
-      // Only select orders if there are items left to pick
-      if (remainingItemsToPick > 0) {
-        // Use ordersToPick instead of ordersToShip - only select orders that need picking
-        const orderIdsToShip = ordersToPick.map(order => order.id)
+      // Only select limited PICKING orders if there are items left to pick
+      if (itemsInLimitedPickingOrders > 0) {
+        const orderIdsToShip = limitedOrdersForPicking.map(order => order.id)
 
         orderIdsToShip.forEach(orderId => {
           if (!selectedOrders.has(orderId)) {
@@ -439,8 +554,8 @@ export default function WarehouseOrdersPage() {
         })
       }
     } else {
-      // When unchecked, deselect orders that need picking
-      const orderIdsToShip = new Set(ordersToPick.map(order => order.id))
+      // When unchecked, deselect orders
+      const orderIdsToShip = new Set(limitedOrdersForPicking.map(order => order.id))
 
       Array.from(selectedOrders).forEach(orderId => {
         if (orderIdsToShip.has(orderId)) {
@@ -500,7 +615,7 @@ export default function WarehouseOrdersPage() {
       {/* Orders Stats with Checkboxes */}
       <div className="mt-6">
         <div className="flex items-center space-x-6 min-h-[40px]">
-          {/* Orders to ship with checkbox */}
+          {/* Orders to ship with checkbox - uses limitedOrdersForShipping */}
           <label className="flex items-center space-x-2 cursor-pointer h-10">
             <input
               type="checkbox"
@@ -509,24 +624,29 @@ export default function WarehouseOrdersPage() {
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
             />
             <span className="text-sm font-medium text-gray-700">
-              {ordersToShip.length} order{ordersToShip.length !== 1 ? 's' : ''} to ship
+              {limitedOrdersForShipping.length} order{limitedOrdersForShipping.length !== 1 ? 's' : ''} to ship
+              {ordersToShip.length > limitedOrdersForShipping.length && (
+                <span className="text-xs text-gray-500 ml-1">
+                  (of {ordersToShip.length} total)
+                </span>
+              )}
             </span>
           </label>
 
-          {/* Items to ship with checkbox */}
+          {/* Items to pick with checkbox - uses limitedOrdersForPicking */}
           <label className="flex items-center space-x-2 cursor-pointer h-10">
               <input
               type="checkbox"
               checked={showItemsToShip}
               onChange={(e) => handleItemsToShipChange(e.target.checked)}
-              disabled={remainingItemsToPick === 0}
+              disabled={itemsInLimitedPickingOrders === 0}
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <span className={`text-sm font-medium ${remainingItemsToPick === 0 ? 'text-gray-400' : 'text-gray-700'}`}>
-              {remainingItemsToPick} item{remainingItemsToPick !== 1 ? 's' : ''} to pick
-              {pickedItemsQuantity > 0 && (
+            <span className={`text-sm font-medium ${itemsInLimitedPickingOrders === 0 ? 'text-gray-400' : 'text-gray-700'}`}>
+              {itemsInLimitedPickingOrders} item{itemsInLimitedPickingOrders !== 1 ? 's' : ''} to pick
+              {itemsToPick > itemsInLimitedPickingOrders && (
                 <span className="text-xs text-gray-500 ml-1">
-                  ({pickedItemsQuantity} picked)
+                  (of {itemsToPick} total)
                 </span>
               )}
             </span>
@@ -560,7 +680,7 @@ export default function WarehouseOrdersPage() {
         onMaxPickingOrdersChange={setMaxPickingOrders}
         showItemsToShip={showItemsToShip}
         onShowPickingList={handleShowPickingList}
-        itemsToShipCount={remainingItemsToPick} // Changed from itemsToShip
+        itemsToShipCount={itemsInLimitedPickingOrders}
       />
 
       {/* Show Filters Button */}
@@ -603,6 +723,8 @@ export default function WarehouseOrdersPage() {
           onPrintPackingSlip={handlePrintSinglePackingSlip}
           onColumnVisibilityChange={handleColumnVisibilityChange}
           onColumnReorder={handleColumnReorder}
+          onUpdateStatus={updateStatus}                           // ADD THIS
+          onUpdateFulfillmentStatus={updateFulfillmentStatus}     // ADD THIS
         />
       </div>
 
@@ -648,11 +770,12 @@ export default function WarehouseOrdersPage() {
           maxOrdersLimit={selectedOrdersForPicking.length > 0 ? "all" : maxPickingOrders}
           totalOrdersCount={selectedOrdersForPicking.length > 0 ? selectedOrdersForPicking.length : ordersToShip.length}
           limitedOrdersCount={ordersWithDetailsForPicking.length}
-          itemsCount={selectedOrdersForPicking.length > 0 ? itemsInSelectedOrders : itemsInLimitedOrders}
+          itemsCount={selectedOrdersForPicking.length > 0 ? itemsInSelectedOrders : itemsInLimitedPickingOrders}
           pickedItems={pickedItems}
           pickedOrders={pickedOrders}
           onItemPicked={handleItemPicked}
           onOrderPicked={handleOrderPicked}
+          onUpdateFulfillmentStatus={handleUpdateFulfillmentStatus}
         />
       )}
     </div>

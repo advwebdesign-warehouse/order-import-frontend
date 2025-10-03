@@ -31,6 +31,7 @@ export interface OrderItem {
   currency: string
   variant: string
   weight: number
+  location?: string 
   meta: {
     color: string
     size: string
