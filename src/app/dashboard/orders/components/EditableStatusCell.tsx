@@ -28,7 +28,9 @@ export default function EditableStatusCell({
 }: EditableStatusCellProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   // Find the current option by matching the value (code)
   const currentOption = options.find(opt => opt.value === currentValue)
@@ -46,6 +48,23 @@ export default function EditableStatusCell({
       })
     }
   }, [currentOption, currentValue, options, type])
+
+  // Calculate dropdown position when opening
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const buttonRect = buttonRef.current.getBoundingClientRect()
+      const dropdownHeight = 300 // Approximate max height of dropdown
+      const spaceBelow = window.innerHeight - buttonRect.bottom
+      const spaceAbove = buttonRect.top
+
+      // If not enough space below but more space above, show dropdown above
+      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+        setDropdownPosition('top')
+      } else {
+        setDropdownPosition('bottom')
+      }
+    }
+  }, [isOpen])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -80,6 +99,7 @@ export default function EditableStatusCell({
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         disabled={isUpdating}
         className={`
@@ -104,7 +124,21 @@ export default function EditableStatusCell({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1">
+        <div
+          className={`
+            fixed z-[9999] w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1
+            max-h-60 overflow-y-auto
+          `}
+          style={{
+            left: buttonRef.current ? `${buttonRef.current.getBoundingClientRect().left}px` : '0',
+            [dropdownPosition === 'bottom' ? 'top' : 'bottom']:
+              buttonRef.current
+                ? dropdownPosition === 'bottom'
+                  ? `${buttonRef.current.getBoundingClientRect().bottom + 4}px`
+                  : `${window.innerHeight - buttonRef.current.getBoundingClientRect().top + 4}px`
+                : '0'
+          }}
+        >
           {options.map((option) => (
             <button
               key={option.value}

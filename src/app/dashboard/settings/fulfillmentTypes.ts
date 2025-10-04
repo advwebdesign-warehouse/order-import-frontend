@@ -53,7 +53,7 @@ export const DEFAULT_FULFILLMENT_STATUSES: FulfillmentStatus[] = [
     color: 'bg-yellow-100 text-yellow-800',  // ✅ Actual Tailwind class
     needsShipping: true,
     needsPicking: false,
-    type: 'custom',
+    type: 'system',
     isEditable: true
   },
   {
@@ -64,7 +64,7 @@ export const DEFAULT_FULFILLMENT_STATUSES: FulfillmentStatus[] = [
     color: 'bg-orange-100 text-orange-800',  // ✅ Actual Tailwind class
     needsShipping: true,
     needsPicking: false,
-    type: 'custom',
+    type: 'system',
     isEditable: true
   },
   {

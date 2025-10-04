@@ -8,7 +8,8 @@ import {
   DocumentTextIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  Bars3Icon
+  Bars3Icon,
+  ListBulletIcon
 } from '@heroicons/react/24/outline'
 import ReactCountryFlag from "react-country-flag"
 import {
@@ -38,6 +39,7 @@ import {
 } from '../constants/orderConstants'
 import EditableStatusCell from './EditableStatusCell'
 import { ORDER_STATUS_OPTIONS, FULFILLMENT_STATUS_OPTIONS } from '../constants/statusOptions'
+import { convertTailwindToHex } from '../../shared/utils/colorUtils'
 
 // Date extraction utility functions
 const extractDateParts = (dateString: string) => {
@@ -69,6 +71,7 @@ interface OrdersTableProps {
   onSelectAll: () => void
   onViewOrder: (order: Order) => void
   onPrintPackingSlip: (order: Order) => void
+  onPrintPickingList?: (order: Order) => void
   onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
   onColumnReorder?: (columns: ColumnConfig[]) => void
   onUpdateStatus?: (orderId: string, newStatus: string) => Promise<void>
@@ -128,6 +131,7 @@ export default function OrdersTable({
   onSelectAll,
   onViewOrder,
   onPrintPackingSlip,
+  onPrintPickingList,
   onColumnVisibilityChange,
   onColumnReorder,
   onUpdateStatus,
@@ -151,6 +155,11 @@ export default function OrdersTable({
       const newColumns = arrayMove(columns, oldIndex, newIndex)
       onColumnReorder(newColumns)
     }
+  }
+
+  const getStatusColors = (statusCode: string) => {
+    const status = fulfillmentStatusOptions?.find(s => s.value === statusCode)
+    return convertTailwindToHex(status?.color || '#6366f1')
   }
 
   // Filter visible columns
@@ -422,25 +431,40 @@ export default function OrdersTable({
           </div>
         )
 
-      case 'actions':
-        return (
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => onViewOrder(order)}
-              className="text-indigo-600 hover:text-indigo-900"
-              title="View Order"
-            >
-              <EyeIcon className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => onPrintPackingSlip(order)}
-              className="text-gray-600 hover:text-gray-900"
-              title="Print Packing Slip"
-            >
-              <DocumentTextIcon className="h-4 w-4" />
-            </button>
-          </div>
-        )
+        case 'actions':
+          const packingColors = getStatusColors('PACKING')
+          const pickingColors = getStatusColors('PICKING')
+
+          return (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => onViewOrder(order)}
+                className="hover:opacity-75 transition-opacity"
+                style={{ color: '#6366f1' }}
+                title="View Order"
+              >
+                <EyeIcon className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => onPrintPackingSlip(order)}
+                className="hover:opacity-75 transition-opacity"
+                style={{ color: packingColors.text }}
+                title="Print Packing Slip"
+              >
+                <DocumentTextIcon className="h-4 w-4" />
+              </button>
+              {onPrintPickingList && (
+                <button
+                  onClick={() => onPrintPickingList(order)}
+                  className="hover:opacity-75 transition-opacity"
+                  style={{ color: pickingColors.text }}
+                  title="Print Picking List"
+                >
+                  <ListBulletIcon className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )
 
       default:
         // Fallback for any other fields

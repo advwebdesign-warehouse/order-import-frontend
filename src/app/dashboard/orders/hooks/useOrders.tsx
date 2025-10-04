@@ -241,7 +241,8 @@ export function useOrders() {
   }, [])
 
   const refreshOrders = async () => {
-    setOrders([...mockOrdersData])
+    // Create new object references to force React re-render
+    setOrders(mockOrdersData.map(order => ({ ...order })))
   }
 
   // Add function to update order fulfillment status

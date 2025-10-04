@@ -118,7 +118,7 @@ export default function OrdersPage() {
     return fulfillmentStatuses.map(status => ({
       value: status.code,
       label: status.label,
-      color: status.color  // ✅ Use color directly from settings
+      color: status.color
     }))
   }, [fulfillmentStatuses])
 
@@ -216,7 +216,8 @@ export default function OrdersPage() {
     loading,
     updateOrdersFulfillmentStatus,
     updateStatus,
-    updateFulfillmentStatus
+    updateFulfillmentStatus,
+    refreshOrders
   } = useOrders()
 
   const warehouseFilteredOrders = useMemo(() => {
@@ -225,6 +226,21 @@ export default function OrdersPage() {
     }
     return orders.filter(order => order.warehouseId === selectedWarehouseId)
   }, [orders, selectedWarehouseId])
+
+  // Clean up stale order IDs from packedOrders Set
+  useEffect(() => {
+    if (typeof window !== 'undefined' && packedOrders.size > 0) {
+      const currentOrderIds = new Set(warehouseFilteredOrders.map(o => o.id))
+      const validPackedOrders = new Set(
+        Array.from(packedOrders).filter(id => currentOrderIds.has(id))
+      )
+
+      // Only update if there are invalid IDs
+      if (validPackedOrders.size !== packedOrders.size) {
+        setPackedOrders(validPackedOrders)
+      }
+    }
+  }, [warehouseFilteredOrders, packedOrders])
 
   const {
     searchTerm,
@@ -414,12 +430,6 @@ export default function OrdersPage() {
       .reduce((sum, item) => sum + item.totalQuantity, 0)
   }, [pickedItems, consolidatedItemsForPicking])
 
-  useEffect(() => {
-    if (showItemsToShip && remainingItemsToPick === 0) {
-      setShowItemsToShip(false)
-    }
-  }, [remainingItemsToPick, showItemsToShip])
-
   const {
     columns,
     sortConfig,
@@ -503,6 +513,14 @@ export default function OrdersPage() {
     setShowPackingSlip(true)
   }
 
+  const handlePrintPickingListForOrder = (order: Order) => {
+    // Clear current selection and select only this order
+    clearSelection()
+    handleSelectOrder(order.id)
+    // Open picking list modal
+    setShowPickingList(true)
+  }
+
   const handleExport = () => {
     exportOrdersToCSV(sortedOrders, columns.filter(col => col.visible))
   }
@@ -545,16 +563,15 @@ export default function OrdersPage() {
     setShowOrdersToShip(checked)
 
     if (checked) {
-      const orderIdsToShip = limitedOrdersForShipping.map(order => order.id)
+      setShowItemsToShip(false)
+      clearSelection()
 
+      const orderIdsToShip = limitedOrdersForShipping.map(order => order.id)
       orderIdsToShip.forEach(orderId => {
-        if (!selectedOrders.has(orderId)) {
-          handleSelectOrder(orderId)
-        }
+        handleSelectOrder(orderId)
       })
     } else {
       const orderIdsToShip = new Set(limitedOrdersForShipping.map(order => order.id))
-
       Array.from(selectedOrders).forEach(orderId => {
         if (orderIdsToShip.has(orderId)) {
           handleSelectOrder(orderId)
@@ -567,18 +584,17 @@ export default function OrdersPage() {
     setShowItemsToShip(checked)
 
     if (checked) {
+      setShowOrdersToShip(false)
+      clearSelection()
+
       if (itemsInLimitedPickingOrders > 0) {
         const orderIdsToShip = limitedOrdersForPicking.map(order => order.id)
-
         orderIdsToShip.forEach(orderId => {
-          if (!selectedOrders.has(orderId)) {
-            handleSelectOrder(orderId)
-          }
+          handleSelectOrder(orderId)
         })
       }
     } else {
       const orderIdsToShip = new Set(limitedOrdersForPicking.map(order => order.id))
-
       Array.from(selectedOrders).forEach(orderId => {
         if (orderIdsToShip.has(orderId)) {
           handleSelectOrder(orderId)
@@ -662,7 +678,27 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {ordersToShip.length > 0 && (
+      {selectedWarehouseId === '' ? (
+        <div className="mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-blue-800">
+                  Select a warehouse to pick and ship orders
+                </h3>
+                <p className="mt-1 text-sm text-blue-700">
+                  Please select a specific warehouse from the dropdown above to view picking and shipping options.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : ordersToShip.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center space-x-6 min-h-[40px]">
             <label className="flex items-center space-x-2 cursor-pointer h-10">
@@ -728,6 +764,8 @@ export default function OrdersPage() {
         showItemsToShip={showItemsToShip}
         onShowPickingList={handleShowPickingList}
         itemsToShipCount={itemsInLimitedPickingOrders}
+        isSpecificWarehouse={selectedWarehouseId !== ''}
+        fulfillmentStatusOptions={fulfillmentStatusOptions}
       />
 
       <OrdersFilters
@@ -750,6 +788,7 @@ export default function OrdersPage() {
         onSelectAll={() => handleSelectAll(currentOrders)}
         onViewOrder={handleViewOrderDetails}
         onPrintPackingSlip={handlePrintSinglePackingSlip}
+        onPrintPickingList={handlePrintPickingListForOrder}
         onColumnReorder={handleColumnReorder}
         onUpdateStatus={updateStatus}
         onUpdateFulfillmentStatus={updateFulfillmentStatus}
@@ -799,10 +838,15 @@ export default function OrdersPage() {
         <PackingSlipModal
           orders={selectedOrdersForPicking}
           isOpen={showPackingSlipModal}
-          onClose={() => setShowPackingSlipModal(false)}
+          onClose={() => {
+            setShowPackingSlipModal(false)
+            refreshOrders()
+          }}
           warehouseName={selectedWarehouse ? selectedWarehouse.name : 'All Warehouses'}
           packedOrders={packedOrders}
           onOrderPacked={handleOrderPacked}
+          fulfillmentStatusOptions={fulfillmentStatusOptions}
+          onUpdateFulfillmentStatus={handleUpdateFulfillmentStatus}
         />
       )}
 
@@ -821,6 +865,7 @@ export default function OrdersPage() {
           onItemPicked={handleItemPicked}
           onOrderPicked={handleOrderPicked}
           onUpdateFulfillmentStatus={handleUpdateFulfillmentStatus}
+          fulfillmentStatusOptions={fulfillmentStatusOptions}
         />
       )}
     </div>

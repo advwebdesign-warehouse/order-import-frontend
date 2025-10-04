@@ -12,6 +12,7 @@ import OrdersToolbar from '../../../orders/components/OrdersToolbar'
 import OrdersFilters from '../../../orders/components/OrdersFilters'
 import OrdersTable from '../../../orders/components/OrdersTable'
 import OrdersPagination from '../../../orders/components/OrdersPagination'
+import PackingSlipModal from '../../../orders/components/PackingSlipModal'
 
 // Custom hooks
 import { useWarehouseOrders } from './hooks/useWarehouseOrders'
@@ -112,6 +113,14 @@ export default function WarehouseOrdersPage() {
   const [showPickingList, setShowPickingList] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [showPackingSlipModal, setShowPackingSlipModal] = useState(false)
+  const [packedOrders, setPackedOrders] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`packed_orders_warehouse_${warehouseId}`)
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    }
+    return new Set()
+  })
 
   // Checkbox states
   const [showOrdersToShip, setShowOrdersToShip] = useState(false)
@@ -162,20 +171,43 @@ export default function WarehouseOrdersPage() {
   }, [pickedOrders, warehouseId])
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`packed_orders_warehouse_${warehouseId}`, JSON.stringify(Array.from(packedOrders)))
+    }
+  }, [packedOrders, warehouseId])
+
+  useEffect(() => {
     if (typeof window !== 'undefined' && warehouseId) {
       localStorage.setItem(`maxPickingOrders_${warehouseId}`, maxPickingOrders)
     }
   }, [maxPickingOrders, warehouseId])
+
+
 
   // Custom hooks for state management
   const {
     orders,
     loading,
     updateOrdersFulfillmentStatus,
-    updateStatus,              // ADD THIS
-    updateFulfillmentStatus    // ADD THIS
+    updateStatus,
+    updateFulfillmentStatus,
+    refreshOrders
   } = useWarehouseOrders(warehouseId)
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && pickedOrders.size > 0) {
+      const currentOrderIds = new Set(orders.map(o => o.id))
+      const validPickedOrders = new Set(
+        Array.from(pickedOrders).filter(id => currentOrderIds.has(id))
+      )
+
+      // Only update if there are invalid IDs
+      if (validPickedOrders.size !== pickedOrders.size) {
+        setPickedOrders(validPickedOrders)
+      }
+    }
+  }, [orders, pickedOrders])
+  
   const {
     searchTerm,
     setSearchTerm,
@@ -404,12 +436,6 @@ export default function WarehouseOrdersPage() {
       .reduce((sum, item) => sum + item.totalQuantity, 0)
   }, [pickedItems, consolidatedItemsForPicking])
 
-  // Auto-uncheck the items checkbox when all items are picked
-  useEffect(() => {
-    if (showItemsToShip && remainingItemsToPick === 0) {
-      setShowItemsToShip(false)
-    }
-  }, [remainingItemsToPick, showItemsToShip])
 
   // Determine which orders to show in table based on checkbox state
   const ordersToDisplay = showOrdersToShip ? ordersToShip : filteredOrders
@@ -468,10 +494,7 @@ export default function WarehouseOrdersPage() {
       alert('Please select at least one order to print packing slips.')
       return
     }
-
-    const selectedOrdersList = orders.filter(order => selectedOrders.has(order.id))
-    const selectedOrdersWithDetails = selectedOrdersList.map(transformToDetailedOrder)
-    printMultiplePackingSlips(selectedOrdersWithDetails)
+    setShowPackingSlipModal(true)  // Just open the modal
   }
 
   const handlePrintSinglePackingSlip = (order: Order) => {
@@ -509,7 +532,6 @@ export default function WarehouseOrdersPage() {
     setSearchTerm('')
     setCurrentPage(1)
 
-    // Use the correct FilterState structure
     setFilters({
       status: [],
       fulfillmentStatus: [],
@@ -521,50 +543,55 @@ export default function WarehouseOrdersPage() {
     })
   }
 
-  // Checkbox handlers
   const handleOrdersToShipChange = (checked: boolean) => {
     setShowOrdersToShip(checked)
 
     if (checked) {
-      // Select limited SHIPPING orders based on max picking orders setting
-      const orderIdsToShip = limitedOrdersForShipping.map(order => order.id)
+      setShowItemsToShip(false)
+      clearSelection()
 
+      const orderIdsToShip = limitedOrdersForShipping.map(order => order.id)
       orderIdsToShip.forEach(orderId => {
-        if (!selectedOrders.has(orderId)) {
-          handleSelectOrder(orderId)
-        }
+        handleSelectOrder(orderId)
       })
     } else {
-      // When unchecked, only deselect orders that are in the "limited orders to ship" list
       const orderIdsToShip = new Set(limitedOrdersForShipping.map(order => order.id))
-
       Array.from(selectedOrders).forEach(orderId => {
         if (orderIdsToShip.has(orderId)) {
           handleSelectOrder(orderId)
         }
       })
     }
-    setCurrentPage(1) // Reset to first page when toggling
+    setCurrentPage(1)
+  }
+
+  const handleOrderPacked = (orderId: string) => {
+    setPackedOrders(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(orderId)) {
+        newSet.delete(orderId)
+      } else {
+        newSet.add(orderId)
+      }
+      return newSet
+    })
   }
 
   const handleItemsToShipChange = (checked: boolean) => {
     setShowItemsToShip(checked)
 
     if (checked) {
-      // Only select limited PICKING orders if there are items left to pick
+      setShowOrdersToShip(false)
+      clearSelection()
+
       if (itemsInLimitedPickingOrders > 0) {
         const orderIdsToShip = limitedOrdersForPicking.map(order => order.id)
-
         orderIdsToShip.forEach(orderId => {
-          if (!selectedOrders.has(orderId)) {
-            handleSelectOrder(orderId)
-          }
+          handleSelectOrder(orderId)
         })
       }
     } else {
-      // When unchecked, deselect orders
       const orderIdsToShip = new Set(limitedOrdersForPicking.map(order => order.id))
-
       Array.from(selectedOrders).forEach(orderId => {
         if (orderIdsToShip.has(orderId)) {
           handleSelectOrder(orderId)
@@ -577,7 +604,6 @@ export default function WarehouseOrdersPage() {
     setShowPickingList(true)
   }
 
-  // Clear picking state for current warehouse (useful for testing or reset)
   const handleClearPickingState = () => {
     setPickedItems(new Set())
     setPickedOrders(new Set())
@@ -585,6 +611,14 @@ export default function WarehouseOrdersPage() {
       localStorage.removeItem(getPickingStateKey('items'))
       localStorage.removeItem(getPickingStateKey('orders'))
     }
+  }
+
+  const handlePrintPickingListForOrder = (order: Order) => {
+    // Clear current selection and select only this order
+    clearSelection()
+    handleSelectOrder(order.id)
+    // Open picking list modal
+    setShowPickingList(true)
   }
 
   if (loading || fulfillmentLoading) {
@@ -689,6 +723,7 @@ export default function WarehouseOrdersPage() {
         showItemsToShip={showItemsToShip}
         onShowPickingList={handleShowPickingList}
         itemsToShipCount={itemsInLimitedPickingOrders}
+        fulfillmentStatusOptions={fulfillmentStatusOptions}
       />
 
       {/* Show Filters Button */}
@@ -729,6 +764,7 @@ export default function WarehouseOrdersPage() {
           onSelectAll={() => handleSelectAll(currentOrders)}
           onViewOrder={handleViewOrderDetails}
           onPrintPackingSlip={handlePrintSinglePackingSlip}
+          onPrintPickingList={handlePrintPickingListForOrder}
           onColumnVisibilityChange={handleColumnVisibilityChange}
           onColumnReorder={handleColumnReorder}
           onUpdateStatus={updateStatus}
@@ -774,8 +810,11 @@ export default function WarehouseOrdersPage() {
         <PickingListModal
           orders={ordersWithDetailsForPicking}
           isOpen={showPickingList}
-          onClose={() => setShowPickingList(false)}
-          warehouseName={warehouse.name}
+          onClose={() => {
+            setShowPickingList(false)
+            refreshOrders()
+          }}
+          warehouseName={warehouse ? warehouse.name : 'Warehouse'}
           maxOrdersLimit={selectedOrdersForPicking.length > 0 ? "all" : maxPickingOrders}
           totalOrdersCount={selectedOrdersForPicking.length > 0 ? selectedOrdersForPicking.length : ordersToShip.length}
           limitedOrdersCount={ordersWithDetailsForPicking.length}
@@ -784,6 +823,23 @@ export default function WarehouseOrdersPage() {
           pickedOrders={pickedOrders}
           onItemPicked={handleItemPicked}
           onOrderPicked={handleOrderPicked}
+          onUpdateFulfillmentStatus={handleUpdateFulfillmentStatus}
+          fulfillmentStatusOptions={fulfillmentStatusOptions}
+        />
+      )}
+
+      {showPackingSlipModal && selectedOrdersForPicking.length > 0 && (
+        <PackingSlipModal
+          orders={selectedOrdersForPicking}
+          isOpen={showPackingSlipModal}
+          onClose={() => {
+            setShowPackingSlipModal(false)
+            refreshOrders()
+          }}
+          warehouseName={warehouse.name}
+          packedOrders={packedOrders}
+          onOrderPacked={handleOrderPacked}
+          fulfillmentStatusOptions={fulfillmentStatusOptions}
           onUpdateFulfillmentStatus={handleUpdateFulfillmentStatus}
         />
       )}

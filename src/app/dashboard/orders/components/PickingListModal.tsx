@@ -1,4 +1,4 @@
-// file path: app/dashboard/orders/components/PickingListModal.tsx
+//file path: app/dashboard/orders/components/PickingListModal.tsx
 
 'use client'
 
@@ -21,10 +21,10 @@ interface PickingListModalProps {
   pickedOrders?: Set<string>
   onItemPicked?: (sku: string) => void
   onOrderPicked?: (orderId: string) => void
-  onUpdateFulfillmentStatus?: (orderIds: string[], status: string) => void  // Add this
+  onUpdateFulfillmentStatus?: (orderIds: string[], status: string) => void
+  fulfillmentStatusOptions?: Array<{ value: string; label: string; color: string }>
 }
 
-// Mock item details - in real app this would come from the order details
 interface ItemDetail {
   sku: string
   name: string
@@ -49,21 +49,37 @@ export default function PickingListModal({
   pickedOrders = new Set<string>(),
   onItemPicked = () => {},
   onOrderPicked = () => {},
-  onUpdateFulfillmentStatus  // Add this
+  onUpdateFulfillmentStatus,
+  fulfillmentStatusOptions = []
 }: PickingListModalProps) {
 
-  // Use provided counts or calculate from orders if not provided
+  const getStatusLabel = (statusCode: string) => {
+    const status = fulfillmentStatusOptions.find(s => s.value === statusCode)
+    return status?.label || statusCode.replace(/_/g, ' ')
+  }
+
+  const getStatusColor = (statusCode: string) => {
+    const status = fulfillmentStatusOptions.find(s => s.value === statusCode)
+    if (status?.color) {
+      return status.color
+    }
+    if (statusCode === 'PICKING') return 'bg-yellow-100 text-yellow-800'
+    if (statusCode === 'PACKED') return 'bg-indigo-100 text-indigo-800'
+    return 'bg-gray-100 text-gray-800'
+  }
+
   const ordersForPicking = orders
   const actualOrdersCount = limitedOrdersCount ?? orders.length
   const totalOrders = totalOrdersCount ?? orders.length
   const totalItemsToPick = itemsCount ?? orders.reduce((total, order) => total + (order.itemCount || 0), 0)
 
-  // Consolidate items across all orders for the left column
+  // Calculate how many orders are marked as packed
+  const packedOrdersCount = pickedOrders.size
+
   const consolidatedItems = useMemo(() => {
     const itemMap = new Map<string, ItemDetail>()
 
     orders.forEach((order) => {
-      // Use actual items from the order
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach(item => {
           if (itemMap.has(item.sku)) {
@@ -90,15 +106,12 @@ export default function PickingListModal({
     })
 
     return Array.from(itemMap.values()).sort((a, b) => {
-      // Sort by location for efficient picking route
       return (a.location || '').localeCompare(b.location || '')
     })
   }, [orders])
 
-  // Force checkboxes to update their visual state before printing
   useEffect(() => {
     const handleBeforePrint = () => {
-      // Force all checked checkboxes to have the checked attribute set
       pickedItems.forEach(sku => {
         const checkbox = document.getElementById(`item-${sku}`) as HTMLInputElement
         if (checkbox) {
@@ -120,14 +133,12 @@ export default function PickingListModal({
   }, [pickedItems, pickedOrders])
 
   const handlePrint = () => {
-    // Ensure checkboxes are set before print
     setTimeout(() => {
       window.print()
     }, 100)
   }
 
   const handleExport = () => {
-    // Use the export function from pickingListExporter
     downloadPickingListCSV(ordersForPicking, warehouseName)
   }
 
@@ -137,16 +148,28 @@ export default function PickingListModal({
       return
     }
 
-    const orderIds = orders.map(o => o.id)
-    const orderNumbers = orders.map(o => o.orderNumber).join(', ')
+    // Only get orders that are marked as packed (checked)
+    const packedOrderIds = Array.from(pickedOrders)
+
+    if (packedOrderIds.length === 0) {
+      alert('Please mark at least one order as packed before setting to picking.')
+      return
+    }
+
+    // Get order numbers for confirmation message
+    const packedOrderNumbers = orders
+      .filter(o => packedOrderIds.includes(o.id))  // ✅ FIXED: was pickedOrderIds
+      .map(o => o.orderNumber)
+      .join(', ')
 
     const confirmed = window.confirm(
-      `Set ${orders.length} order(s) to PICKING status?\n\nOrders: ${orderNumbers}`
+      `Set ${packedOrderIds.length} packed order(s) to PICKING status?\n\nOrders: ${packedOrderNumbers}`
     )
 
     if (confirmed) {
-      onUpdateFulfillmentStatus(orderIds, 'PICKING')
-      alert(`${orders.length} order(s) updated to PICKING status`)
+      onUpdateFulfillmentStatus(packedOrderIds, 'PICKING')
+      // Optional: Clear the packed orders after updating
+      // packedOrderIds.forEach(id => onOrderPicked(id))
     }
   }
 
@@ -205,9 +228,16 @@ export default function PickingListModal({
                       {onUpdateFulfillmentStatus && (
                         <button
                           onClick={handleSetToPicking}
-                          className="inline-flex items-center rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-500"
+                          disabled={packedOrdersCount === 0}
+                          className="inline-flex items-center rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-yellow-600"
+                          title={packedOrdersCount === 0 ? "Please mark orders as packed first" : `Set ${packedOrdersCount} packed order(s) to Picking status`}
                         >
                           Set to Picking
+                          {packedOrdersCount > 0 && (
+                            <span className="ml-2 rounded-full bg-yellow-800 px-2 py-0.5 text-xs">
+                              {packedOrdersCount}
+                            </span>
+                          )}
                         </button>
                       )}
                       <button
@@ -341,12 +371,8 @@ export default function PickingListModal({
                                     </p>
                                   </div>
                                   <div className="flex items-center space-x-2">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium print:bg-white print:text-gray-900 print:border print:border-gray-400 ${
-                                      order.fulfillmentStatus === 'PICKING' ? 'bg-yellow-100 text-yellow-800' :
-                                      order.fulfillmentStatus === 'PACKED' ? 'bg-indigo-100 text-indigo-800' :
-                                      'bg-gray-100 text-gray-800'
-                                    }`}>
-                                      {order.fulfillmentStatus}
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium print:bg-white print:text-gray-900 print:border print:border-gray-400 ${getStatusColor(order.fulfillmentStatus)}`}>
+                                      {getStatusLabel(order.fulfillmentStatus)}
                                     </span>
                                     {pickedOrders.has(order.id) && (
                                       <CheckCircleIcon className="h-5 w-5 text-green-600 print:hidden" />
