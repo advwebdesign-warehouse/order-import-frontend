@@ -9,7 +9,8 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   Bars3Icon,
-  ListBulletIcon
+  ListBulletIcon,
+  TruckIcon
 } from '@heroicons/react/24/outline'
 import ReactCountryFlag from "react-country-flag"
 import {
@@ -72,11 +73,12 @@ interface OrdersTableProps {
   onViewOrder: (order: Order) => void
   onPrintPackingSlip: (order: Order) => void
   onPrintPickingList?: (order: Order) => void
+  onShipOrder?: (order: Order) => void  // ADD THIS LINE
   onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
   onColumnReorder?: (columns: ColumnConfig[]) => void
   onUpdateStatus?: (orderId: string, newStatus: string) => Promise<void>
   onUpdateFulfillmentStatus?: (orderId: string, newStatus: string) => Promise<void>
-  fulfillmentStatusOptions?: Array<{ value: string; label: string; color: string }>  // ADD THIS
+  fulfillmentStatusOptions?: Array<{ value: string; label: string; color: string }>
 }
 
 // Sortable header component for drag-and-drop column reordering
@@ -132,6 +134,7 @@ export default function OrdersTable({
   onViewOrder,
   onPrintPackingSlip,
   onPrintPickingList,
+  onShipOrder,  // ADD THIS LINE
   onColumnVisibilityChange,
   onColumnReorder,
   onUpdateStatus,
@@ -434,6 +437,7 @@ export default function OrdersTable({
         case 'actions':
           const packingColors = getStatusColors('PACKING')
           const pickingColors = getStatusColors('PICKING')
+          const shippingColors = getStatusColors('READY_TO_SHIP')
 
           return (
             <div className="flex items-center space-x-2">
@@ -461,6 +465,18 @@ export default function OrdersTable({
                   title="Print Picking List"
                 >
                   <ListBulletIcon className="h-4 w-4" />
+                </button>
+              )}
+              {onShipOrder && (
+                <button
+                  onClick={() => onShipOrder(order)}
+                  className="hover:opacity-75 transition-opacity"
+                  style={{ color: shippingColors.text }}
+                  title="Ship Order"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
                 </button>
               )}
             </div>

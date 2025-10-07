@@ -1,0 +1,10 @@
+//file path: vercel.json
+
+{
+  "crons": [
+    {
+      "path": "/api/cron/tracking-update",
+      "schedule": "0 */4 * * *"
+    }
+  ]
+}

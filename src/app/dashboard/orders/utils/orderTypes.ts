@@ -1,4 +1,37 @@
-// File: app/dashboard/orders/utils/orderTypes.ts
+//file path: app/dashboard/orders/utils/orderTypes.ts
+
+export interface ShippingLabel {
+  id: string
+  trackingNumber: string
+  carrier: 'USPS' | 'UPS' | 'FedEx'
+  serviceType: string
+  labelUrl: string
+  labelImage?: string
+  postage: number
+  createdAt: string
+  shipDate: string
+  deliveryDate?: string
+  weight: {
+    lbs: number
+    oz: number
+  }
+  dimensions?: {
+    length: number
+    width: number
+    height: number
+  }
+  // NEW: Tracking information
+  trackingStatus?: string
+  trackingCategory?: 'in_transit' | 'out_for_delivery' | 'delivered' | 'exception' | 'unknown'
+  trackingLocation?: string
+  trackingLastUpdate?: string
+  trackingEvents?: Array<{
+    timestamp: string
+    status: string
+    location: string
+    description: string
+  }>
+}
 
 export interface Order {
   id: string
@@ -20,6 +53,24 @@ export interface Order {
   // Add warehouse support
   warehouseId?: string
   warehouseName?: string
+
+  // ADD THESE SHIPPING ADDRESS FIELDS:
+  shippingAddress1?: string
+  shippingAddress2?: string
+  shippingCity?: string
+  shippingProvince?: string  // state/province
+  shippingZip?: string
+  shippingCountry?: string
+  shippingCountryCode?: string
+  shippingPhone?: string
+
+  // ADD ORDER ITEMS AND WEIGHT:
+  lineItems?: string  // JSON string of items
+  totalWeight?: number  // in ounces
+
+  // ADD SHIPPING LABEL SUPPORT:
+  shippingLabel?: ShippingLabel
+  trackingNumber?: string
 }
 
 export interface OrderItem {
@@ -31,7 +82,7 @@ export interface OrderItem {
   currency: string
   variant: string
   weight: number
-  location?: string 
+  location?: string
   meta: {
     color: string
     size: string

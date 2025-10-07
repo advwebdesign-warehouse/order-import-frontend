@@ -13,6 +13,7 @@ import OrdersFilters from '../../../orders/components/OrdersFilters'
 import OrdersTable from '../../../orders/components/OrdersTable'
 import OrdersPagination from '../../../orders/components/OrdersPagination'
 import PackingSlipModal from '../../../orders/components/PackingSlipModal'
+import ShippingModal from '../../../orders/components/ShippingModal'
 
 // Custom hooks
 import { useWarehouseOrders } from './hooks/useWarehouseOrders'
@@ -207,7 +208,7 @@ export default function WarehouseOrdersPage() {
       }
     }
   }, [orders, pickedOrders])
-  
+
   const {
     searchTerm,
     setSearchTerm,
@@ -239,6 +240,14 @@ export default function WarehouseOrdersPage() {
       return orderNeedsPicking(order, fulfillmentStatuses)
     })
   }, [filteredOrders, fulfillmentStatuses])  // ✅ FIXED
+
+  const [showShippingModal, setShowShippingModal] = useState(false)
+  const [orderToShip, setOrderToShip] = useState<Order | null>(null)
+
+  const handleShipOrder = (order: Order) => {
+    setOrderToShip(order)
+    setShowShippingModal(true)
+  }
 
   // Calculate total items to ship from processing orders only
   const itemsToShip = useMemo(() => {
@@ -765,6 +774,7 @@ export default function WarehouseOrdersPage() {
           onViewOrder={handleViewOrderDetails}
           onPrintPackingSlip={handlePrintSinglePackingSlip}
           onPrintPickingList={handlePrintPickingListForOrder}
+          onShipOrder={handleShipOrder}
           onColumnVisibilityChange={handleColumnVisibilityChange}
           onColumnReorder={handleColumnReorder}
           onUpdateStatus={updateStatus}
@@ -843,6 +853,42 @@ export default function WarehouseOrdersPage() {
           onUpdateFulfillmentStatus={handleUpdateFulfillmentStatus}
         />
       )}
+
+      {showShippingModal && orderToShip && (
+        <ShippingModal
+          order={{
+            id: orderToShip.id,
+            orderNumber: orderToShip.orderNumber,
+            customer: {
+              name: orderToShip.customerName || '',
+              email: orderToShip.customerEmail || ''
+            },
+            shippingAddress: {
+              streetAddress: orderToShip.shippingAddress1 || '',
+              secondaryAddress: orderToShip.shippingAddress2,
+              city: orderToShip.shippingCity || '',
+              state: orderToShip.shippingProvince || '',
+              zipCode: orderToShip.shippingZip || ''
+            },
+            items: orderToShip.lineItems ? JSON.parse(orderToShip.lineItems).map((item: any) => ({
+              name: item.name || '',
+              quantity: item.quantity || 0,
+              sku: item.sku || ''
+            })) : [],
+            total: orderToShip.totalAmount || 0,
+            weight: orderToShip.totalWeight
+          }}
+          isOpen={showShippingModal}
+          onClose={() => {
+            setShowShippingModal(false)
+            setOrderToShip(null)
+          }}
+          onShipmentCreated={() => {
+            refreshOrders()
+          }}
+        />
+      )}
+
     </div>
   )
 }

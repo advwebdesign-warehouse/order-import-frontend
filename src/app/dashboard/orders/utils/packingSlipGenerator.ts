@@ -5,7 +5,7 @@ import { formatDateForPackingSlip, calculateTotalWeight } from './orderUtils'
 
 export function printMultiplePackingSlips(orders: OrderWithDetails[]) {
   const printContent = orders.map(order => generatePackingSlipHTML(order))
-    .join('<div style="page-break-after: always;"></div>')
+    .join('') // FIXED: Removed the extra page-break div that was causing blank pages
 
   const printWindow = window.open('', '_blank')
   if (printWindow) {
@@ -146,7 +146,7 @@ export function generatePackingSlipHTML(order: OrderWithDetails): string {
         </div>
 
         <div class="signature-area">
-          <h4>✍️ Packed By</h4>
+          <h4>✏️ Packed By</h4>
           <div class="signature-line"></div>
           <div style="font-size: 12px; margin-top: 5px;">Signature</div>
           <div style="margin-top: 15px; font-size: 12px;">Date: _______________</div>

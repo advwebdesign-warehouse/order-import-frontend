@@ -7,10 +7,12 @@ import OrderDetailsModal from './OrderDetailsModal'
 import PackingSlip from './PackingSlip'
 import PackingSlipModal from './components/PackingSlipModal'
 import PickingListModal from './components/PickingListModal'
+import ShippingModal from './components/ShippingModal'
 import OrdersToolbar from './components/OrdersToolbar'
 import OrdersFilters from './components/OrdersFilters'
 import OrdersTable from './components/OrdersTable'
 import OrdersPagination from './components/OrdersPagination'
+
 
 // Custom hooks
 import { useOrders } from './hooks/useOrders'
@@ -226,6 +228,10 @@ export default function OrdersPage() {
     }
     return orders.filter(order => order.warehouseId === selectedWarehouseId)
   }, [orders, selectedWarehouseId])
+
+  // Add these two state variables for shipping
+  const [showShippingModal, setShowShippingModal] = useState(false)
+  const [orderToShip, setOrderToShip] = useState<Order | null>(null)
 
   // Clean up stale order IDs from packedOrders Set
   useEffect(() => {
@@ -868,6 +874,42 @@ export default function OrdersPage() {
           fulfillmentStatusOptions={fulfillmentStatusOptions}
         />
       )}
+
+      {showShippingModal && orderToShip && (
+        <ShippingModal
+          order={{
+            id: orderToShip.id,
+            orderNumber: orderToShip.orderNumber,
+            customer: {
+              name: orderToShip.customerName || '',
+              email: orderToShip.customerEmail || ''
+            },
+            shippingAddress: {
+              streetAddress: orderToShip.shippingAddress1 || '',
+              secondaryAddress: orderToShip.shippingAddress2,
+              city: orderToShip.shippingCity || '',
+              state: orderToShip.shippingProvince || '',
+              zipCode: orderToShip.shippingZip || ''
+            },
+            items: orderToShip.lineItems ? JSON.parse(orderToShip.lineItems).map((item: any) => ({
+              name: item.name || '',
+              quantity: item.quantity || 0,
+              sku: item.sku || ''
+            })) : [],
+            total: orderToShip.totalAmount || 0,
+            weight: orderToShip.totalWeight
+          }}
+          isOpen={showShippingModal}
+          onClose={() => {
+            setShowShippingModal(false)
+            setOrderToShip(null)
+          }}
+          onShipmentCreated={() => {
+            refreshOrders()
+          }}
+        />
+      )}
+
     </div>
   )
 }
