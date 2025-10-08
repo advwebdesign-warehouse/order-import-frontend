@@ -88,24 +88,56 @@ export function saveUserIntegrations(settings: IntegrationSettings, userId?: str
    return null
  }
 
-/**
- * Get all users who have USPS integration enabled
- */
-export function getAllUsersWithUSPS(): Array<{ userId: string; credentials: { userId: string; apiUrl: string } }> {
-  if (typeof window === 'undefined') return []
+ /**
+  * Get all users who have USPS integration enabled
+  */
+ export function getAllUsersWithUSPS(): Array<{
+   userId: string
+   credentials: {
+     consumerKey: string
+     consumerSecret: string
+     environment: 'sandbox' | 'production'
+   }
+ }> {
+   if (typeof window === 'undefined') return []
 
-  const users: Array<{ userId: string; credentials: { userId: string; apiUrl: string } }> = []
+   const users: Array<{
+     userId: string
+     credentials: {
+       consumerKey: string
+       consumerSecret: string
+       environment: 'sandbox' | 'production'
+     }
+   }> = []
 
-  // In browser, we can only access current user's data
-  const currentUserId = getCurrentUserId()
-  const credentials = getUserUSPSCredentials(currentUserId)
+   // In browser, we can only access current user's data
+   const currentUserId = getCurrentUserId()
+   const integrations = getUserIntegrations(currentUserId)
 
-  if (credentials && credentials.userId) {
-    users.push({
-      userId: currentUserId,
-      credentials
-    })
-  }
+   if (!integrations) return []
 
-  return users
-}
+   const uspsIntegration = integrations.integrations.find(
+     i => i.id === 'usps' && i.enabled && i.type === 'shipping' && i.name === 'USPS'
+   )
+
+   if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
+     // Type assertion to tell TypeScript this is specifically a USPS integration
+     const config = uspsIntegration.config as {
+       consumerKey: string
+       consumerSecret: string
+       environment: 'sandbox' | 'production'
+       apiUrl: string
+     }
+
+     users.push({
+       userId: currentUserId,
+       credentials: {
+         consumerKey: config.consumerKey,
+         consumerSecret: config.consumerSecret,
+         environment: config.environment
+       }
+     })
+   }
+
+   return users
+ }

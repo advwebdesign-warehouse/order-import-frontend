@@ -1,6 +1,6 @@
 //file path: src/lib/usps/trackingService.ts
 
-import { USPSService } from './uspsService'
+import { USPSServiceV2, USPSTrackingInfo } from './uspsServiceV2'
 
 export interface TrackingUpdate {
   trackingNumber: string
@@ -21,50 +21,38 @@ export interface TrackingEvent {
 }
 
 export class USPSTrackingService {
-  private uspsService: USPSService
+  private uspsService: USPSServiceV2
 
-  constructor(userId?: string, apiUrl?: string) {
-    this.uspsService = new USPSService(userId, apiUrl)
+  constructor(consumerKey: string, consumerSecret: string, environment: 'sandbox' | 'production') {
+    this.uspsService = new USPSServiceV2(consumerKey, consumerSecret, environment)
   }
 
   async getTrackingUpdate(trackingNumber: string): Promise<TrackingUpdate | null> {
     try {
-      const trackingInfo = await this.uspsService.trackPackage(trackingNumber)
+      const trackingInfo: USPSTrackingInfo = await this.uspsService.trackPackage(trackingNumber)
 
-      const status = trackingInfo.Status?.[0] || 'Unknown'
-      const statusCategory = this.categorizeStatus(status)
+      // Convert new API format to our TrackingUpdate format
+      const events: TrackingEvent[] = trackingInfo.events.map(event => ({
+        timestamp: event.eventTimestamp,
+        status: event.eventType,
+        location: this.formatLocation(event),
+        description: event.eventType
+      }))
 
-      const events: TrackingEvent[] = []
-      if (trackingInfo.TrackSummary) {
-        events.push({
-          timestamp: trackingInfo.TrackSummary[0].EventTime?.[0] || new Date().toISOString(),
-          status: trackingInfo.TrackSummary[0].Event?.[0] || status,
-          location: this.formatLocation(trackingInfo.TrackSummary[0]),
-          description: trackingInfo.TrackSummary[0].EventDescription?.[0] || ''
-        })
-      }
-
-      if (trackingInfo.TrackDetail) {
-        trackingInfo.TrackDetail.forEach((detail: any) => {
-          events.push({
-            timestamp: detail.EventTime?.[0] || '',
-            status: detail.Event?.[0] || '',
-            location: this.formatLocation(detail),
-            description: detail.EventDescription?.[0] || ''
-          })
-        })
-      }
+      // Get latest event for current location
+      const latestEvent = trackingInfo.events[0]
+      const location = latestEvent
+        ? this.formatLocation(latestEvent)
+        : 'Unknown'
 
       return {
         trackingNumber,
-        status,
-        statusDescription: trackingInfo.StatusSummary?.[0] || 'No information available',
-        statusCategory,
-        location: trackingInfo.EventCity?.[0]
-          ? `${trackingInfo.EventCity[0]}, ${trackingInfo.EventState?.[0] || ''}`
-          : 'Unknown',
-        timestamp: trackingInfo.EventTime?.[0] || new Date().toISOString(),
-        deliveryDate: trackingInfo.ExpectedDeliveryDate?.[0],
+        status: trackingInfo.status,
+        statusDescription: trackingInfo.statusSummary,
+        statusCategory: this.categorizeStatus(trackingInfo.statusCategory),
+        location,
+        timestamp: latestEvent?.eventTimestamp || new Date().toISOString(),
+        deliveryDate: trackingInfo.expectedDeliveryDate,
         events
       }
     } catch (error) {
@@ -81,35 +69,37 @@ export class USPSTrackingService {
       if (update) {
         updates.push(update)
       }
+      // Rate limiting - wait 1 second between requests
       await this.delay(1000)
     }
 
     return updates
   }
 
-  private categorizeStatus(status: string): TrackingUpdate['statusCategory'] {
-    const statusLower = status.toLowerCase()
+  private categorizeStatus(statusCategory: string): TrackingUpdate['statusCategory'] {
+    const statusLower = statusCategory.toLowerCase()
 
     if (statusLower.includes('delivered')) {
       return 'delivered'
-    } else if (statusLower.includes('out for delivery')) {
+    } else if (statusLower.includes('out for delivery') || statusLower.includes('out_for_delivery')) {
       return 'out_for_delivery'
-    } else if (statusLower.includes('in transit') || statusLower.includes('arrived') || statusLower.includes('departed')) {
+    } else if (statusLower.includes('in transit') || statusLower.includes('in_transit')) {
       return 'in_transit'
-    } else if (statusLower.includes('exception') || statusLower.includes('alert') || statusLower.includes('issue')) {
+    } else if (statusLower.includes('exception') || statusLower.includes('alert')) {
       return 'exception'
     }
 
     return 'unknown'
   }
 
-  private formatLocation(eventData: any): string {
-    const city = eventData.EventCity?.[0] || ''
-    const state = eventData.EventState?.[0] || ''
-    const zip = eventData.EventZIPCode?.[0] || ''
-    const country = eventData.EventCountry?.[0] || ''
+  private formatLocation(event: any): string {
+    const parts = [
+      event.eventCity,
+      event.eventState,
+      event.eventZIP,
+      event.eventCountry
+    ].filter(Boolean)
 
-    const parts = [city, state, zip, country].filter(Boolean)
     return parts.join(', ') || 'Unknown'
   }
 
@@ -129,5 +119,3 @@ export class USPSTrackingService {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 }
-
-export const trackingService = new USPSTrackingService()

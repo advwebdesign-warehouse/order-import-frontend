@@ -57,8 +57,9 @@ export async function GET(request: NextRequest) {
       totalShipments += trackingNumbers.length
 
       const trackingService = new USPSTrackingService(
-        user.credentials.userId,
-        user.credentials.apiUrl
+        user.credentials.consumerKey,
+        user.credentials.consumerSecret,
+        user.credentials.environment
       )
 
       const updates = await trackingService.getMultipleTrackingUpdates(trackingNumbers)
