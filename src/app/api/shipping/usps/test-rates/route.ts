@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       length: 10,
       width: 8,
       height: 6,
-      mailClass: 'USPS_GROUND_ADVANTAGE' as const,
+      mailClass: 'USPS_GROUND_ADVANTAGE' as const, 
       packageType: 'PACKAGE' as const,
       extraServices: []
     }
