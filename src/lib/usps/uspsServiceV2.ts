@@ -342,4 +342,190 @@ export class USPSServiceV2 {
       })) || []
     }
   }
+
+  /**
+   * Get available USPS containers by testing rates API
+   * Tests different package types to see which ones are available
+   */
+  async getAvailableContainers(originZip: string = '10001', destZip: string = '90210'): Promise<any[]> {
+    const testPackageTypes = [
+      { code: 'PACKAGE', name: 'Your Own Box (Package)' },
+      { code: 'FLAT_RATE_ENVELOPE', name: 'USPS Flat Rate Envelope' },
+      { code: 'FLAT_RATE_BOX', name: 'USPS Flat Rate Box' },
+      { code: 'LETTER', name: 'Letter' }
+    ]
+
+    const mailClasses = [
+      'PRIORITY_MAIL',
+      'PRIORITY_MAIL_EXPRESS',
+      'USPS_GROUND_ADVANTAGE',
+      'FIRST-CLASS_PACKAGE_SERVICE'
+    ]
+
+    const availableContainers: any[] = []
+
+    console.log('[USPS] Testing available containers...')
+
+    // Test each mail class with different package types
+    for (const mailClass of mailClasses) {
+      for (const packageType of testPackageTypes) {
+        try {
+          const shipment: USPSShipment = {
+            fromAddress: {
+              firstName: 'Test',
+              lastName: 'Sender',
+              streetAddress: '123 Test St',
+              city: 'New York',
+              state: 'NY',
+              ZIPCode: originZip
+            },
+            toAddress: {
+              firstName: 'Test',
+              lastName: 'Recipient',
+              streetAddress: '456 Test Ave',
+              city: 'Los Angeles',
+              state: 'CA',
+              ZIPCode: destZip
+            },
+            weight: 16, // 1 lb = 16 oz
+            length: 10,
+            width: 8,
+            height: 6,
+            mailClass: mailClass as any,
+            packageType: packageType.code as any
+          }
+
+          const rates = await this.getRates(shipment)
+
+          if (rates && rates.length > 0) {
+            // This package type is available
+            const exists = availableContainers.find(
+              c => c.code === packageType.code && c.mailClass === mailClass
+            )
+
+            if (!exists) {
+              availableContainers.push({
+                code: packageType.code,
+                name: `${packageType.name} - ${mailClass.replace(/_/g, ' ')}`,
+                mailClass: mailClass,
+                packageType: packageType.code,
+                available: true,
+                rates: rates
+              })
+              console.log(`[USPS] ✓ Available: ${packageType.code} with ${mailClass}`)
+            }
+          }
+        } catch (error) {
+          // Container not available for this service - skip
+          console.log(`[USPS] ✗ Not available: ${packageType.code} with ${mailClass}`)
+        }
+      }
+    }
+
+    console.log(`[USPS] Found ${availableContainers.length} available container/service combinations`)
+    return availableContainers
+  }
+
+  /**
+   * Get standard USPS container specifications
+   * Based on official USPS packaging specifications
+   */
+  getContainerSpecifications(): any[] {
+    return [
+      {
+        code: 'FLAT_RATE_ENVELOPE',
+        name: 'USPS Priority Mail Flat Rate Envelope',
+        dimensions: { length: 12.5, width: 9.5, height: 0.75, unit: 'in' },
+        weight: { maxWeight: 70, tareWeight: 0.1, unit: 'lbs' },
+        description: 'Standard flat rate envelope - up to 70 lbs',
+        flatRate: true,
+        flatRatePrice: 9.65, // 2024 pricing
+        availableFor: 'both' as const,
+        mailClass: 'PRIORITY_MAIL',
+        packageType: 'FLAT_RATE_ENVELOPE'
+      },
+      {
+        code: 'PADDED_FLAT_RATE_ENVELOPE',
+        name: 'USPS Padded Flat Rate Envelope',
+        dimensions: { length: 12.5, width: 9.5, height: 1, unit: 'in' },
+        weight: { maxWeight: 70, tareWeight: 0.2, unit: 'lbs' },
+        description: 'Padded flat rate envelope - up to 70 lbs',
+        flatRate: true,
+        flatRatePrice: 10.40,
+        availableFor: 'both' as const,
+        mailClass: 'PRIORITY_MAIL',
+        packageType: 'FLAT_RATE_ENVELOPE'
+      },
+      {
+        code: 'SMALL_FLAT_RATE_BOX',
+        name: 'USPS Small Flat Rate Box',
+        dimensions: { length: 8.625, width: 5.375, height: 1.625, unit: 'in' },
+        weight: { maxWeight: 70, tareWeight: 0.3, unit: 'lbs' },
+        description: 'Small flat rate box - up to 70 lbs',
+        flatRate: true,
+        flatRatePrice: 10.40,
+        availableFor: 'both' as const,
+        mailClass: 'PRIORITY_MAIL',
+        packageType: 'FLAT_RATE_BOX'
+      },
+      {
+        code: 'MEDIUM_FLAT_RATE_BOX',
+        name: 'USPS Medium Flat Rate Box',
+        dimensions: { length: 11.25, width: 8.75, height: 6, unit: 'in' },
+        weight: { maxWeight: 70, tareWeight: 0.5, unit: 'lbs' },
+        description: 'Medium flat rate box (top loading) - up to 70 lbs',
+        flatRate: true,
+        flatRatePrice: 17.05,
+        availableFor: 'both' as const,
+        mailClass: 'PRIORITY_MAIL',
+        packageType: 'FLAT_RATE_BOX'
+      },
+      {
+        code: 'LARGE_FLAT_RATE_BOX',
+        name: 'USPS Large Flat Rate Box',
+        dimensions: { length: 12.25, width: 12.25, height: 6, unit: 'in' },
+        weight: { maxWeight: 70, tareWeight: 0.6, unit: 'lbs' },
+        description: 'Large flat rate box - up to 70 lbs',
+        flatRate: true,
+        flatRatePrice: 22.80,
+        availableFor: 'both' as const,
+        mailClass: 'PRIORITY_MAIL',
+        packageType: 'FLAT_RATE_BOX'
+      },
+      {
+        code: 'PACKAGE_VARIABLE',
+        name: 'Your Own Box (Variable)',
+        dimensions: { length: 0, width: 0, height: 0, unit: 'in' },
+        weight: { maxWeight: 70, tareWeight: 0, unit: 'lbs' },
+        description: 'Use your own packaging - dimensions required',
+        flatRate: false,
+        availableFor: 'both' as const,
+        mailClass: 'PRIORITY_MAIL',
+        packageType: 'PACKAGE'
+      },
+      {
+        code: 'PACKAGE_GROUND',
+        name: 'Your Own Box (Ground Advantage)',
+        dimensions: { length: 0, width: 0, height: 0, unit: 'in' },
+        weight: { maxWeight: 70, tareWeight: 0, unit: 'lbs' },
+        description: 'Use your own packaging with Ground Advantage',
+        flatRate: false,
+        availableFor: 'domestic' as const,
+        mailClass: 'USPS_GROUND_ADVANTAGE',
+        packageType: 'PACKAGE'
+      },
+      {
+        code: 'LETTER',
+        name: 'Letter',
+        dimensions: { length: 11.5, width: 6.125, height: 0.25, unit: 'in' },
+        weight: { maxWeight: 3.5, tareWeight: 0.01, unit: 'lbs' },
+        description: 'Standard letter size',
+        flatRate: false,
+        availableFor: 'domestic' as const,
+        mailClass: 'FIRST-CLASS_PACKAGE_SERVICE',
+        packageType: 'LETTER'
+      }
+    ]
+  }
+
 }

@@ -10,7 +10,7 @@ import {
   ChevronDownIcon,
   Bars3Icon,
   ListBulletIcon,
-  TruckIcon
+  TruckIcon  // ✅ ADD THIS
 } from '@heroicons/react/24/outline'
 import ReactCountryFlag from "react-country-flag"
 import {
@@ -73,7 +73,7 @@ interface OrdersTableProps {
   onViewOrder: (order: Order) => void
   onPrintPackingSlip: (order: Order) => void
   onPrintPickingList?: (order: Order) => void
-  onShipOrder?: (order: Order) => void  // ADD THIS LINE
+  onShipOrder?: (order: Order) => void  // ✅ ADD THIS
   onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
   onColumnReorder?: (columns: ColumnConfig[]) => void
   onUpdateStatus?: (orderId: string, newStatus: string) => Promise<void>
@@ -134,7 +134,7 @@ export default function OrdersTable({
   onViewOrder,
   onPrintPackingSlip,
   onPrintPickingList,
-  onShipOrder,  // ADD THIS LINE
+  onShipOrder,
   onColumnVisibilityChange,
   onColumnReorder,
   onUpdateStatus,
@@ -449,14 +449,7 @@ export default function OrdersTable({
               >
                 <EyeIcon className="h-4 w-4" />
               </button>
-              <button
-                onClick={() => onPrintPackingSlip(order)}
-                className="hover:opacity-75 transition-opacity"
-                style={{ color: packingColors.text }}
-                title="Print Packing Slip"
-              >
-                <DocumentTextIcon className="h-4 w-4" />
-              </button>
+
               {onPrintPickingList && (
                 <button
                   onClick={() => onPrintPickingList(order)}
@@ -467,6 +460,16 @@ export default function OrdersTable({
                   <ListBulletIcon className="h-4 w-4" />
                 </button>
               )}
+              
+              <button
+                onClick={() => onPrintPackingSlip(order)}
+                className="hover:opacity-75 transition-opacity"
+                style={{ color: packingColors.text }}
+                title="Print Packing Slip"
+              >
+                <DocumentTextIcon className="h-4 w-4" />
+              </button>
+
               {onShipOrder && (
                 <button
                   onClick={() => onShipOrder(order)}

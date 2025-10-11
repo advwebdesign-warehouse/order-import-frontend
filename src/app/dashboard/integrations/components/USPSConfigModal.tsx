@@ -42,6 +42,8 @@ export default function USPSConfigModal({
     })
   }
 
+  const [syncing, setSyncing] = useState(false)
+
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
@@ -76,8 +78,61 @@ export default function USPSConfigModal({
     }
   }
 
-  const handleSave = () => {
-    onSave(integration.id, config)
+  const handleSave = async () => {
+    setSyncing(true)
+
+    try {
+      // Save the configuration first
+      onSave(integration.id, config)
+
+      // Check if USPS boxes already exist
+      const existingBoxes = localStorage.getItem('shipping_boxes')
+      const parsed = existingBoxes ? JSON.parse(existingBoxes) : []
+      const hasUSPSBoxes = parsed.some((box: any) => box.boxType === 'usps')
+
+      // Only auto-sync if no USPS boxes exist yet (first time setup)
+      if (!hasUSPSBoxes) {
+        console.log('First time setup - auto-syncing USPS boxes...')
+
+        const response = await fetch('/api/shipping/boxes/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            carriers: ['USPS'],
+            credentials: {
+              consumerKey: config.consumerKey,
+              consumerSecret: config.consumerSecret,
+              environment: config.environment,
+              apiUrl: config.apiUrl
+            }
+          })
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`✅ Auto-synced ${data.count} USPS boxes`)
+
+          // Store boxes in localStorage
+          if (data.boxes && data.boxes.length > 0) {
+            // Keep custom boxes, add new USPS boxes
+            const customBoxes = parsed.filter((box: any) => box.boxType === 'custom')
+            const updated = [...customBoxes, ...data.boxes]
+
+            localStorage.setItem('shipping_boxes', JSON.stringify(updated))
+            console.log('✅ Boxes stored in localStorage')
+          }
+        } else {
+          console.warn('Failed to auto-sync boxes:', await response.text())
+        }
+      } else {
+        console.log('USPS boxes already exist - skipping auto-sync. Use "Sync from API" button to refresh.')
+      }
+    } catch (error) {
+      console.error('Error auto-syncing boxes:', error)
+    } finally {
+      setSyncing(false)
+      onClose()
+    }
   }
 
   const isConfigValid =
@@ -379,7 +434,7 @@ export default function USPSConfigModal({
                         disabled={!isConfigValid}
                         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Save Configuration
+                        {syncing ? 'Saving & Syncing Boxes...' : 'Save Configuration'}
                       </button>
                     </div>
                   </div>

@@ -4,31 +4,53 @@
 
 import { Fragment } from 'react'
 import { Listbox, Transition } from '@headlessui/react'
-import { ChevronUpDownIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/20/solid'
+import { ChevronUpDownIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, FunnelIcon, ArrowDownTrayIcon } from '@heroicons/react/20/solid'
 import { FilterState } from '../utils/orderTypes'
 import { FILTER_OPTIONS } from '../constants/orderConstants'
 import { useWarehouses } from '../../warehouses/context/WarehouseContext'
+import ScreenOptions from '../../shared/components/ScreenOptions'
+import { ColumnConfig } from '../../shared/components/ColumnSettings'
 
 interface OrdersFiltersProps {
-  searchTerm: string  // ADDED
-  onSearchChange: (value: string) => void  // ADDED
-  showFilters: boolean  // ADDED
-  onToggleFilters: () => void  // ADDED
+  searchTerm: string
+  onSearchChange: (value: string) => void
+  showFilters: boolean
+  onToggleFilters: () => void
   filters: FilterState
   onFiltersChange: (filters: FilterState) => void
   onClearAllFilters: () => void
   hideWarehouseFilter?: boolean
+  onExport?: () => void
+  optionsOpen?: boolean
+  onOptionsOpenChange?: (open: boolean) => void
+  itemsPerPage?: number
+  onItemsPerPageChange?: (value: number) => void
+  maxPickingOrders?: string
+  onMaxPickingOrdersChange?: (value: string) => void
+  columns?: ColumnConfig[]
+  onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
+  onResetLayout?: () => void
 }
 
 export default function OrdersFilters({
-  searchTerm,  // ADDED
-  onSearchChange,  // ADDED
-  showFilters,  // ADDED
-  onToggleFilters,  // ADDED
+  searchTerm,
+  onSearchChange,
+  showFilters,
+  onToggleFilters,
   filters,
   onFiltersChange,
   onClearAllFilters,
-  hideWarehouseFilter = false
+  hideWarehouseFilter = false,
+  onExport,
+  optionsOpen,
+  onOptionsOpenChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  maxPickingOrders,
+  onMaxPickingOrdersChange,
+  columns,
+  onColumnVisibilityChange,
+  onResetLayout
 }: OrdersFiltersProps) {
   const { warehouses } = useWarehouses()
 
@@ -260,6 +282,35 @@ export default function OrdersFilters({
             </span>
           )}
         </button>
+
+        {optionsOpen !== undefined && onOptionsOpenChange && itemsPerPage && onItemsPerPageChange && (
+          <ScreenOptions
+            isOpen={optionsOpen}
+            onOpenChange={onOptionsOpenChange}
+            itemsPerPage={itemsPerPage}
+            onItemsPerPageChange={onItemsPerPageChange}
+            maxPickingOrders={maxPickingOrders}
+            onMaxPickingOrdersChange={onMaxPickingOrdersChange}
+            columns={columns?.filter(col => col.id !== 'select' && col.id !== 'actions').map(col => ({
+              id: col.id,
+              label: col.label || col.field,
+              visible: col.visible
+            }))}
+            onColumnVisibilityChange={onColumnVisibilityChange}
+            onResetLayout={onResetLayout}
+          />
+        )}
+
+        {/* Export Orders Button */}
+        {onExport && (
+          <button
+            onClick={onExport}
+            className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Export Orders
+          </button>
+        )}
       </div>
 
       {/* Filters Panel - Collapsible */}

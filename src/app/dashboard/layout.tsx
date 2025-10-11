@@ -1,7 +1,7 @@
 //file path: app/dashboard/layout.tsx
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import {
   Bars3Icon,
@@ -12,16 +12,19 @@ import {
   Cog6ToothIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
+  TruckIcon, // NEW: Import shipping icon
 } from '@heroicons/react/24/outline'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import DashboardProviders from './providers'
+import { hasShippingIntegration } from '@/lib/storage/integrationStorage' // NEW: Import helper
 
 // Navigation item interface - simplified
 interface NavigationItem {
   name: string
   href: string
   icon: any
+  condition?: () => boolean // NEW: Optional condition for showing item
 }
 
 function DashboardLayoutContent({
@@ -30,7 +33,15 @@ function DashboardLayoutContent({
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showShipping, setShowShipping] = useState(false) // NEW: State for shipping visibility
   const pathname = usePathname()
+
+  // NEW: Check for shipping integration on mount and when pathname changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setShowShipping(hasShippingIntegration())
+    }
+  }, [pathname])
 
   const isCurrentPage = (href: string): boolean => {
     if (href === '/dashboard') {
@@ -40,14 +51,25 @@ function DashboardLayoutContent({
   }
 
   // Simple flat navigation - no expandable items or submenus
-  const navigation: NavigationItem[] = [
+  const navigationItems: NavigationItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Products', href: '/dashboard/products', icon: CubeIcon },
     { name: 'Orders', href: '/dashboard/orders', icon: ShoppingBagIcon },
     { name: 'Warehouses', href: '/dashboard/warehouses', icon: BuildingOffice2Icon },
+    {
+      name: 'Shipping',
+      href: '/dashboard/shipping',
+      icon: TruckIcon,
+      condition: () => showShipping // NEW: Only show if shipping integration exists
+    },
     { name: 'Integrations', href: '/dashboard/integrations', icon: Cog6ToothIcon },
     { name: 'Settings', href: '/dashboard/settings', icon: WrenchScrewdriverIcon }
   ]
+
+  // NEW: Filter navigation based on conditions
+  const navigation = navigationItems.filter(item =>
+    !item.condition || item.condition()
+  )
 
   const renderNavigationItem = (item: NavigationItem) => {
     const isActive = isCurrentPage(item.href)

@@ -26,6 +26,7 @@ import { useWarehouses } from '../warehouses/hooks/useWarehouses'
 // Shared components
 import WarehouseSelector from '../shared/components/WarehouseSelector'
 import ColumnSettings, { ColumnConfig } from '../shared/components/ColumnSettings'
+import ScreenOptions from '../shared/components/ScreenOptions'
 import { usePagination } from '../shared/hooks/usePagination'
 
 // Utils
@@ -111,7 +112,15 @@ const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
 }
 
 export default function OrdersPage() {
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('')
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      // Then check localStorage
+      const saved = localStorage.getItem('selectedWarehouseId_orders') // or '_products'
+      return saved || ''
+    }
+    return ''
+  })
+
   const { warehouses, loading: warehousesLoading } = useWarehouses()
 
   const { statuses: fulfillmentStatuses, loading: fulfillmentLoading } = useFulfillmentStatuses()
@@ -232,6 +241,7 @@ export default function OrdersPage() {
   // Add these two state variables for shipping
   const [showShippingModal, setShowShippingModal] = useState(false)
   const [orderToShip, setOrderToShip] = useState<Order | null>(null)
+  const [optionsOpen, setOptionsOpen] = useState(false)
 
   // Clean up stale order IDs from packedOrders Set
   useEffect(() => {
@@ -527,6 +537,12 @@ export default function OrdersPage() {
     setShowPickingList(true)
   }
 
+  const handleShipOrder = (order: Order) => {
+    console.log('🚢 Ship button clicked!', order)  // ADD THIS
+    setOrderToShip(order)
+    setShowShippingModal(true)
+  }
+
   const handleExport = () => {
     exportOrdersToCSV(sortedOrders, columns.filter(col => col.visible))
   }
@@ -563,6 +579,20 @@ export default function OrdersPage() {
     setSelectedWarehouseId(warehouseId)
     setCurrentPage(1)
     clearSelection()
+
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedWarehouseId_orders', warehouseId) // or '_products'
+    }
+
+    // Update URL to reflect warehouse selection
+    const url = new URL(window.location.href)
+    if (warehouseId) {
+      url.searchParams.set('warehouse', warehouseId)
+    } else {
+      url.searchParams.delete('warehouse')
+    }
+    window.history.replaceState({}, '', url.toString())
   }
 
   const handleOrdersToShipChange = (checked: boolean) => {
@@ -706,6 +736,20 @@ export default function OrdersPage() {
         </div>
       ) : ordersToShip.length > 0 && (
         <div className="mb-6">
+          <div className="mb-2">
+            <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+              Quick Select <span className="text-gray-400">·</span> Auto-select orders limited by max order setting
+              <span className="text-gray-500 normal-case font-normal">
+                {' '}(adjustable in{' '}
+                <button
+                  onClick={() => setOptionsOpen(true)}
+                  className="text-indigo-600 hover:text-indigo-800 underline decoration-dotted font-medium cursor-pointer"
+                >
+                  Options ⚙️
+                </button>)
+              </span>
+            </p>
+          </div>
           <div className="flex items-center space-x-6 min-h-[40px]">
             <label className="flex items-center space-x-2 cursor-pointer h-10">
               <input
@@ -758,6 +802,14 @@ export default function OrdersPage() {
       <OrdersToolbar
         selectedOrdersCount={selectedOrders.size}
         onPrintPackingSlips={handlePrintPackingSlips}
+        onShipNow={() => {
+          // Ship the first selected order
+          const firstOrderId = Array.from(selectedOrders)[0]
+          const order = warehouseFilteredOrders.find(o => o.id === firstOrderId)
+          if (order) {
+            handleShipOrder(order)
+          }
+        }}
         onExport={handleExport}
         onResetLayout={handleResetLayout}
         columns={columns}
@@ -782,7 +834,18 @@ export default function OrdersPage() {
         filters={filters}
         onFiltersChange={setFilters}
         onClearAllFilters={handleClearAllFilters}
+        onExport={handleExport}
+        optionsOpen={optionsOpen}
+        onOptionsOpenChange={setOptionsOpen}
+        itemsPerPage={ordersPerPage || 20}
+        onItemsPerPageChange={handleItemsPerPageChange}
+        maxPickingOrders={maxPickingOrders}
+        onMaxPickingOrdersChange={handleMaxPickingOrdersChange}
+        columns={columns}
+        onColumnVisibilityChange={handleColumnVisibilityChange}
+        onResetLayout={handleResetLayout}
       />
+
 
       <OrdersTable
         orders={currentOrders}
@@ -795,6 +858,7 @@ export default function OrdersPage() {
         onViewOrder={handleViewOrderDetails}
         onPrintPackingSlip={handlePrintSinglePackingSlip}
         onPrintPickingList={handlePrintPickingListForOrder}
+        onShipOrder={handleShipOrder}
         onColumnReorder={handleColumnReorder}
         onUpdateStatus={updateStatus}
         onUpdateFulfillmentStatus={updateFulfillmentStatus}

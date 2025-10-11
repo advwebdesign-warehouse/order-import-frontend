@@ -66,78 +66,146 @@ export function saveUserIntegrations(settings: IntegrationSettings, userId?: str
 
 /**
  * Get USPS credentials for a specific user
+ * FIXED: Now returns proper USPS API credentials
  */
- /**
-  * Get USPS credentials for a specific user
-  */
- export function getUserUSPSCredentials(userId?: string): { userId: string; apiUrl: string } | null {
-   const uid = userId || getCurrentUserId()
-   const integrations = getUserIntegrations(uid)
+export function getUserUSPSCredentials(userId?: string): {
+  consumerKey: string
+  consumerSecret: string
+  apiUrl: string
+  environment: 'sandbox' | 'production'
+} | null {
+  const uid = userId || getCurrentUserId()
+  const integrations = getUserIntegrations(uid)
 
-   if (!integrations) return null
+  if (!integrations) return null
 
-   const uspsIntegration = integrations.integrations.find(i => i.id === 'usps' && i.enabled)
+  const uspsIntegration = integrations.integrations.find(i => i.id === 'usps' && i.enabled)
 
-   if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
-     return {
-       userId: uid,  // Use the userId parameter, not from config
-       apiUrl: uspsIntegration.config.apiUrl
-     }
-   }
+  if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
+    // Type assertion to access USPS config
+    const config = uspsIntegration.config as {
+      consumerKey: string
+      consumerSecret: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
 
-   return null
- }
+    return {
+      consumerKey: config.consumerKey,
+      consumerSecret: config.consumerSecret,
+      apiUrl: config.apiUrl,
+      environment: config.environment
+    }
+  }
 
- /**
-  * Get all users who have USPS integration enabled
-  */
- export function getAllUsersWithUSPS(): Array<{
-   userId: string
-   credentials: {
-     consumerKey: string
-     consumerSecret: string
-     environment: 'sandbox' | 'production'
-   }
- }> {
-   if (typeof window === 'undefined') return []
+  return null
+}
 
-   const users: Array<{
-     userId: string
-     credentials: {
-       consumerKey: string
-       consumerSecret: string
-       environment: 'sandbox' | 'production'
-     }
-   }> = []
+/**
+ * Get all users who have USPS integration enabled
+ */
+export function getAllUsersWithUSPS(): Array<{
+  userId: string
+  credentials: {
+    consumerKey: string
+    consumerSecret: string
+    environment: 'sandbox' | 'production'
+    apiUrl: string
+  }
+}> {
+  if (typeof window === 'undefined') return []
 
-   // In browser, we can only access current user's data
-   const currentUserId = getCurrentUserId()
-   const integrations = getUserIntegrations(currentUserId)
+  const users: Array<{
+    userId: string
+    credentials: {
+      consumerKey: string
+      consumerSecret: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
+  }> = []
 
-   if (!integrations) return []
+  // In browser, we can only access current user's data
+  const currentUserId = getCurrentUserId()
+  const integrations = getUserIntegrations(currentUserId)
 
-   const uspsIntegration = integrations.integrations.find(
-     i => i.id === 'usps' && i.enabled && i.type === 'shipping' && i.name === 'USPS'
-   )
+  if (!integrations) return []
 
-   if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
-     // Type assertion to tell TypeScript this is specifically a USPS integration
-     const config = uspsIntegration.config as {
-       consumerKey: string
-       consumerSecret: string
-       environment: 'sandbox' | 'production'
-       apiUrl: string
-     }
+  const uspsIntegration = integrations.integrations.find(
+    i => i.id === 'usps' && i.enabled && i.type === 'shipping' && i.name === 'USPS'
+  )
 
-     users.push({
-       userId: currentUserId,
-       credentials: {
-         consumerKey: config.consumerKey,
-         consumerSecret: config.consumerSecret,
-         environment: config.environment
-       }
-     })
-   }
+  if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
+    // Type assertion to tell TypeScript this is specifically a USPS integration
+    const config = uspsIntegration.config as {
+      consumerKey: string
+      consumerSecret: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
 
-   return users
- }
+    users.push({
+      userId: currentUserId,
+      credentials: {
+        consumerKey: config.consumerKey,
+        consumerSecret: config.consumerSecret,
+        environment: config.environment,
+        apiUrl: config.apiUrl
+      }
+    })
+  }
+
+  return users
+}
+
+/**
+ * NEW: Check if user has any enabled shipping integrations
+ * Used to conditionally show the Shipping menu in navigation
+ */
+export function hasShippingIntegration(userId?: string): boolean {
+  const integrations = getUserIntegrations(userId)
+
+  if (!integrations) return false
+
+  return integrations.integrations.some(
+    integration => integration.type === 'shipping' && integration.enabled
+  )
+}
+
+/**
+ * NEW: Get all enabled shipping carriers for a user
+ * Returns array of carrier names: ['USPS', 'UPS', 'FedEx', 'DHL']
+ */
+export function getEnabledShippingCarriers(userId?: string): string[] {
+  const integrations = getUserIntegrations(userId)
+
+  if (!integrations) return []
+
+  return integrations.integrations
+    .filter(integration => integration.type === 'shipping' && integration.enabled)
+    .map(integration => integration.name)
+}
+
+/**
+ * NEW: Get credentials for any shipping carrier
+ * Generic function to get credentials for UPS, FedEx, DHL when added
+ */
+export function getShippingCarrierCredentials(
+  carrierName: string,
+  userId?: string
+): any | null {
+  const uid = userId || getCurrentUserId()
+  const integrations = getUserIntegrations(uid)
+
+  if (!integrations) return null
+
+  const carrierIntegration = integrations.integrations.find(
+    i => i.name === carrierName && i.type === 'shipping' && i.enabled
+  )
+
+  if (carrierIntegration) {
+    return carrierIntegration.config
+  }
+
+  return null
+}

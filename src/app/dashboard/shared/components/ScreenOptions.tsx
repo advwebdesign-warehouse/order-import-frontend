@@ -6,6 +6,9 @@ import { useState, useRef, useEffect } from 'react'
 import { ChevronDownIcon, ChevronUpIcon, ArrowPathIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 interface ScreenOptionsProps {
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+
   // Pagination
   itemsPerPage: number
   onItemsPerPageChange: (value: number) => void
@@ -45,6 +48,8 @@ const MAX_PICKING_OPTIONS = [
 ]
 
 export default function ScreenOptions({
+  isOpen: externalIsOpen,
+  onOpenChange,
   itemsPerPage,
   onItemsPerPageChange,
   itemsPerPageOptions = DEFAULT_ITEMS_PER_PAGE_OPTIONS,
@@ -57,9 +62,19 @@ export default function ScreenOptions({
   onResetLayout,
   className = ''
 }: ScreenOptionsProps) {
-  const [isOpen, setIsOpen] = useState(false)
   const [customPickingLimit, setCustomPickingLimit] = useState('100')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [internalIsOpen, setInternalIsOpen] = useState(false)
+
+  // Use external control if provided, otherwise use internal state
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen
+  const setIsOpen = (open: boolean) => {
+    if (onOpenChange) {
+      onOpenChange(open)
+    } else {
+      setInternalIsOpen(open)
+    }
+  }
 
   // Close dropdown when clicking outside
   useEffect(() => {
