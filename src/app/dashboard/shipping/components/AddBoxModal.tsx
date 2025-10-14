@@ -8,13 +8,22 @@ import { XMarkIcon } from '@heroicons/react/24/outline'
 import { ShippingBox, BoxType, ServiceType } from '../utils/shippingTypes'
 
 interface AddBoxModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onSave: (box: Partial<ShippingBox>) => void
-  box?: ShippingBox | null
-}
+     isOpen: boolean
+     onClose: () => void
+     onSave: (box: Partial<ShippingBox>, applyToAllWarehouses?: boolean) => void
+     box?: ShippingBox | null
+     selectedWarehouseId: string
+     allWarehouses: Array<{ id: string; name: string }>
+   }
 
-export default function AddBoxModal({ isOpen, onClose, onSave, box }: AddBoxModalProps) {
+export default function AddBoxModal({
+  isOpen,
+  onClose,
+  onSave,
+  box,
+  selectedWarehouseId,
+  allWarehouses
+}: AddBoxModalProps) {
   const [formData, setFormData] = useState({
     name: '',
     boxType: 'custom' as BoxType,
@@ -33,6 +42,17 @@ export default function AddBoxModal({ isOpen, onClose, onSave, box }: AddBoxModa
     isActive: true,
     availableFor: 'both' as ServiceType
   })
+
+  const [applyToAllWarehouses, setApplyToAllWarehouses] = useState(false)
+
+  // Show "Apply to All Warehouses" option when:
+  // 1. Editing a carrier box (not custom)
+  // 2. AND a specific warehouse is selected (not "All Warehouses")
+  // 3. AND there are multiple warehouses
+  const showApplyToAll = box &&
+                          box.boxType !== 'custom' &&
+                          selectedWarehouseId !== '' &&
+                          allWarehouses.length > 1
 
   useEffect(() => {
     if (box) {
@@ -57,10 +77,11 @@ export default function AddBoxModal({ isOpen, onClose, onSave, box }: AddBoxModa
         availableFor: 'both'
       })
     }
+    setApplyToAllWarehouses(false)
   }, [box, isOpen])
 
   const handleSave = () => {
-    onSave(formData)
+    onSave(formData, applyToAllWarehouses)
   }
 
   return (
@@ -94,7 +115,7 @@ export default function AddBoxModal({ isOpen, onClose, onSave, box }: AddBoxModa
                 <div className="flex items-center justify-between mb-6">
                   <Dialog.Title className="text-2xl font-semibold text-gray-900">
                     {box ?
-                      (box.boxType === 'custom' ? 'Edit Custom Box' : 'Set Dimensions')
+                      (box.boxType === 'custom' ? 'Edit Custom Box' : 'Edit Box')
                       : 'Add Custom Box'
                     }
                   </Dialog.Title>
@@ -327,6 +348,29 @@ export default function AddBoxModal({ isOpen, onClose, onSave, box }: AddBoxModa
                       <option value="international">International Only</option>
                     </select>
                   </div>
+
+                  {/* Apply to All Warehouses - Only show when editing carrier box in specific warehouse */}
+                  {showApplyToAll && (
+                    <div className="border-t pt-4">
+                      <label className="flex items-start cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={applyToAllWarehouses}
+                          onChange={(e) => setApplyToAllWarehouses(e.target.checked)}
+                          className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <div className="ml-3">
+                          <span className="text-sm font-medium text-gray-900">
+                            Apply to All Warehouses
+                          </span>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Update this carrier box in all {allWarehouses.length} warehouses.
+                            This will sync the settings across: {allWarehouses.map(w => w.name).join(', ')}.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer */}
@@ -343,7 +387,7 @@ export default function AddBoxModal({ isOpen, onClose, onSave, box }: AddBoxModa
                     className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {box ?
-                      (box.boxType === 'custom' ? 'Update Box' : 'Save Dimensions')
+                      (applyToAllWarehouses ? 'Update All Warehouses' : 'Update Box')
                       : 'Add Box'
                     }
                   </button>

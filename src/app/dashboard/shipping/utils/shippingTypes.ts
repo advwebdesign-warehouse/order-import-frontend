@@ -27,6 +27,23 @@ export interface ShippingBox {
   availableFor: ServiceType
   createdAt: string
   updatedAt: string
+
+  // Carrier-specific fields (used by BoxesTab)
+  carrierType?: string // Original carrier type for duplicated boxes
+  mailClass?: string // USPS mail class (PRIORITY_MAIL, GROUND_ADVANTAGE, etc.)
+  packageType?: string // Package type classification
+
+  // Variable/editable box fields
+  isEditable?: boolean // Can user customize dimensions?
+  needsDimensions?: boolean // Does this box need dimensions set?
+
+  // NEW: Warehouse tracking
+  warehouse?: string // 'all' for all warehouses, or specific warehouse ID
+
+  // NEW: Duplication tracking
+  isDuplicate?: boolean // Is this box a duplicate of another?
+  duplicateGroupId?: string // Unique ID for this duplication group (NEW!)
+  originalBoxId?: string // ID of the original box (if isDuplicate is true)
 }
 
 export interface CarrierService {

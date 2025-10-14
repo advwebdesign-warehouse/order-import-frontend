@@ -2,14 +2,47 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
-import { PlusIcon, PencilIcon, TrashIcon, CubeIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
-import { ShippingBox } from '../utils/shippingTypes'
-import { USPS_BOXES, UPS_BOXES, FEDEX_BOXES } from '../data/carrierBoxes'
-import AddBoxModal from './AddBoxModal'
-import { getEnabledShippingCarriers, getUserUSPSCredentials } from '@/lib/storage/integrationStorage'
+/**
+ * BoxesTab - Manages shipping boxes with INDEPENDENT multi-warehouse support
+ *
+ * Storage Architecture v2:
+ * -----------------------
+ * Each warehouse has its OWN complete set of boxes:
+ *   shipping_boxes_warehouse1  // All boxes for NY (carrier + custom)
+ *   shipping_boxes_warehouse2  // All boxes for LA (carrier + custom)
+ *   shipping_boxes_warehouse3  // All boxes for Miami (carrier + custom)
+ *
+ * Box Loading (API-ONLY):
+ * - Boxes are loaded EXCLUSIVELY from carrier APIs (USPS, UPS, FedEx)
+ * - No static/hardcoded boxes - ensures always up-to-date with carrier offerings
+ * - User must sync with API to populate boxes
+ *
+ * Benefits:
+ * - Changes in one warehouse don't affect others
+ * - Each warehouse can enable/disable boxes independently
+ * - "Apply to All Warehouses" option available for bulk updates
+ * - Always accurate carrier packaging options
+ *
+ * "All Warehouses" View:
+ * - Shows merged list from all warehouses
+ * - Displays which warehouses have each box enabled
+ * - No separate storage - computed on-the-fly
+ */
 
-export default function BoxesTab() {
+import { useState, useEffect } from 'react'
+import { PlusIcon, PencilIcon, TrashIcon, CubeIcon } from '@heroicons/react/24/outline'
+import { ShippingBox } from '../utils/shippingTypes'
+import AddBoxModal from './AddBoxModal'
+import Notification from '../../shared/components/Notification'
+import { useNotification } from '../../shared/hooks/useNotification'
+import { getEnabledShippingCarriers, getUserUSPSCredentials } from '@/lib/storage/integrationStorage'
+import { useWarehouses } from '../../warehouses/hooks/useWarehouses'
+
+interface BoxesTabProps {
+  selectedWarehouseId: string
+}
+
+export default function BoxesTab({ selectedWarehouseId }: BoxesTabProps) {
   const [boxes, setBoxes] = useState<ShippingBox[]>([])
   const [filteredBoxes, setFilteredBoxes] = useState<ShippingBox[]>([])
   const [selectedType, setSelectedType] = useState<'all' | 'custom' | 'usps' | 'ups' | 'fedex'>('all')
@@ -17,17 +50,82 @@ export default function BoxesTab() {
   const [editingBox, setEditingBox] = useState<ShippingBox | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [enabledCarriers, setEnabledCarriers] = useState<string[]>([])
-  const [syncing, setSyncing] = useState(false)
+  const [isLoadingCarriers, setIsLoadingCarriers] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
 
-  // Get enabled carriers
+  // Use the notification hook
+  const { notification, showSuccess, showError, closeNotification } = useNotification()
+
+  // Get all warehouses for "Apply to All" feature
+  const { warehouses } = useWarehouses()
+
+  // Get the localStorage key for specific warehouse
+  const getStorageKey = (warehouseId: string) => {
+    return `shipping_boxes_${warehouseId}`
+  }
+
+  // Get box state across all warehouses
+  const getBoxStateAcrossWarehouses = (boxId: string) => {
+    const states: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
+
+    warehouses.forEach(warehouse => {
+      const storageKey = getStorageKey(warehouse.id)
+      const savedBoxes = localStorage.getItem(storageKey)
+
+      if (savedBoxes) {
+        const boxes: ShippingBox[] = JSON.parse(savedBoxes)
+        const box = boxes.find(b => {
+          // Match by ID for custom boxes
+          if (b.id === boxId) return true
+
+          // For carrier boxes, match by type and carrier code
+          const targetBox = filteredBoxes.find(fb => fb.id === boxId)
+          if (targetBox && b.boxType === targetBox.boxType) {
+            const bCarrierCode = (b as any).carrierCode
+            const targetCarrierCode = (targetBox as any).carrierCode
+            return bCarrierCode === targetCarrierCode
+          }
+          return false
+        })
+
+        if (box) {
+          states.push({
+            warehouseId: warehouse.id,
+            warehouseName: warehouse.name,
+            isActive: box.isActive
+          })
+        }
+      }
+    })
+
+    return states
+  }
+
+  // Get enabled carriers - runs FIRST
   useEffect(() => {
     const carriers = getEnabledShippingCarriers()
     setEnabledCarriers(carriers)
+    setIsLoadingCarriers(false)
   }, [])
 
-  // Load boxes from localStorage
+  // Load boxes from localStorage - runs AFTER carriers are loaded
   useEffect(() => {
-    const savedBoxes = localStorage.getItem('shipping_boxes')
+    // Don't load boxes until carriers are loaded
+    if (isLoadingCarriers || enabledCarriers.length === 0) return
+
+    if (selectedWarehouseId === '') {
+      // "All Warehouses" view - merge boxes from all warehouses
+      loadAllWarehousesBoxes()
+    } else {
+      // Specific warehouse - load only that warehouse's boxes
+      loadWarehouseBoxes(selectedWarehouseId)
+    }
+  }, [enabledCarriers, isLoadingCarriers, selectedWarehouseId, warehouses])
+
+  const loadWarehouseBoxes = (warehouseId: string) => {
+    const storageKey = getStorageKey(warehouseId)
+    const savedBoxes = localStorage.getItem(storageKey)
+
     if (savedBoxes) {
       const parsed = JSON.parse(savedBoxes)
       // Filter boxes to only show those for enabled carriers
@@ -37,85 +135,79 @@ export default function BoxesTab() {
       })
       setBoxes(filtered)
     } else {
-      // Initialize with only enabled carrier boxes
-      initializeBoxesForEnabledCarriers()
+      // No boxes found - user needs to sync from API
+      console.log(`[BoxesTab] No boxes found for warehouse ${warehouseId}. User must sync from API.`)
+      setBoxes([])
     }
-  }, [enabledCarriers])
+  }
 
-  // Auto-sync check on load
-  useEffect(() => {
-    const checkAndAutoSync = async () => {
-      if (enabledCarriers.length === 0) return
+  const loadAllWarehousesBoxes = () => {
+    // Merge boxes from all warehouses
+    const boxMap = new Map<string, ShippingBox>()
+    let hasAnyBoxes = false
 
-      const lastSync = localStorage.getItem('boxes_last_sync')
-      const now = Date.now()
-      const oneDayMs = 24 * 60 * 60 * 1000 // 24 hours
+    warehouses.forEach(warehouse => {
+      const storageKey = getStorageKey(warehouse.id)
+      const savedBoxes = localStorage.getItem(storageKey)
 
-      // Check if last sync was more than 24 hours ago
-      if (!lastSync || now - parseInt(lastSync) > oneDayMs) {
-        console.log('[Auto-Sync] Last sync was more than 24 hours ago, syncing...')
+      if (savedBoxes) {
+        hasAnyBoxes = true
+        const parsed = JSON.parse(savedBoxes) as ShippingBox[]
 
-        // Auto-sync in background
-        try {
-          await handleSyncFromAPI()
-          localStorage.setItem('boxes_last_sync', now.toString())
-        } catch (error) {
-          console.error('[Auto-Sync] Failed:', error)
-        }
-      }
-    }
+        parsed.forEach(box => {
+          // Use a unique key based on box type and identifier
+          let boxKey: string
 
-    checkAndAutoSync()
-  }, [enabledCarriers]) // Run when carriers are loaded
+          if (box.boxType === 'custom') {
+            // For grouped duplicates - group by duplicateGroupId (NOT originalBoxId!)
+            if (box.isDuplicate && box.duplicateGroupId) {
+              boxKey = `duplicate-group-${box.duplicateGroupId}` // FIXED: Use duplicateGroupId
+            } else {
+              boxKey = box.id // Use unique ID for independent custom boxes
+            }
+          } else {
+            // Carrier boxes: group by type and carrier code
+            boxKey = `${box.boxType}-${(box as any).carrierCode || box.name}`
+          }
 
-  const initializeBoxesForEnabledCarriers = () => {
-    const initialBoxes: ShippingBox[] = []
-
-    enabledCarriers.forEach(carrier => {
-      if (carrier === 'USPS') {
-        initialBoxes.push(...USPS_BOXES.map((box, index) => ({
-          ...box,
-          id: `usps-${index}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        })))
-      } else if (carrier === 'UPS') {
-        initialBoxes.push(...UPS_BOXES.map((box, index) => ({
-          ...box,
-          id: `ups-${index}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        })))
-      } else if (carrier === 'FedEx' || carrier === 'FEDEX') {
-        initialBoxes.push(...FEDEX_BOXES.map((box, index) => ({
-          ...box,
-          id: `fedex-${index}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        })))
+          if (!boxMap.has(boxKey)) {
+            boxMap.set(boxKey, box)
+          }
+        })
       }
     })
 
-    setBoxes(initialBoxes)
-    localStorage.setItem('shipping_boxes', JSON.stringify(initialBoxes))
+    if (!hasAnyBoxes) {
+      console.log(`[BoxesTab] No boxes found in any warehouse. User must sync from API.`)
+      setBoxes([])
+      return
+    }
+
+    const merged = Array.from(boxMap.values())
+
+    // Filter boxes to only show those for enabled carriers
+    const filtered = merged.filter((box: ShippingBox) => {
+      if (box.boxType === 'custom') return true
+      return enabledCarriers.some(carrier => carrier === box.boxType.toUpperCase())
+    })
+
+    setBoxes(filtered)
   }
 
   // Sync boxes from carrier APIs
   const handleSyncFromAPI = async () => {
-    setSyncing(true)
     try {
-      // Get credentials from localStorage (client-side)
+      setIsSyncing(true)
+
       const credentials = getUserUSPSCredentials()
 
-      console.log('Credentials from localStorage:', credentials ? 'Found' : 'Not found')
-
       if (!credentials && enabledCarriers.includes('USPS')) {
-        alert('USPS credentials not found. Please configure USPS in Integrations.')
-        setSyncing(false)
+        showError('USPS Credentials Missing', 'Please configure USPS in Integrations.')
         return
       }
 
-      // Call API to get available packaging options from carrier
+      console.log('[BoxesTab] Starting sync...')
+
       const response = await fetch('/api/shipping/boxes/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,38 +219,85 @@ export default function BoxesTab() {
 
       if (response.ok) {
         const data = await response.json()
-        console.log('API Response:', data)
-
         const apiBoxes = data.boxes || []
 
-        // Smart merge: Keep custom boxes, intelligently update carrier boxes
-        const mergedBoxes = smartMergeBoxes(boxes, apiBoxes)
+        console.log('[BoxesTab] Sync response:', apiBoxes.length, 'boxes')
 
-        setBoxes(mergedBoxes)
-        localStorage.setItem('shipping_boxes', JSON.stringify(mergedBoxes))
-        localStorage.setItem('boxes_last_sync', Date.now().toString())
+        // Separate variable/editable boxes from regular boxes
+        const variableBoxes = apiBoxes.filter((box: any) => box.isEditable || box.needsDimensions)
+        const regularBoxes = apiBoxes.filter((box: any) => !box.isEditable && !box.needsDimensions)
 
-        const updatedCount = mergedBoxes.filter(box => box.boxType !== 'custom').length
-        alert(`Successfully synced ${updatedCount} boxes from carrier APIs!`)
+        console.log('[BoxesTab] Variable boxes:', variableBoxes.length)
+        console.log('[BoxesTab] Regular boxes:', regularBoxes.length)
+
+        // Apply sync to current warehouse or all warehouses
+        if (selectedWarehouseId === '') {
+          // Sync all warehouses
+          console.log('[BoxesTab] Syncing to all warehouses')
+          warehouses.forEach(warehouse => {
+            syncWarehouseBoxes(warehouse.id, apiBoxes, variableBoxes)
+          })
+        } else {
+          // Sync only selected warehouse
+          console.log('[BoxesTab] Syncing to warehouse', selectedWarehouseId)
+          syncWarehouseBoxes(selectedWarehouseId, apiBoxes, variableBoxes)
+        }
+
+        const updatedCount = apiBoxes.length
+        const addedVariableCount = variableBoxes.length
+
+        showSuccess(
+          'Sync Successful',
+          `Synced ${updatedCount} boxes${addedVariableCount > 0 ? ` (${addedVariableCount} variable boxes included)` : ''}`
+        )
+
+        // Reload boxes after a small delay to ensure localStorage is updated
+        setTimeout(() => {
+          if (selectedWarehouseId === '') {
+            loadAllWarehousesBoxes()
+          } else {
+            loadWarehouseBoxes(selectedWarehouseId)
+          }
+          setIsSyncing(false)
+        }, 100)
       } else {
         const error = await response.json()
-        alert(`Failed to sync: ${error.error || 'Unknown error'}`)
+        showError('Sync Failed', error.error || 'Unknown error occurred')
+        setIsSyncing(false) // Stop loading on error
       }
     } catch (error: any) {
-      console.error('Sync error:', error)
-      alert('Failed to sync boxes. Check console for details.')
-    } finally {
-      setSyncing(false)
+      console.error('[BoxesTab] Sync error:', error)
+      showError('Sync Failed', 'Failed to sync boxes. Check console for details.')
+      setIsSyncing(false) // Stop loading on error
     }
   }
 
-  // Smart merge function - preserves user customizations
-  const smartMergeBoxes = (existingBoxes: ShippingBox[], apiBoxes: any[]): ShippingBox[] => {
-    const merged: ShippingBox[] = []
+  const syncWarehouseBoxes = (warehouseId: string, apiBoxes: any[], variableBoxes: any[]) => {
+    const storageKey = getStorageKey(warehouseId)
+    const savedBoxes = localStorage.getItem(storageKey)
+    const existingBoxes: ShippingBox[] = savedBoxes ? JSON.parse(savedBoxes) : []
 
-    // Process API boxes first
+    // Smart merge with special handling for variable boxes
+    const mergedBoxes = smartMergeBoxes(existingBoxes, apiBoxes, variableBoxes)
+    localStorage.setItem(storageKey, JSON.stringify(mergedBoxes))
+
+    console.log(`[BoxesTab] Synced ${mergedBoxes.length} boxes to warehouse ${warehouseId}`)
+  }
+
+  // Enhanced smart merge function - handles variable boxes specially
+  const smartMergeBoxes = (
+    existingBoxes: ShippingBox[],
+    apiBoxes: any[],
+    variableBoxes: any[]
+  ): ShippingBox[] => {
+    const merged: ShippingBox[] = []
+    const processedIds = new Set<string>()
+
+    // Step 1: Process API boxes (regular + variable)
     apiBoxes.forEach(apiBox => {
-      // Find if this box already exists
+      const isVariable = apiBox.isEditable || apiBox.needsDimensions
+
+      // Find existing box by carrier code and mail class
       const existing = existingBoxes.find(box =>
         box.boxType === apiBox.boxType &&
         (box as any).carrierCode === apiBox.carrierCode &&
@@ -166,93 +305,68 @@ export default function BoxesTab() {
       )
 
       if (existing) {
-        // Box exists - check if user customized it
-        const isVariableBox = apiBox.isEditable
-        const hasCustomDimensions = existing.dimensions.length > 0 &&
-                                     existing.dimensions.width > 0 &&
-                                     existing.dimensions.height > 0
+        processedIds.add(existing.id)
 
-        if (isVariableBox && hasCustomDimensions) {
-          // Variable box with custom dimensions - preserve user customizations
-          console.log(`[Sync] Preserving customizations for: ${existing.name}`)
+        if (isVariable) {
+          // For variable boxes: preserve user-set dimensions if they exist
+          const hasUserDimensions = existing.dimensions.length > 0 &&
+                                   existing.dimensions.width > 0 &&
+                                   existing.dimensions.height > 0
+
           merged.push({
             ...existing,
-            // Only update carrier-controlled fields
+            name: apiBox.name, // Update name from API
             weight: {
               ...existing.weight,
               maxWeight: apiBox.weight.maxWeight, // Update max weight from API
               unit: apiBox.weight.unit
             },
-            availableFor: apiBox.availableFor, // Update availability rules
+            dimensions: hasUserDimensions ? existing.dimensions : apiBox.dimensions,
+            isEditable: true,
+            needsDimensions: !hasUserDimensions,
             updatedAt: new Date().toISOString()
           })
         } else {
-          // Non-customized box or flat rate box - update everything
-          console.log(`[Sync] Updating: ${apiBox.name}`)
+          // Regular boxes: update from API
           merged.push({
-            ...apiBox,
-            id: existing.id, // Keep the same ID
-            isActive: existing.isActive, // Preserve active state
-            createdAt: existing.createdAt, // Preserve creation date
+            ...existing,
+            name: apiBox.name,
+            dimensions: apiBox.dimensions,
+            weight: {
+              ...existing.weight,
+              maxWeight: apiBox.weight.maxWeight,
+              unit: apiBox.weight.unit
+            },
             updatedAt: new Date().toISOString()
           })
         }
       } else {
         // New box from API - add it
-        console.log(`[Sync] Adding new box: ${apiBox.name}`)
-        merged.push(apiBox)
+        merged.push({
+          ...apiBox,
+          id: `${apiBox.boxType}-${merged.length}-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+        console.log(`[Sync] Added new ${isVariable ? 'variable' : 'regular'} box: ${apiBox.name}`)
       }
     })
 
-    // Keep legacy carrier boxes that are no longer in API
-    const existingCarrierBoxes = existingBoxes.filter(box =>
-      box.boxType !== 'custom' &&
-      !merged.some(m => m.id === box.id)
+    // Step 2: Keep existing custom boxes (boxType === 'custom')
+    const customBoxes = existingBoxes.filter(box =>
+      box.boxType === 'custom' && !processedIds.has(box.id)
     )
-
-    existingCarrierBoxes.forEach(box => {
-      console.log(`[Sync] Keeping legacy box: ${box.name}`)
-      merged.push(box)
-    })
-
-    // Add custom boxes at the end
-    const customBoxes = existingBoxes.filter(box => box.boxType === 'custom')
     merged.push(...customBoxes)
 
-    // Sort boxes in logical order
-    const sorted = merged.sort((a, b) => {
-      // 1. Carrier boxes first, then custom boxes
-      const aIsCustom = a.boxType === 'custom'
-      const bIsCustom = b.boxType === 'custom'
+    // Step 3: Keep existing user-modified variable boxes that weren't in API response
+    const orphanedVariableBoxes = existingBoxes.filter(box =>
+      !processedIds.has(box.id) &&
+      box.boxType !== 'custom' &&
+      (box as any).isEditable === true
+    )
+    merged.push(...orphanedVariableBoxes)
 
-      if (aIsCustom !== bIsCustom) {
-        return aIsCustom ? 1 : -1 // Carrier boxes first
-      }
-
-      // 2. Within carrier boxes: flat rate first, then variable/editable boxes
-      if (!aIsCustom && !bIsCustom) {
-        const aIsFlatRate = a.flatRate
-        const bIsFlatRate = b.flatRate
-        const aIsEditable = (a as any).isEditable
-        const bIsEditable = (b as any).isEditable
-
-        if (aIsFlatRate !== bIsFlatRate) {
-          return aIsFlatRate ? -1 : 1 // Flat rate first
-        }
-
-        // Both flat rate or both variable - sort alphabetically
-        return a.name.localeCompare(b.name)
-      }
-
-      // 3. Custom boxes: sort by creation date (newest first)
-      if (aIsCustom && bIsCustom) {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      }
-
-      return 0
-    })
-
-    return sorted
+    return merged.sort((a, b) => a.name.localeCompare(b.name))
   }
 
   // Filter boxes
@@ -261,12 +375,10 @@ export default function BoxesTab() {
 
     if (selectedType !== 'all') {
       if (selectedType === 'custom') {
-        // Show both custom boxes AND editable variable boxes
         filtered = filtered.filter(box =>
           box.boxType === 'custom' || (box as any).isEditable
         )
       } else {
-        // For carrier filters (usps, ups, fedex), exclude editable boxes
         filtered = filtered.filter(box =>
           box.boxType === selectedType && !(box as any).isEditable
         )
@@ -276,22 +388,12 @@ export default function BoxesTab() {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
       filtered = filtered.filter(box => {
-        // Search in name
         const nameMatch = box.name.toLowerCase().includes(searchLower)
-
-        // Search in description
         const descMatch = box.description?.toLowerCase().includes(searchLower)
-
-        // Search in box type (usps, ups, fedex, custom)
         const boxTypeMatch = box.boxType.toLowerCase().includes(searchLower)
-
-        // Search in carrier type (for custom boxes that have original carrier)
         const carrierTypeMatch = (box as any).carrierType?.toLowerCase().includes(searchLower)
-
-        // Search in mail class (PRIORITY_MAIL, GROUND_ADVANTAGE, etc)
         const mailClassMatch = (box as any).mailClass?.toLowerCase().replace(/_/g, ' ').includes(searchLower)
 
-        // Return true if any field matches
         return nameMatch || descMatch || boxTypeMatch || carrierTypeMatch || mailClassMatch
       })
     }
@@ -299,94 +401,382 @@ export default function BoxesTab() {
     setFilteredBoxes(filtered)
   }, [boxes, selectedType, searchTerm])
 
-  const handleSaveBox = (boxData: Partial<ShippingBox>) => {
+  const handleSaveBox = (boxData: Partial<ShippingBox>, applyToAllWarehouses: boolean = false) => {
     if (editingBox) {
-      // Update existing
-      const updated = boxes.map(box => {
-        if (box.id === editingBox.id) {
-          // Check if dimensions were added to a variable box
-          const hasValidDimensions = boxData.dimensions &&
-                                     boxData.dimensions.length > 0 &&
-                                     boxData.dimensions.width > 0 &&
-                                     boxData.dimensions.height > 0
-
-          // Auto-activate if dimensions are now set
-          const shouldActivate = hasValidDimensions &&
-                                (box as any).isEditable &&
-                                !box.isActive
-
-          return {
-            ...box,
-            ...boxData,
-            isActive: shouldActivate ? true : box.isActive, // Auto-activate
-            needsDimensions: !hasValidDimensions, // Clear warning if dimensions set
-            updatedAt: new Date().toISOString()
-          }
-        }
-        return box
-      })
-      setBoxes(updated)
-      localStorage.setItem('shipping_boxes', JSON.stringify(updated))
+      // Editing existing box
+      if (applyToAllWarehouses && selectedWarehouseId !== '') {
+        // Apply changes to all warehouses
+        warehouses.forEach(warehouse => {
+          updateBoxInWarehouse(warehouse.id, editingBox, boxData)
+        })
+        showSuccess('Box Updated', `${boxData.name} has been updated in all warehouses.`)
+      } else if (selectedWarehouseId === '') {
+        // Update in all warehouses (when "All Warehouses" view)
+        warehouses.forEach(warehouse => {
+          updateBoxInWarehouse(warehouse.id, editingBox, boxData)
+        })
+        showSuccess('Box Updated', `${boxData.name} has been updated in all warehouses.`)
+      } else {
+        // Update only in current warehouse
+        updateBoxInWarehouse(selectedWarehouseId, editingBox, boxData)
+        showSuccess('Box Updated', `${boxData.name} has been updated.`)
+      }
     } else {
-      // Add new custom box
+      // Creating new custom box
       const newBox: ShippingBox = {
         ...boxData as ShippingBox,
         id: `custom-${Date.now()}`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
-      const updated = [...boxes, newBox]
-      setBoxes(updated)
-      localStorage.setItem('shipping_boxes', JSON.stringify(updated))
+
+      if (selectedWarehouseId === '') {
+        // Add to all warehouses
+        warehouses.forEach(warehouse => {
+          addBoxToWarehouse(warehouse.id, newBox)
+        })
+        showSuccess('Box Added', `${boxData.name} has been created in all warehouses.`)
+      } else {
+        // Add to current warehouse only
+        addBoxToWarehouse(selectedWarehouseId, newBox)
+        showSuccess('Box Added', `${boxData.name} has been created.`)
+      }
     }
+
     setShowAddModal(false)
     setEditingBox(null)
+
+    // Reload boxes
+    if (selectedWarehouseId === '') {
+      loadAllWarehousesBoxes()
+    } else {
+      loadWarehouseBoxes(selectedWarehouseId)
+    }
   }
 
+
+  const updateBoxInWarehouse = (warehouseId: string, targetBox: ShippingBox, boxData: Partial<ShippingBox>) => {
+    const storageKey = getStorageKey(warehouseId)
+    const savedBoxes = localStorage.getItem(storageKey)
+    const boxes: ShippingBox[] = savedBoxes ? JSON.parse(savedBoxes) : []
+
+    const updatedBoxes = boxes.map(box => {
+      let isMatch = false
+
+      if (targetBox.boxType === 'custom') {
+        // For grouped duplicates - match by duplicateGroupId
+        if (targetBox.isDuplicate && targetBox.duplicateGroupId) {
+          isMatch = !!(box.isDuplicate && box.duplicateGroupId === targetBox.duplicateGroupId) // FIX: Force boolean
+        } else {
+          // Regular custom box - match by ID
+          isMatch = box.id === targetBox.id
+        }
+      } else {
+        // Match by carrier properties for carrier boxes
+        isMatch = box.boxType === targetBox.boxType &&
+                  (box as any).carrierCode === (targetBox as any).carrierCode &&
+                  (box as any).mailClass === (targetBox as any).mailClass
+      }
+
+      if (isMatch) {
+        const hasValidDimensions = boxData.dimensions &&
+                                   boxData.dimensions.length > 0 &&
+                                   boxData.dimensions.width > 0 &&
+                                   boxData.dimensions.height > 0
+
+        const shouldActivate = hasValidDimensions &&
+                              (box as any).isEditable &&
+                              !box.isActive
+
+        return {
+          ...box,
+          ...boxData,
+          isActive: shouldActivate ? true : (boxData.isActive !== undefined ? boxData.isActive : box.isActive),
+          needsDimensions: !hasValidDimensions,
+          updatedAt: new Date().toISOString()
+        }
+      }
+      return box
+    })
+
+    localStorage.setItem(storageKey, JSON.stringify(updatedBoxes))
+    console.log(`[Update] Updated box in warehouse ${warehouseId}`)
+  }
+
+  const addBoxToWarehouse = (warehouseId: string, box: ShippingBox) => {
+    const storageKey = getStorageKey(warehouseId)
+    const savedBoxes = localStorage.getItem(storageKey)
+    const boxes: ShippingBox[] = savedBoxes ? JSON.parse(savedBoxes) : []
+
+    boxes.push(box)
+    localStorage.setItem(storageKey, JSON.stringify(boxes))
+  }
+
+  //file path: app/dashboard/shipping/components/BoxesTab.tsx
+
   const handleDuplicateBox = (box: ShippingBox) => {
-    // Check if original box needs dimensions
     const hasZeroDimensions = box.dimensions.length === 0 &&
                              box.dimensions.width === 0 &&
                              box.dimensions.height === 0
 
     const originalCarrier = (box as any).carrierType || box.boxType
 
-    // Create a duplicate with custom type
-    const duplicate: ShippingBox = {
-      ...box,
-      id: `custom-${Date.now()}`,
-      boxType: 'custom',
-      name: `Copy of ${box.name}`,
-      isActive: false, // Start inactive
-      carrierType: originalCarrier, // Store original carrier
-      mailClass: (box as any).mailClass,
-      packageType: (box as any).packageType,
-      isEditable: true,
-      needsDimensions: hasZeroDimensions, // This should be true for 0×0×0 boxes
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    } as any
+    if (selectedWarehouseId === '') {
+      // In "All Warehouses" view - create GROUPED duplicates with unique group ID
+      const uniqueGroupId = `duplicate-group-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-    const updated = [...boxes, duplicate]
-    setBoxes(updated)
-    localStorage.setItem('shipping_boxes', JSON.stringify(updated))
+      console.log(`[Duplicate] Creating grouped duplicates with groupId: ${uniqueGroupId}`)
+
+      warehouses.forEach(warehouse => {
+        const warehouseDuplicate: ShippingBox = {
+          ...box,
+          id: `custom-${warehouse.id}-${Date.now()}-${Math.random()}`,
+          boxType: 'custom',
+          name: `Copy of ${box.name}`,
+          isActive: false,
+          carrierType: originalCarrier,
+          mailClass: (box as any).mailClass,
+          packageType: (box as any).packageType,
+          isEditable: true,
+          needsDimensions: hasZeroDimensions,
+          warehouse: warehouse.id,
+          isDuplicate: true,
+          duplicateGroupId: uniqueGroupId, // SAME group ID for all warehouses
+          originalBoxId: box.id, // Keep for reference
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as any
+        addBoxToWarehouse(warehouse.id, warehouseDuplicate)
+      })
+      showSuccess('Box Duplicated', `Created a copy of ${box.name} in all warehouses.`)
+      loadAllWarehousesBoxes()
+    } else {
+      // Specific warehouse - create INDEPENDENT duplicate
+      const duplicate: ShippingBox = {
+        ...box,
+        id: `custom-${Date.now()}-${Math.random()}`,
+        boxType: 'custom',
+        name: `Copy of ${box.name}`,
+        isActive: false,
+        carrierType: originalCarrier,
+        mailClass: (box as any).mailClass,
+        packageType: (box as any).packageType,
+        isEditable: true,
+        needsDimensions: hasZeroDimensions,
+        // No warehouse, isDuplicate, duplicateGroupId, or originalBoxId
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as any
+      addBoxToWarehouse(selectedWarehouseId, duplicate)
+      showSuccess('Box Duplicated', `Created a copy of ${box.name}.`)
+      loadWarehouseBoxes(selectedWarehouseId)
+    }
+  }
+
+  const deleteBoxFromWarehouse = (warehouseId: string, targetBox: ShippingBox) => {
+    const storageKey = getStorageKey(warehouseId)
+    const savedBoxes = localStorage.getItem(storageKey)
+    if (!savedBoxes) return
+
+    const boxes: ShippingBox[] = JSON.parse(savedBoxes)
+
+    const updatedBoxes = boxes.filter(box => {
+      if (targetBox.boxType === 'custom') {
+        // For grouped duplicates - match by duplicateGroupId
+        if (targetBox.isDuplicate && targetBox.duplicateGroupId) {
+          return !(box.isDuplicate && box.duplicateGroupId === targetBox.duplicateGroupId)
+        }
+        // Regular custom box - match by ID
+        return box.id !== targetBox.id
+      }
+
+      // For carrier boxes - match by type and carrier code
+      return !(
+        box.boxType === targetBox.boxType &&
+        (box as any).carrierCode === (targetBox as any).carrierCode &&
+        (box as any).mailClass === (targetBox as any).mailClass
+      )
+    })
+
+    localStorage.setItem(storageKey, JSON.stringify(updatedBoxes))
+    console.log(`[Delete] Deleted box from warehouse ${warehouseId}`)
   }
 
   const handleDeleteBox = (id: string) => {
-    if (confirm('Are you sure you want to delete this box?')) {
-      const updated = boxes.filter(box => box.id !== id)
-      setBoxes(updated)
-      localStorage.setItem('shipping_boxes', JSON.stringify(updated))
+    const boxToDelete = boxes.find(box => box.id === id)
+    if (!boxToDelete) return
+
+    if (selectedWarehouseId === '') {
+      // All Warehouses View - check if this is a grouped duplicate
+      if (boxToDelete.boxType === 'custom' &&
+          boxToDelete.isDuplicate &&
+          boxToDelete.duplicateGroupId) { // Changed from originalBoxId
+
+        // This is a grouped duplicate - delete from ALL warehouses
+        console.log('[Delete] Grouped duplicate - deleting from all warehouses')
+
+        warehouses.forEach(warehouse => {
+          const storageKey = getStorageKey(warehouse.id)
+          const savedBoxes = localStorage.getItem(storageKey)
+
+          if (savedBoxes) {
+            const boxes: ShippingBox[] = JSON.parse(savedBoxes)
+            // Find and remove boxes with matching duplicateGroupId
+            const updatedBoxes = boxes.filter(box => {
+              if (box.isDuplicate && box.duplicateGroupId === boxToDelete.duplicateGroupId) {
+                console.log(`[Delete] Removing duplicate from warehouse ${warehouse.id}`)
+                return false
+              }
+              return true
+            })
+            localStorage.setItem(storageKey, JSON.stringify(updatedBoxes))
+          }
+        })
+
+        showSuccess('Box Deleted', `${boxToDelete.name} has been deleted from all warehouses.`)
+      } else {
+        // Regular delete from all warehouses
+        warehouses.forEach(warehouse => {
+          deleteBoxFromWarehouse(warehouse.id, boxToDelete)
+        })
+        showSuccess('Box Deleted', `${boxToDelete.name} has been deleted from all warehouses.`)
+      }
+
+      loadAllWarehousesBoxes()
+    } else {
+      // Delete from current warehouse only
+      deleteBoxFromWarehouse(selectedWarehouseId, boxToDelete)
+      showSuccess('Box Deleted', `${boxToDelete.name} has been deleted.`)
+      loadWarehouseBoxes(selectedWarehouseId)
     }
   }
 
   const handleToggleActive = (id: string) => {
-    const updated = boxes.map(box =>
-      box.id === id ? { ...box, isActive: !box.isActive } : box
-    )
-    setBoxes(updated)
-    localStorage.setItem('shipping_boxes', JSON.stringify(updated))
+    const box = boxes.find(b => b.id === id)
+    if (!box) return
+
+    if (selectedWarehouseId === '') {
+      // All Warehouses View
+
+      if (box.boxType === 'custom') {
+        // Check if this is a GROUPED DUPLICATE
+        if (box.isDuplicate && box.duplicateGroupId) { // Changed from originalBoxId
+          console.log('[Toggle] Grouped duplicate - toggling in ALL warehouses')
+
+          // Find all states across warehouses for this group
+          let allStates: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
+          warehouses.forEach(warehouse => {
+            const storageKey = getStorageKey(warehouse.id)
+            const savedBoxes = localStorage.getItem(storageKey)
+            if (savedBoxes) {
+              const boxes: ShippingBox[] = JSON.parse(savedBoxes)
+              const matchingBox = boxes.find(b =>
+                b.isDuplicate && b.duplicateGroupId === box.duplicateGroupId
+              )
+              if (matchingBox) {
+                allStates.push({
+                  warehouseId: warehouse.id,
+                  warehouseName: warehouse.name,
+                  isActive: matchingBox.isActive
+                })
+              }
+            }
+          })
+
+          const enabledCount = allStates.filter(s => s.isActive).length
+          const newState = enabledCount === 0
+
+          console.log(`[Toggle] Grouped duplicate - Setting all to: ${newState}`)
+          warehouses.forEach(warehouse => {
+            toggleBoxInWarehouse(warehouse.id, box, newState)
+          })
+          loadAllWarehousesBoxes()
+          return
+        }
+
+        // For single-warehouse or non-grouped custom boxes
+        const boxWarehouse = box.warehouse
+        if (boxWarehouse && boxWarehouse !== 'all') {
+          console.log(`[Toggle] Single-warehouse custom box - toggling only in: ${boxWarehouse}`)
+          toggleBoxInWarehouse(boxWarehouse, box)
+          loadAllWarehousesBoxes()
+          return
+        }
+
+        // Box is in all warehouses - toggle all
+        const states = getBoxStateAcrossWarehouses(id)
+        const enabledCount = states.filter(s => s.isActive).length
+        const allDisabled = enabledCount === 0
+        const newState = allDisabled
+
+        console.log(`[Toggle] Custom box (all warehouses) - Setting all to: ${newState}`)
+        warehouses.forEach(warehouse => {
+          toggleBoxInWarehouse(warehouse.id, box, newState)
+        })
+        loadAllWarehousesBoxes()
+        return
+      }
+
+      // For CARRIER boxes - Enable/Disable ALL
+      const states = getBoxStateAcrossWarehouses(id)
+      const enabledCount = states.filter(s => s.isActive).length
+      const allDisabled = enabledCount === 0
+      const newState = allDisabled
+
+      console.log(`[Toggle] Carrier box - Setting all to: ${newState}`)
+      warehouses.forEach(warehouse => {
+        toggleBoxInWarehouse(warehouse.id, box, newState)
+      })
+      loadAllWarehousesBoxes()
+    } else {
+      // Single warehouse - normal toggle
+      toggleBoxInWarehouse(selectedWarehouseId, box)
+      loadWarehouseBoxes(selectedWarehouseId)
+    }
   }
+
+  const toggleBoxInWarehouse = (warehouseId: string, targetBox: ShippingBox, forceState?: boolean) => {
+    const storageKey = getStorageKey(warehouseId)
+    const savedBoxes = localStorage.getItem(storageKey)
+    const boxes: ShippingBox[] = savedBoxes ? JSON.parse(savedBoxes) : []
+
+    let matchFound = false
+    const updatedBoxes = boxes.map(box => {
+      let isMatch = false
+
+      if (targetBox.boxType === 'custom') {
+        // For grouped duplicates - match by duplicateGroupId
+        if (targetBox.isDuplicate && targetBox.duplicateGroupId) {
+          isMatch = !!(box.isDuplicate && box.duplicateGroupId === targetBox.duplicateGroupId) // FIX: Force boolean
+        } else {
+          // Regular custom box - match by ID
+          isMatch = box.id === targetBox.id
+        }
+      } else {
+        // Match by carrier properties for carrier boxes
+        isMatch = box.boxType === targetBox.boxType &&
+                  (box as any).carrierCode === (targetBox as any).carrierCode &&
+                  (box as any).mailClass === (targetBox as any).mailClass
+      }
+
+      if (isMatch) {
+        matchFound = true
+        const newState = forceState !== undefined ? forceState : !box.isActive
+        console.log(`[Toggle] Warehouse ${warehouseId}: ${box.name} → ${newState}`)
+        return { ...box, isActive: newState }
+      }
+
+      return box
+    })
+
+    if (!matchFound) {
+      console.warn(`[Toggle] No match found in warehouse ${warehouseId} for box:`, targetBox.name)
+    }
+
+    localStorage.setItem(storageKey, JSON.stringify(updatedBoxes))
+    console.log(`[Toggle] Updated box in warehouse ${warehouseId}`)
+  }
+
 
   const getBoxTypeColor = (type: string) => {
     switch (type) {
@@ -398,7 +788,6 @@ export default function BoxesTab() {
     }
   }
 
-  // Build filter options based on enabled carriers
   const filterOptions = [
     { value: 'all', label: 'All Boxes' },
     { value: 'custom', label: 'Custom' },
@@ -408,39 +797,95 @@ export default function BoxesTab() {
     }))
   ]
 
+  // Show loading state while carriers are being loaded
+  if (isLoadingCarriers) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading shipping carriers...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (enabledCarriers.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-        <CubeIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Shipping Integrations Found</h3>
-        <p className="text-gray-600 mb-4">
-          You need to enable a shipping integration before managing boxes
-        </p>
-
-        <a href="/dashboard/integrations"
-          className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          Go to Integrations
-        </a>
+      <div className="space-y-6">
+        <Notification
+          show={notification.show}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+          onClose={closeNotification}
+        />
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+          <CubeIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Shipping Integrations Found</h3>
+          <p className="text-gray-600 mb-4">
+            You need to enable a shipping integration before managing boxes
+          </p>
+          <a href="/dashboard/integrations"
+            className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Go to Integrations
+          </a>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
+      <Notification
+        show={notification.show}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+        onClose={closeNotification}
+      />
+
       {/* Info Banner */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-start">
           <CubeIcon className="h-5 w-5 text-blue-600 mt-0.5 mr-3" />
           <div className="flex-1">
             <h4 className="text-sm font-medium text-blue-900 mb-1">
-              Packaging Options Based on Your Account
+              {selectedWarehouseId ?
+                'Packaging Options for This Warehouse' :
+                'Packaging Options - All Warehouses'
+              }
             </h4>
             <p className="text-sm text-blue-700">
-              These boxes reflect the packaging options available with your carrier account.
-              Rates and availability may vary based on your negotiated rates and service level.
-              Click "Sync from API" to refresh with your latest options.
+              {selectedWarehouseId ? (
+                <>
+                  Each warehouse has its own boxes loaded from carrier APIs. Changes here only affect <strong>this warehouse</strong>.
+                  Use "Enabled/Disable in all" when editing to sync changes everywhere.
+                </>
+              ) : (
+                <>
+                  Changes made here will affect <strong>all warehouses</strong>.
+                  Boxes are loaded from carrier APIs to ensure accurate packaging options.
+                </>
+              )}
             </p>
+            {boxes.length === 0 && !searchTerm && (
+              <button
+                onClick={handleSyncFromAPI}
+                disabled={isSyncing}
+                className="mt-3 inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg
+                  className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isSyncing ? 'Syncing...' : 'Sync from API'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -448,14 +893,26 @@ export default function BoxesTab() {
       {/* Actions Bar */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <input
               type="text"
               placeholder="Search boxes..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             />
+            {/* Clear button - only show when there's text */}
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Clear search"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
           <div className="flex gap-2">
             <select
@@ -475,14 +932,6 @@ export default function BoxesTab() {
                 </option>
               ))}
             </select>
-            <button
-              onClick={handleSyncFromAPI}
-              disabled={syncing}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ArrowPathIcon className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing...' : 'Sync from API'}
-            </button>
           </div>
         </div>
       </div>
@@ -500,16 +949,13 @@ export default function BoxesTab() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <CubeIcon className="h-6 w-6 text-gray-400" />
 
-                  {/* Show original carrier for custom boxes, otherwise show box type */}
                   {box.boxType === 'custom' && (box as any).carrierType ? (
-                    // Custom box - show original carrier
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       getBoxTypeColor((box as any).carrierType)
                     }`}>
                       {(box as any).carrierType.toUpperCase()}
                     </span>
                   ) : (
-                    // Regular box - show box type
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       getBoxTypeColor(box.boxType)
                     }`}>
@@ -517,7 +963,6 @@ export default function BoxesTab() {
                     </span>
                   )}
 
-                  {/* Service Type Badge */}
                   {(box as any).mailClass && (
                     <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       {(box as any).mailClass.replace(/_/g, ' ')}
@@ -529,7 +974,6 @@ export default function BoxesTab() {
                       Flat Rate
                     </span>
                   )}
-                  {/* Warning badge for boxes needing dimensions */}
                   {(box as any).needsDimensions && (
                     <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 flex items-center gap-1">
                       ⚠️ Needs Dimensions
@@ -537,10 +981,9 @@ export default function BoxesTab() {
                   )}
                 </div>
 
-                {/* Action buttons - Icon only */}
+                {/* Action Buttons - Duplicate, Edit, Delete */}
                 {(box.boxType === 'custom' || (box as any).isEditable) && (
                   <div className="flex gap-1">
-                    {/* Duplicate button - Icon only */}
                     <button
                       onClick={() => handleDuplicateBox(box)}
                       className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
@@ -551,7 +994,6 @@ export default function BoxesTab() {
                       </svg>
                     </button>
 
-                    {/* Edit button - Icon only */}
                     <button
                       onClick={() => {
                         setEditingBox(box)
@@ -563,7 +1005,6 @@ export default function BoxesTab() {
                       <PencilIcon className="h-5 w-5" />
                     </button>
 
-                    {/* Delete button - Icon only (only for custom boxes) */}
                     {box.boxType === 'custom' && (
                       <button
                         onClick={() => handleDeleteBox(box.id)}
@@ -598,24 +1039,152 @@ export default function BoxesTab() {
                     {box.weight.maxWeight} {box.weight.unit}
                   </span>
                 </div>
-
               </div>
 
-              {/* Availability */}
+              {/* Availability - Enhanced for All Warehouses View */}
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-gray-500">
-                  {box.availableFor === 'both' ? 'Domestic & International' :
-                   box.availableFor === 'domestic' ? 'Domestic Only' : 'International Only'}
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500">
+                    {box.availableFor === 'both' ? 'Domestic & International' :
+                     box.availableFor === 'domestic' ? 'Domestic Only' : 'International Only'}
+                  </span>
+
+                  {/* All Warehouses View - Show status/action text */}
+                  {/* All Warehouses View - Show status/action text */}
+                  {selectedWarehouseId === '' && (() => {
+                    // For CUSTOM boxes - check warehouse field FIRST
+                    if (box.boxType === 'custom') {
+                      const boxWarehouse = box.warehouse
+
+                      // For duplicates created from "All Warehouses", show multi-warehouse status
+                      if (box.isDuplicate && box.duplicateGroupId && boxWarehouse && boxWarehouse !== 'all') { // Changed
+                        const states = getBoxStateAcrossWarehouses(box.id)
+
+                        // If no states found, search by duplicateGroupId
+                        let allStates = states
+                        if (states.length === 0) {
+                          allStates = []
+                          warehouses.forEach(warehouse => {
+                            const storageKey = getStorageKey(warehouse.id)
+                            const savedBoxes = localStorage.getItem(storageKey)
+                            if (savedBoxes) {
+                              const boxes: ShippingBox[] = JSON.parse(savedBoxes)
+                              const matchingBox = boxes.find(b =>
+                                b.isDuplicate && b.duplicateGroupId === box.duplicateGroupId // Changed
+                              )
+                              if (matchingBox) {
+                                allStates.push({
+                                  warehouseId: warehouse.id,
+                                  warehouseName: warehouse.name,
+                                  isActive: matchingBox.isActive
+                                })
+                              }
+                            }
+                          })
+                        }
+
+                        const enabledCount = allStates.filter(s => s.isActive).length
+                        const totalCount = allStates.length
+                        const allEnabled = enabledCount === totalCount
+                        const allDisabled = enabledCount === 0
+
+                        return (
+                          <span className={`text-xs font-medium mt-0.5 ${
+                            allEnabled ? 'text-green-600' :
+                            allDisabled ? 'text-gray-500' :
+                            'text-amber-600'
+                          }`}>
+                            {allEnabled && 'Enabled in all'}
+                            {allDisabled && 'Disabled in all'}
+                            {!allEnabled && !allDisabled && `Enabled in ${enabledCount}/${totalCount} warehouses`}
+                          </span>
+                        )
+                      }
+
+                      // For single-warehouse custom boxes
+                      if (boxWarehouse && boxWarehouse !== 'all') {
+                        const warehouse = warehouses.find(w => w.id === boxWarehouse)
+                        const warehouseName = warehouse?.name || 'Unknown'
+
+                        return (
+                          <span className={`text-xs font-medium mt-0.5 ${
+                            box.isActive ? 'text-green-600' : 'text-gray-500'
+                          }`}>
+                            {box.isActive ? 'Enabled' : 'Disabled'} in: {warehouseName}
+                          </span>
+                        )
+                      }
+
+                      // For custom boxes in all warehouses (warehouse === 'all' or not set)
+                      const states = getBoxStateAcrossWarehouses(box.id)
+                      const enabledWarehouses = states.filter(s => s.isActive).map(s => s.warehouseName)
+                      const disabledWarehouses = states.filter(s => !s.isActive).map(s => s.warehouseName)
+
+                      if (states.length === 1) {
+                        return (
+                          <span className="text-xs font-medium mt-0.5 text-gray-600">
+                            {states[0].warehouseName} only
+                          </span>
+                        )
+                      } else if (enabledWarehouses.length > 0) {
+                        return (
+                          <span className="text-xs font-medium mt-0.5 text-green-600">
+                            Enabled in: {enabledWarehouses.join(', ')}
+                          </span>
+                        )
+                      } else {
+                        return (
+                          <span className="text-xs font-medium mt-0.5 text-gray-500">
+                            Disabled in: {disabledWarehouses.join(', ')}
+                          </span>
+                        )
+                      }
+                    }
+
+                    // For CARRIER boxes - show multi-warehouse toggle logic
+                    const states = getBoxStateAcrossWarehouses(box.id)
+                    const enabledCount = states.filter(s => s.isActive).length
+                    const totalCount = states.length
+                    const allEnabled = enabledCount === totalCount
+                    const allDisabled = enabledCount === 0
+
+                    return (
+                      <span className={`text-xs font-medium mt-0.5 ${
+                        allEnabled ? 'text-green-600' :      // Changed to green for enabled
+                        allDisabled ? 'text-gray-500' :      // Changed to gray for disabled
+                        'text-amber-600'
+                      }`}>
+                        {allEnabled && 'Enabled in all'}     {/* STATE not action */}
+                        {allDisabled && 'Disabled in all'}   {/* STATE not action */}
+                        {!allEnabled && !allDisabled && `Enabled in ${enabledCount}/${totalCount} warehouses`}
+                      </span>
+                    )
+                  })()}
+                </div>
+
                 <div className="flex items-center gap-2">
-                  {/* Show warning whenever dimensions are needed */}
                   {(box as any).needsDimensions && (
                     <span className="text-xs text-amber-600">Set dimensions first</span>
                   )}
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={box.isActive}
+                      checked={(() => {
+                        if (selectedWarehouseId === '') {
+                          // All Warehouses View
+
+                          // For CUSTOM boxes with specific warehouse - use direct isActive state
+                          if (box.boxType === 'custom' && box.warehouse && box.warehouse !== 'all') {
+                            return box.isActive
+                          }
+
+                          // For other boxes - check across all warehouses
+                          const states = getBoxStateAcrossWarehouses(box.id)
+                          const enabledCount = states.filter(s => s.isActive).length
+                          return enabledCount > 0
+                        }
+                        return box.isActive
+                      })()}
                       onChange={() => handleToggleActive(box.id)}
                       disabled={(box as any).needsDimensions}
                       className="sr-only peer"
@@ -632,15 +1201,40 @@ export default function BoxesTab() {
       {filteredBoxes.length === 0 && (
         <div className="text-center py-12">
           <CubeIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No boxes found</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            {searchTerm
-              ? 'Try adjusting your search'
-              : selectedType === 'custom'
-                ? 'Duplicate a box to create custom variants'
-                : 'Click "Sync from API" to load your carrier boxes'
-            }
-          </p>
+          {boxes.length === 0 ? (
+            // No boxes at all - need to sync
+            <>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No Boxes Found</h3>
+              <p className="mt-1 text-sm text-gray-500 mb-4">
+                {searchTerm
+                  ? 'No boxes match your search. Try clearing the search filter.'
+                  : 'Sync with carrier APIs to load available packaging options'}
+              </p>
+              {!searchTerm && (
+                <button
+                  onClick={handleSyncFromAPI}
+                  className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Sync from API to Load Boxes
+                </button>
+              )}
+            </>
+          ) : (
+            // Has boxes but filter is hiding them
+            <>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No boxes found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {searchTerm
+                  ? 'Try adjusting your search'
+                  : selectedType === 'custom'
+                    ? 'Duplicate a box to create custom variants'
+                    : 'Try adjusting your filter'}
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -653,6 +1247,8 @@ export default function BoxesTab() {
         }}
         onSave={handleSaveBox}
         box={editingBox}
+        selectedWarehouseId={selectedWarehouseId}
+        allWarehouses={warehouses}
       />
     </div>
   )

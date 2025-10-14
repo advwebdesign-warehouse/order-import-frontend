@@ -7,14 +7,27 @@ import { CarrierService } from '../utils/shippingTypes'
 import { USPS_SERVICES, UPS_SERVICES, FEDEX_SERVICES } from '../data/carrierServices'
 import { TruckIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline'
 
-export default function ServicesTab() {
+interface ServicesTabProps {
+  selectedWarehouseId: string
+}
+
+export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
   const [services, setServices] = useState<CarrierService[]>([])
   const [selectedCarrier, setSelectedCarrier] = useState<'all' | 'USPS' | 'UPS' | 'FedEx'>('all')
   const [selectedType, setSelectedType] = useState<'all' | 'domestic' | 'international'>('all')
 
-  // Load services from localStorage
+  // Get the localStorage key based on selected warehouse
+  const getStorageKey = (key: string) => {
+    return selectedWarehouseId
+      ? `${key}_${selectedWarehouseId}`
+      : `${key}_all`
+  }
+
+  // Load services from localStorage (warehouse-specific)
   useEffect(() => {
-    const savedServices = localStorage.getItem('shipping_services')
+    const storageKey = getStorageKey('shipping_services')
+    const savedServices = localStorage.getItem(storageKey)
+
     if (savedServices) {
       setServices(JSON.parse(savedServices))
     } else {
@@ -40,9 +53,9 @@ export default function ServicesTab() {
         }))
       ]
       setServices(initialServices)
-      localStorage.setItem('shipping_services', JSON.stringify(initialServices))
+      localStorage.setItem(storageKey, JSON.stringify(initialServices))
     }
-  }, [])
+  }, [selectedWarehouseId])
 
   const filteredServices = services.filter(service => {
     const carrierMatch = selectedCarrier === 'all' || service.carrier === selectedCarrier
@@ -51,11 +64,12 @@ export default function ServicesTab() {
   })
 
   const handleToggleActive = (id: string) => {
+    const storageKey = getStorageKey('shipping_services')
     const updated = services.map(service =>
       service.id === id ? { ...service, isActive: !service.isActive } : service
     )
     setServices(updated)
-    localStorage.setItem('shipping_services', JSON.stringify(updated))
+    localStorage.setItem(storageKey, JSON.stringify(updated))
   }
 
   const getCarrierColor = (carrier: string) => {
@@ -70,6 +84,21 @@ export default function ServicesTab() {
 
   return (
     <div className="space-y-6">
+      {/* Info Banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start">
+          <TruckIcon className="h-5 w-5 text-blue-600 mt-0.5 mr-3" />
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-blue-900 mb-1">
+              Carrier Services {selectedWarehouseId ? 'for This Warehouse' : 'for All Warehouses'}
+            </h4>
+            <p className="text-sm text-blue-700">
+              Enable or disable shipping services. Only active services will be available when creating shipments.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col sm:flex-row gap-4">
