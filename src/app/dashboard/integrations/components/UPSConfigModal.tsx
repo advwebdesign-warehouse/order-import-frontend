@@ -38,7 +38,6 @@ export default function UPSConfigModal({
       return
     }
 
-    // Check if UPS credentials are configured
     const clientId = process.env.NEXT_PUBLIC_UPS_CLIENT_ID
     const redirectUri = process.env.NEXT_PUBLIC_UPS_REDIRECT_URI || 'https://orders-warehouse.adv.design/api/auth/ups/callback'
 
@@ -51,7 +50,29 @@ export default function UPSConfigModal({
     setConnecting(true)
 
     try {
-      // Save account number and environment first
+      // STEP 1: Validate client with UPS FIRST
+      console.log('[UPS OAuth] Step 1: Validating client...')
+      const validateUrl = environment === 'production'
+        ? `https://onlinetools.ups.com/security/v1/oauth/validate-client?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`
+        : `https://wwwcie.ups.com/security/v1/oauth/validate-client?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`
+
+      const validateResponse = await fetch(validateUrl)
+      const validateData = await validateResponse.json()
+
+      console.log('[UPS OAuth] Validate response:', validateData)
+
+      if (validateData.result !== 'success') {
+        throw new Error('Client validation failed')
+      }
+
+      const lassoType = validateData.type // Should be "ups_com_api"
+      const lassoRedirectURL = validateData.LassoRedirectURL // Should be "https://www.ups.com/lasso/signin"
+
+      console.log('[UPS OAuth] ✅ Client validated')
+      console.log('[UPS OAuth] Type:', lassoType)
+      console.log('[UPS OAuth] Lasso URL:', lassoRedirectURL)
+
+      // STEP 2: Save account number and environment first
       onSave(integration.id, {
         accountNumber,
         environment,
@@ -60,7 +81,7 @@ export default function UPSConfigModal({
           : 'https://wwwcie.ups.com'
       })
 
-      // Generate OAuth URL and redirect
+      // Generate OAuth state
       const state = `ups_${Date.now()}_${environment}`
 
       // Store state and account info in COOKIES (accessible server-side)
@@ -68,20 +89,17 @@ export default function UPSConfigModal({
       document.cookie = `ups_account_number=${accountNumber}; path=/; max-age=600; SameSite=Lax`
       document.cookie = `ups_environment=${environment}; path=/; max-age=600; SameSite=Lax`
 
-      // Build authorization URL - MUST include redirect_uri!
+      // STEP 3: Build authorization URL with CORRECT parameters
       const params = new URLSearchParams({
         client_id: clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: 'read write',
+        scope: 'read', // ✅ FIXED: Use just "read" not "read write"
+        type: lassoType, // ✅ Use the type from validate-client response
         state: state
       })
 
-      const baseUrl = environment === 'production'
-        ? 'https://www.ups.com'
-        : 'https://wwwcie.ups.com'
-
-      const authUrl = `${baseUrl}/security/v1/oauth/authorize?${params.toString()}`
+      const authUrl = `${lassoRedirectURL}?${params.toString()}`
 
       console.log('========================================')
       console.log('[UPS OAuth] Full Authorization URL:')
@@ -89,11 +107,13 @@ export default function UPSConfigModal({
       console.log('========================================')
       console.log('[UPS OAuth] Client ID:', clientId?.substring(0, 10) + '...')
       console.log('[UPS OAuth] Redirect URI:', redirectUri)
+      console.log('[UPS OAuth] Scope:', 'read')
+      console.log('[UPS OAuth] Type:', lassoType)
       console.log('[UPS OAuth] State:', state)
       console.log('[UPS OAuth] Environment:', environment)
       console.log('========================================')
 
-      // Redirect to UPS authorization
+      // STEP 4: Redirect to UPS authorization
       window.location.href = authUrl
     } catch (error: any) {
       console.error('❌ Connection error:', error)
