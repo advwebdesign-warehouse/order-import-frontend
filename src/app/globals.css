@@ -20,3 +20,11 @@
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
+@keyframes slideProgress {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}

@@ -4,7 +4,7 @@
 
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { XMarkIcon, InformationCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, InformationCircleIcon, ChevronDownIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { USPSIntegration, Environment } from '../types/integrationTypes'
 
 interface USPSConfigModalProps {
@@ -13,6 +13,9 @@ interface USPSConfigModalProps {
   integration: USPSIntegration
   onSave: (integrationId: string, config: any) => void
 }
+
+// Progress stages for visual feedback
+type SyncStage = 'idle' | 'saving-config' | 'updating-boxes' | 'updating-services' | 'success'
 
 export default function USPSConfigModal({
   isOpen,
@@ -30,19 +33,19 @@ export default function USPSConfigModal({
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [showSecret, setShowSecret] = useState(false)
-  const [showInstructions, setShowInstructions] = useState(false) // New state for collapsible
+  const [showInstructions, setShowInstructions] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncStage, setSyncStage] = useState<SyncStage>('idle')
 
   const handleEnvironmentChange = (env: Environment) => {
     setConfig({
       ...config,
       environment: env,
       apiUrl: env === 'sandbox'
-        ? 'https://apis-tem.usps.com'  // ← CORRECTED
-        : 'https://apis.usps.com'       // ← CORRECTED
+        ? 'https://apis-tem.usps.com'
+        : 'https://apis.usps.com'
     })
   }
-
-  const [syncing, setSyncing] = useState(false)
 
   const handleTest = async () => {
     setTesting(true)
@@ -80,68 +83,205 @@ export default function USPSConfigModal({
 
   const handleSave = async () => {
     setSyncing(true)
+    setSyncStage('saving-config')
 
     try {
-      // Save the configuration first
-      onSave(integration.id, config)
+      // Step 1: Save config manually to localStorage (don't call onSave yet)
+      console.log('[USPS Config] Saving configuration to localStorage...')
 
-      // Check if USPS boxes already exist
-      const existingBoxes = localStorage.getItem('shipping_boxes')
-      const parsed = existingBoxes ? JSON.parse(existingBoxes) : []
-      const hasUSPSBoxes = parsed.some((box: any) => box.boxType === 'usps')
+      // Get current integrations from localStorage
+      const storageKey = `orderSync_integrations_default_user`
+      const stored = localStorage.getItem(storageKey)
+      const currentSettings = stored ? JSON.parse(stored) : null
 
-      // Only auto-sync if no USPS boxes exist yet (first time setup)
-      if (!hasUSPSBoxes) {
-        console.log('First time setup - auto-syncing USPS boxes...')
-
-        const response = await fetch('/api/shipping/boxes/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            carriers: ['USPS'],
-            credentials: {
-              consumerKey: config.consumerKey,
-              consumerSecret: config.consumerSecret,
-              environment: config.environment,
-              apiUrl: config.apiUrl
+      if (currentSettings) {
+        // Update the USPS integration
+        const updatedIntegrations = currentSettings.integrations.map((int: any) => {
+          if (int.id === integration.id) {
+            return {
+              ...int,
+              config,
+              status: 'connected',
+              enabled: true,
+              connectedAt: new Date().toISOString()
             }
-          })
+          }
+          return int
         })
 
-        if (response.ok) {
-          const data = await response.json()
-          console.log(`✅ Auto-synced ${data.count} USPS boxes`)
+        // Save back to localStorage
+        localStorage.setItem(storageKey, JSON.stringify({
+          ...currentSettings,
+          integrations: updatedIntegrations,
+          lastUpdated: new Date().toISOString()
+        }))
 
-          // Store boxes in localStorage
-          if (data.boxes && data.boxes.length > 0) {
-            // Keep custom boxes, add new USPS boxes
-            const customBoxes = parsed.filter((box: any) => box.boxType === 'custom')
-            const updated = [...customBoxes, ...data.boxes]
+        console.log('[USPS Config] ✅ Configuration saved to localStorage')
+      }
 
-            localStorage.setItem('shipping_boxes', JSON.stringify(updated))
-            console.log('✅ Boxes stored in localStorage')
+      await new Promise(resolve => setTimeout(resolve, 800))
+
+      // Step 2: Update Boxes
+      setSyncStage('updating-boxes')
+      console.log('[USPS Config] Updating boxes...')
+
+      const boxesResponse = await fetch('/api/shipping/boxes/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carriers: ['USPS'],
+          credentials: {
+            consumerKey: config.consumerKey,
+            consumerSecret: config.consumerSecret,
+            environment: config.environment
           }
-        } else {
-          console.warn('Failed to auto-sync boxes:', await response.text())
+        })
+      })
+
+      if (boxesResponse.ok) {
+        const boxesData = await boxesResponse.json()
+        console.log(`✅ Synced ${boxesData.count} USPS boxes`)
+
+        // Store boxes in localStorage for all warehouses
+        if (boxesData.boxes && boxesData.boxes.length > 0) {
+          const warehousesStr = localStorage.getItem('warehouses')
+          const warehouses = warehousesStr ? JSON.parse(warehousesStr) : []
+
+          if (warehouses.length > 0) {
+            warehouses.forEach((warehouse: any) => {
+              const storageKey = `shipping_boxes_${warehouse.id}`
+              const existingBoxes = localStorage.getItem(storageKey)
+              const parsed = existingBoxes ? JSON.parse(existingBoxes) : []
+
+              // Keep custom boxes, replace USPS boxes
+              const customBoxes = parsed.filter((box: any) => box.boxType === 'custom')
+              const updated = [...customBoxes, ...boxesData.boxes]
+
+              localStorage.setItem(storageKey, JSON.stringify(updated))
+              localStorage.setItem(`boxes_last_sync_${warehouse.id}`, Date.now().toString())
+            })
+            console.log(`✅ Boxes stored for ${warehouses.length} warehouses`)
+          }
         }
       } else {
-        console.log('USPS boxes already exist - skipping auto-sync. Use "Sync from API" button to refresh.')
+        console.warn('Failed to sync boxes:', await boxesResponse.text())
       }
-    } catch (error) {
-      console.error('Error auto-syncing boxes:', error)
-    } finally {
-      setSyncing(false)
+
+      await new Promise(resolve => setTimeout(resolve, 800))
+
+      // Step 3: Update Services
+      setSyncStage('updating-services')
+      console.log('[USPS Config] Updating services...')
+
+      const servicesResponse = await fetch('/api/shipping/services/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carriers: ['USPS'],
+          credentials: {
+            consumerKey: config.consumerKey,
+            consumerSecret: config.consumerSecret,
+            environment: config.environment
+          }
+        })
+      })
+
+      if (servicesResponse.ok) {
+        const servicesData = await servicesResponse.json()
+        console.log(`✅ Synced ${servicesData.count} USPS services`)
+
+        // Store services in localStorage for all warehouses
+        if (servicesData.services && servicesData.services.length > 0) {
+          const warehousesStr = localStorage.getItem('warehouses')
+          const warehouses = warehousesStr ? JSON.parse(warehousesStr) : []
+
+          if (warehouses.length > 0) {
+            warehouses.forEach((warehouse: any) => {
+              const storageKey = `shipping_services_${warehouse.id}`
+              const existingServices = localStorage.getItem(storageKey)
+              const parsed = existingServices ? JSON.parse(existingServices) : []
+
+              // Merge services, preserving user preferences
+              const merged = servicesData.services.map((apiService: any) => {
+                const existing = parsed.find((s: any) =>
+                  s.carrier === apiService.carrier && s.serviceCode === apiService.serviceCode
+                )
+
+                if (existing) {
+                  return { ...apiService, isActive: existing.isActive, id: existing.id, createdAt: existing.createdAt }
+                }
+                return apiService
+              })
+
+              localStorage.setItem(storageKey, JSON.stringify(merged))
+              localStorage.setItem(`services_last_sync_${warehouse.id}`, Date.now().toString())
+            })
+            console.log(`✅ Services stored for ${warehouses.length} warehouses`)
+          }
+        }
+      } else {
+        console.warn('Failed to sync services:', await servicesResponse.text())
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 800))
+
+      // Step 4: Success!
+      setSyncStage('success')
+      console.log('[USPS Config] ✅ All sync operations completed successfully')
+
+      // Wait 2 seconds before closing
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      // NOW notify parent (but we already saved everything manually)
+      onSave(integration.id, config)
+
+      // Small delay to let parent update
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Reload the page to refresh all components with new data
+      console.log('[USPS Config] 🔄 Reloading page to refresh data...')
+      
+      // Close modal (config already saved earlier)
       onClose()
+
+      window.location.reload()
+    } catch (error) {
+      console.error('[USPS Config] Error during sync:', error)
+      setSyncing(false)
+      setSyncStage('idle')
+      setTestResult({
+        success: false,
+        message: 'Configuration saved, but sync failed. Use "Sync from API" buttons to retry.'
+      })
     }
   }
+
 
   const isConfigValid =
     (config.consumerKey?.trim().length ?? 0) > 0 &&
     (config.consumerSecret?.trim().length ?? 0) > 0
 
+  // Get stage display information
+  const getStageInfo = (stage: SyncStage) => {
+    switch (stage) {
+      case 'saving-config':
+        return { text: 'Saving Configuration...', icon: '💾', color: 'text-blue-600' }
+      case 'updating-boxes':
+        return { text: 'Updating Boxes...', icon: '📦', color: 'text-blue-600' }
+      case 'updating-services':
+        return { text: 'Updating Services...', icon: '🚚', color: 'text-blue-600' }
+      case 'success':
+        return { text: 'Sync Successful!', icon: '✅', color: 'text-green-600' }
+      default:
+        return null
+    }
+  }
+
+  const currentStageInfo = getStageInfo(syncStage)
+
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog as="div" className="relative z-50" onClose={syncing ? () => {} : onClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -168,23 +308,24 @@ export default function USPSConfigModal({
               <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-lg bg-white shadow-xl transition-all flex flex-col max-h-[90vh]">
                 {/* Header */}
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex-shrink-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-3xl">📮</span>
-                        <Dialog.Title className="text-lg font-semibold text-gray-900">
-                          Configure USPS Integration
-                        </Dialog.Title>
-                      </div>
-                      <button
-                        onClick={onClose}
-                        className="text-gray-400 hover:text-gray-500"
-                      >
-                        <XMarkIcon className="h-6 w-6" />
-                      </button>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <span className="text-3xl">📮</span>
+                      <Dialog.Title className="text-lg font-semibold text-gray-900">
+                        Configure USPS Integration
+                      </Dialog.Title>
                     </div>
+                    <button
+                      onClick={onClose}
+                      disabled={syncing}
+                      className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <XMarkIcon className="h-6 w-6" />
+                    </button>
                   </div>
+                </div>
 
-                {/* Content */}
+                {/* Content - ScrollableI'll continue with the rest of the file... */}
                 <div className="px-6 py-6 space-y-6 overflow-y-auto flex-1">
                   {/* Pending Approval Warning */}
                   {testResult && !testResult.success && testResult.message?.includes('Pending') && (
@@ -213,9 +354,8 @@ export default function USPSConfigModal({
                     </div>
                   )}
 
-                  {/* Info Banner - Now Collapsible */}
+                  {/* Info Banner - Collapsible */}
                   <div className="rounded-md bg-blue-50 border border-blue-200">
-                    {/* Clickable Header */}
                     <button
                       onClick={() => setShowInstructions(!showInstructions)}
                       className="w-full p-4 flex items-center justify-between hover:bg-blue-100 transition-colors rounded-md"
@@ -233,7 +373,6 @@ export default function USPSConfigModal({
                       />
                     </button>
 
-                    {/* Collapsible Content */}
                     <div
                       className={`overflow-hidden transition-all duration-300 ease-in-out ${
                         showInstructions ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
@@ -294,7 +433,8 @@ export default function USPSConfigModal({
                       <button
                         type="button"
                         onClick={() => handleEnvironmentChange('sandbox')}
-                        className={`relative flex flex-col items-center p-4 border-2 rounded-lg transition-colors ${
+                        disabled={syncing}
+                        className={`relative flex flex-col items-center p-4 border-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                           config.environment === 'sandbox'
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:border-gray-300'
@@ -319,7 +459,8 @@ export default function USPSConfigModal({
                       <button
                         type="button"
                         onClick={() => handleEnvironmentChange('production')}
-                        className={`relative flex flex-col items-center p-4 border-2 rounded-lg transition-colors ${
+                        disabled={syncing}
+                        className={`relative flex flex-col items-center p-4 border-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                           config.environment === 'production'
                             ? 'border-green-500 bg-green-50'
                             : 'border-gray-200 hover:border-gray-300'
@@ -353,8 +494,9 @@ export default function USPSConfigModal({
                       id="consumerKey"
                       value={config.consumerKey}
                       onChange={(e) => setConfig({ ...config, consumerKey: e.target.value })}
+                      disabled={syncing}
                       placeholder="Enter your USPS Consumer Key"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <p className="mt-1 text-xs text-gray-500">
                       Found in your USPS Developer Portal under "Apps"
@@ -372,13 +514,15 @@ export default function USPSConfigModal({
                         id="consumerSecret"
                         value={config.consumerSecret}
                         onChange={(e) => setConfig({ ...config, consumerSecret: e.target.value })}
+                        disabled={syncing}
                         placeholder="Enter your USPS Consumer Secret"
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                       <button
                         type="button"
                         onClick={() => setShowSecret(!showSecret)}
-                        className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600"
+                        disabled={syncing}
+                        className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600 disabled:opacity-50"
                       >
                         {showSecret ? (
                           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -398,7 +542,7 @@ export default function USPSConfigModal({
                   </div>
 
                   {/* Test Result */}
-                  {testResult && (
+                  {testResult && !syncing && (
                     <div className={`rounded-md p-4 ${
                       testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
                     }`}>
@@ -413,10 +557,11 @@ export default function USPSConfigModal({
                 </div>
 
                 {/* Footer */}
-                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex-shrink-0">
+                  <div className="flex items-center justify-between">
                     <button
                       onClick={handleTest}
-                      disabled={!isConfigValid || testing}
+                      disabled={!isConfigValid || testing || syncing}
                       className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {testing ? 'Testing Connection...' : 'Test Connection'}
@@ -425,20 +570,52 @@ export default function USPSConfigModal({
                     <div className="flex space-x-3">
                       <button
                         onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                        disabled={syncing}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={handleSave}
-                        disabled={!isConfigValid}
+                        disabled={!isConfigValid || syncing}
                         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {syncing ? 'Saving & Syncing Boxes...' : 'Save Configuration'}
+                        Save Configuration
                       </button>
                     </div>
                   </div>
-                </Dialog.Panel>
+
+                  {/* Progress Notification - Appears below buttons */}
+                  {syncing && currentStageInfo && (
+                    <div className="mt-4 rounded-md bg-blue-50 border border-blue-200 p-3">
+                      <div className="flex items-center">
+                        <span className="text-xl mr-3">{currentStageInfo.icon}</span>
+                        <div className="flex-1">
+                          <p className={`text-sm font-medium ${
+                            syncStage === 'success' ? 'text-green-700' : 'text-blue-700'
+                          }`}>
+                            {currentStageInfo.text}
+                          </p>
+                          {syncStage !== 'success' && (
+                            <div className="mt-2 w-full bg-blue-200 rounded-full h-2 overflow-hidden relative">
+                              <div
+                                className="absolute inset-0 bg-gradient-to-r from-blue-400 via-blue-600 to-blue-400 rounded-full"
+                                style={{
+                                  width: '200%',
+                                  animation: 'slideProgress 1.5s linear infinite'
+                                }}
+                              ></div>
+                            </div>
+                          )}
+                        </div>
+                        {syncStage === 'success' && (
+                          <CheckCircleIcon className="h-6 w-6 text-green-600 ml-2" />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Dialog.Panel>
             </Transition.Child>
           </div>
         </div>

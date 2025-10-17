@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   console.log('[UPS Callback] Code:', code ? 'present' : 'missing')
   console.log('[UPS Callback] State:', state)
   console.log('[UPS Callback] Error:', error)
+  console.log('[UPS Callback] Full URL:', request.url)
   console.log('[UPS Callback] ========================================')
 
   // Handle OAuth errors
@@ -38,14 +39,18 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies()
     const storedState = cookieStore.get('ups_oauth_state')?.value
     const accountNumber = cookieStore.get('ups_account_number')?.value
-    const environment = cookieStore.get('ups_environment')?.value
+    const environment = cookieStore.get('ups_environment')?.value as 'sandbox' | 'production'
 
     console.log('[UPS Callback] Stored state:', storedState)
-    console.log('[UPS Callback] Account number:', accountNumber ? 'present' : 'missing')
+    console.log('[UPS Callback] Received state:', state)
+    console.log('[UPS Callback] Account number:', accountNumber)
     console.log('[UPS Callback] Environment:', environment)
 
     // Validate state (CSRF protection)
     if (state !== storedState) {
+      console.error('[UPS Callback] ❌ State mismatch!')
+      console.error('[UPS Callback] Expected:', storedState)
+      console.error('[UPS Callback] Received:', state)
       throw new Error('Invalid state parameter - possible CSRF attack')
     }
 
@@ -60,8 +65,12 @@ export async function GET(request: NextRequest) {
     const clientSecret = process.env.UPS_CLIENT_SECRET
     const redirectUri = process.env.NEXT_PUBLIC_UPS_REDIRECT_URI || 'https://orders-warehouse.adv.design/api/auth/ups/callback'
 
+    console.log('[UPS Callback] Client ID:', clientId?.substring(0, 10) + '...')
+    console.log('[UPS Callback] Client Secret:', clientSecret ? 'present' : 'missing')
+    console.log('[UPS Callback] Redirect URI:', redirectUri)
+
     if (!clientId || !clientSecret) {
-      throw new Error('UPS credentials not configured')
+      throw new Error('UPS credentials not configured in environment variables')
     }
 
     const baseUrl = environment === 'production'
@@ -70,40 +79,59 @@ export async function GET(request: NextRequest) {
 
     const tokenUrl = `${baseUrl}/security/v1/oauth/token`
 
-    console.log('[UPS Callback] Exchanging code for tokens...')
     console.log('[UPS Callback] Token URL:', tokenUrl)
+    console.log('[UPS Callback] Exchanging code for tokens...')
 
-    // Create Basic Auth header
+    // Create Basic Auth header (client_id:client_secret)
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+
+    const tokenRequestBody = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: redirectUri
+    })
+
+    console.log('[UPS Callback] Token request body:', tokenRequestBody.toString())
 
     const response = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${credentials}`
+        'Authorization': `Basic ${credentials}`,
+        'Accept': 'application/json'
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: code,
-        redirect_uri: redirectUri
-      }).toString()
+      body: tokenRequestBody.toString()
     })
 
     const responseText = await response.text()
     console.log('[UPS Callback] Token response status:', response.status)
+    console.log('[UPS Callback] Token response body:', responseText.substring(0, 200) + '...')
 
     if (!response.ok) {
-      console.error('[UPS Callback] ❌ Token exchange failed:', responseText)
-      throw new Error(`Token exchange failed: ${responseText}`)
+      console.error('[UPS Callback] ❌ Token exchange failed')
+      console.error('[UPS Callback] Status:', response.status)
+      console.error('[UPS Callback] Response:', responseText)
+      throw new Error(`Token exchange failed (${response.status}): ${responseText}`)
     }
 
     const tokens = JSON.parse(responseText)
     console.log('[UPS Callback] ✅ Tokens obtained successfully')
+    console.log('[UPS Callback] Token type:', tokens.token_type)
+    console.log('[UPS Callback] Expires in:', tokens.expires_in)
+    console.log('[UPS Callback] Has refresh token:', !!tokens.refresh_token)
 
     // Create response with redirect
-    const redirectResponse = NextResponse.redirect(
-      new URL(`/dashboard/integrations?ups_success=true&ups_account=${accountNumber}&ups_env=${environment}&ups_access_token=${tokens.access_token}&ups_refresh_token=${tokens.refresh_token}&ups_expires_in=${tokens.expires_in}`, request.url)
-    )
+    const redirectUrl = new URL('/dashboard/integrations', request.url)
+    redirectUrl.searchParams.set('ups_success', 'true')
+    redirectUrl.searchParams.set('ups_account', accountNumber)
+    redirectUrl.searchParams.set('ups_env', environment)
+    redirectUrl.searchParams.set('ups_access_token', tokens.access_token)
+    redirectUrl.searchParams.set('ups_refresh_token', tokens.refresh_token || '')
+    redirectUrl.searchParams.set('ups_expires_in', tokens.expires_in?.toString() || '3600')
+
+    console.log('[UPS Callback] ✅ Redirecting to:', redirectUrl.toString())
+
+    const redirectResponse = NextResponse.redirect(redirectUrl)
 
     // Clear cookies
     redirectResponse.cookies.delete('ups_oauth_state')
@@ -114,6 +142,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('[UPS Callback] ❌ Error:', error.message)
+    console.error('[UPS Callback] Stack:', error.stack)
 
     // Clear cookies on error
     const errorResponse = NextResponse.redirect(

@@ -16,22 +16,44 @@ export async function POST(request: NextRequest) {
     console.log('[Services Sync] Credentials received:', credentials ? 'Yes' : 'No')
 
     // Sync USPS Services
-    if (carriers.includes('USPS') && credentials) {
-      console.log('[Services Sync] Syncing USPS services...')
+    if (carriers.includes('USPS')) {
+      console.log('[Services Sync] USPS found in carriers list')
+
+      if (!credentials) {
+        console.error('[Services Sync] No USPS credentials provided')
+        return NextResponse.json(
+          { error: 'USPS credentials are required' },
+          { status: 400 }
+        )
+      }
+
+      console.log('[Services Sync] USPS credentials found, initializing service...')
+      console.log('[Services Sync] Environment:', credentials.environment)
 
       try {
+        // Create USPS service with OAuth credentials - CORRECTED PROPERTY NAMES
         const uspsService = new USPSServiceV2(
-          credentials.userId,
-          credentials.apiKey,
-          credentials.apiUrl.includes('test') ? 'sandbox' : 'production'
+          credentials.consumerKey,  // ✅ Correct property from integrationTypes.ts
+          credentials.consumerSecret,  // ✅ Correct property from integrationTypes.ts
+          credentials.environment
         )
 
         // Get available USPS services from API
+        console.log('[Services Sync] Fetching available USPS services...')
         const uspsServices = await uspsService.getAvailableServices()
 
         console.log(`[Services Sync] Found ${uspsServices.length} USPS services`)
 
-        services.push(...uspsServices)
+        // Add unique IDs and timestamps to each service
+        const servicesWithIds = uspsServices.map((service: any, index: number) => ({
+          ...service,
+          id: `usps-${Date.now()}-${index}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }))
+
+        services.push(...servicesWithIds)
+        console.log(`[Services Sync] Successfully synced ${servicesWithIds.length} USPS services`)
       } catch (error: any) {
         console.error('[Services Sync] USPS sync error:', error)
         return NextResponse.json(
