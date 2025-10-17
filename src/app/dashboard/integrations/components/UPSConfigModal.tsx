@@ -68,7 +68,7 @@ export default function UPSConfigModal({
       document.cookie = `ups_account_number=${accountNumber}; path=/; max-age=600; SameSite=Lax`
       document.cookie = `ups_environment=${environment}; path=/; max-age=600; SameSite=Lax`
 
-      // Build authorization URL
+      // Build authorization URL - NO VALIDATION CALL
       const params = new URLSearchParams({
         client_id: clientId,
         redirect_uri: redirectUri,
@@ -78,11 +78,7 @@ export default function UPSConfigModal({
         state: state
       })
 
-      const baseUrl = environment === 'production'
-        ? 'https://www.ups.com'
-        : 'https://www.ups.com'
-
-      const authUrl = `${baseUrl}/lasso/signin?${params.toString()}`
+      const authUrl = `https://www.ups.com/lasso/signin?${params.toString()}`
 
       console.log('========================================')
       console.log('[UPS OAuth] Full Authorization URL:')
