@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/sync-boxes",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/sync-services",
+      "schedule": "0 3 * * *"
     }
   ]
 }

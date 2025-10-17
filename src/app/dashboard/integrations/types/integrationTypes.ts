@@ -21,12 +21,10 @@ export interface USPSIntegration extends BaseIntegration {
   type: 'shipping'
   name: 'USPS'
   config: {
-    // NEW: OAuth credentials instead of just User ID
     consumerKey: string
     consumerSecret: string
     environment: Environment
     apiUrl: string
-    // OAuth token storage (managed automatically)
     accessToken?: string
     tokenExpiry?: string
   }
@@ -35,6 +33,26 @@ export interface USPSIntegration extends BaseIntegration {
     rateCalculation: boolean
     addressValidation: boolean
     tracking: boolean
+  }
+}
+
+export interface UPSIntegration extends BaseIntegration {
+  type: 'shipping'
+  name: 'UPS'
+  config: {
+    accountNumber: string
+    accessToken?: string
+    refreshToken?: string
+    tokenExpiry?: string
+    environment: Environment
+    apiUrl: string
+  }
+  features: {
+    labelGeneration: boolean
+    rateCalculation: boolean
+    addressValidation: boolean
+    tracking: boolean
+    pickupScheduling: boolean
   }
 }
 
@@ -58,7 +76,7 @@ export interface WooCommerceIntegration extends BaseIntegration {
   }
 }
 
-export type Integration = USPSIntegration | ShopifyIntegration | WooCommerceIntegration
+export type Integration = USPSIntegration | UPSIntegration | ShopifyIntegration | WooCommerceIntegration
 
 export interface IntegrationSettings {
   integrations: Integration[]
@@ -75,18 +93,39 @@ export const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
       status: 'disconnected',
       enabled: false,
       description: 'Generate shipping labels, calculate rates, and track packages with USPS',
-      icon: '📮',
+      icon: '/logos/usps-logo.svg',
       config: {
         consumerKey: '',
         consumerSecret: '',
         environment: 'sandbox',
-        apiUrl: 'https://apis-tem.usps.com' // ← CORRECTED URL
+        apiUrl: 'https://apis-tem.usps.com'
       },
       features: {
         labelGeneration: true,
         rateCalculation: true,
         addressValidation: true,
         tracking: true
+      }
+    },
+    {
+      id: 'ups',
+      name: 'UPS',
+      type: 'shipping',
+      status: 'disconnected',
+      enabled: false,
+      description: 'Generate shipping labels, calculate rates, and track packages with UPS',
+      icon: '/logos/ups-logo.svg',
+      config: {
+        accountNumber: '',
+        environment: 'sandbox',
+        apiUrl: 'https://wwwcie.ups.com'
+      },
+      features: {
+        labelGeneration: true,
+        rateCalculation: true,
+        addressValidation: true,
+        tracking: true,
+        pickupScheduling: true
       }
     }
   ],

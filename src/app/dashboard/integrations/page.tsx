@@ -2,7 +2,8 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   PlusIcon,
   CheckCircleIcon,
@@ -12,13 +13,69 @@ import {
 import { useIntegrations } from './hooks/useIntegrations'
 import IntegrationCard from './components/IntegrationCard'
 import USPSConfigModal from './components/USPSConfigModal'
+import UPSConfigModal from './components/UPSConfigModal'
 import { Integration } from './types/integrationTypes'
 
-export default function IntegrationsPage() {
+function IntegrationsContent() {
+  const searchParams = useSearchParams()
   const { settings, loading, updateIntegration, testIntegration } = useIntegrations()
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [testResults, setTestResults] = useState<{ [key: string]: { success: boolean; message: string } | null }>({})
+
+  // Handle UPS OAuth callback success - MUST BE HERE AT THE TOP WITH OTHER HOOKS
+  useEffect(() => {
+    const upsSuccess = searchParams.get('ups_success')
+    const upsAccount = searchParams.get('ups_account')
+    const upsEnv = searchParams.get('ups_env')
+    const upsAccessToken = searchParams.get('ups_access_token')
+    const upsRefreshToken = searchParams.get('ups_refresh_token')
+    const upsExpiresIn = searchParams.get('ups_expires_in')
+    const upsError = searchParams.get('ups_error')
+    const upsErrorDescription = searchParams.get('ups_error_description')
+
+    if (upsError) {
+      console.error('[UPS OAuth] Error:', upsError, upsErrorDescription)
+      alert(`UPS connection failed: ${upsError}${upsErrorDescription ? ` - ${upsErrorDescription}` : ''}`)
+      window.history.replaceState({}, '', '/dashboard/integrations')
+      return
+    }
+
+    if (upsSuccess && upsAccessToken && upsRefreshToken && upsAccount && upsEnv) {
+      console.log('[UPS OAuth] ✅ Connection successful, saving integration...')
+
+      updateIntegration('ups', {
+        config: {
+          accountNumber: upsAccount,
+          accessToken: upsAccessToken,
+          refreshToken: upsRefreshToken,
+          tokenExpiry: new Date(Date.now() + parseInt(upsExpiresIn || '3600') * 1000).toISOString(),
+          environment: upsEnv as 'sandbox' | 'production',
+          apiUrl: upsEnv === 'production'
+            ? 'https://onlinetools.ups.com'
+            : 'https://wwwcie.ups.com'
+        },
+        status: 'connected',
+        enabled: true,
+        connectedAt: new Date().toISOString()
+      })
+
+      setTestResults(prev => ({
+        ...prev,
+        ups: { success: true, message: '✅ UPS connected successfully!' }
+      }))
+
+      setTimeout(() => {
+        setTestResults(prev => ({
+          ...prev,
+          ups: null
+        }))
+      }, 5000)
+
+      window.history.replaceState({}, '', '/dashboard/integrations')
+      console.log('[UPS OAuth] ✅ Integration setup complete!')
+    }
+  }, [searchParams, updateIntegration])
 
   const handleConfigureClick = (integration: Integration) => {
     setSelectedIntegration(integration)
@@ -45,14 +102,8 @@ export default function IntegrationsPage() {
     })
   }
 
-  /**
-   * Get default config for disconnecting an integration
-   * Preserves user preferences while clearing credentials
-   */
   const getDisconnectedConfig = (integration: Integration): any => {
     if (integration.type === 'shipping') {
-      // All shipping integrations follow similar pattern
-      // Preserve environment settings, clear credentials
       return {
         ...integration.config,
         consumerKey: '',
@@ -63,7 +114,6 @@ export default function IntegrationsPage() {
     }
 
     if (integration.type === 'ecommerce') {
-      // Ecommerce integrations - clear all
       const baseConfig: any = {}
 
       if (integration.name === 'Shopify') {
@@ -79,7 +129,6 @@ export default function IntegrationsPage() {
       return baseConfig
     }
 
-    // Default: clear all config
     return {}
   }
 
@@ -94,7 +143,6 @@ export default function IntegrationsPage() {
   }
 
   const handleTestConnection = async (integration: Integration) => {
-    // Clear any existing result for this integration
     setTestResults(prev => ({
       ...prev,
       [integration.id]: null
@@ -123,7 +171,6 @@ export default function IntegrationsPage() {
       })
     }
 
-    // Auto-dismiss after 5 seconds
     setTimeout(() => {
       setTestResults(prev => ({
         ...prev,
@@ -241,7 +288,6 @@ export default function IntegrationsPage() {
                 onTest={() => handleTestConnection(integration)}
               />
 
-              {/* Test Result Message - Shows under the card */}
               {testResults[integration.id] && (
                 <div
                   className={`mt-2 px-4 py-2 rounded-md text-sm font-medium animate-fade-in ${
@@ -274,7 +320,6 @@ export default function IntegrationsPage() {
                   onTest={() => handleTestConnection(integration)}
                 />
 
-                {/* Test Result Message - Shows under the card */}
                 {testResults[integration.id] && (
                   <div
                     className={`mt-2 px-4 py-2 rounded-md text-sm font-medium animate-fade-in ${
@@ -298,7 +343,7 @@ export default function IntegrationsPage() {
         <h2 className="text-lg font-medium text-gray-900 mb-4">Coming Soon</h2>
         <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
           <p className="text-sm text-gray-500">
-            More integrations coming soon: FedEx, UPS, DHL, Amazon, eBay, and more
+            More integrations coming soon: FedEx, DHL, Amazon, eBay, and more
           </p>
         </div>
       </div>
@@ -317,8 +362,32 @@ export default function IntegrationsPage() {
               onSave={handleSaveConfig}
             />
           )}
+
+          {selectedIntegration.id === 'ups' && (
+            <UPSConfigModal
+              isOpen={showConfigModal}
+              onClose={() => {
+                setShowConfigModal(false)
+                setSelectedIntegration(null)
+              }}
+              integration={selectedIntegration as any}
+              onSave={handleSaveConfig}
+            />
+          )}
         </>
       )}
     </div>
+  )
+}
+
+export default function IntegrationsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    }>
+      <IntegrationsContent />
+    </Suspense>
   )
 }

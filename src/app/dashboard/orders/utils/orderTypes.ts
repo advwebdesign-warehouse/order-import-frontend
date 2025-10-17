@@ -43,6 +43,8 @@ export interface Order {
   status: string
   fulfillmentStatus: string
   platform: string
+  shopName?: string
+  storeName?: string
   orderDate: string
   itemCount: number
   shippingFirstName: string

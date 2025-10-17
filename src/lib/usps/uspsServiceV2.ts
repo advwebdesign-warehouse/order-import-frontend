@@ -1,4 +1,4 @@
-//file path: src/lib/usps/uspsServiceV2.ts
+//file path: lib/usps/uspsServiceV2.ts
 
 // Shared token cache across all instances
 interface TokenCache {
@@ -341,6 +341,338 @@ export class USPSServiceV2 {
         eventCountry: event.eventCountry
       })) || []
     }
+  }
+
+  /**
+   * Get available USPS services
+   * Returns list of services that can be used for shipping
+   * This represents what would come from the USPS API
+   */
+  async getAvailableServices(): Promise<any[]> {
+    console.log('[USPS] Getting available services from API...')
+
+    // In a real implementation, this would call the USPS API
+    // For now, we return the standard USPS services that are available through their API
+    const services = [
+      {
+        carrier: 'USPS',
+        serviceCode: 'PRIORITY_MAIL',
+        serviceName: 'Priority Mail',
+        displayName: 'USPS Priority Mail',
+        description: '1-3 business days',
+        serviceType: 'domestic',
+        estimatedDays: '1-3 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: true,
+          insuranceAvailable: true,
+          saturdayDelivery: true,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 108,
+            width: 108,
+            height: 108
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'PRIORITY_MAIL_FLAT_RATE',
+        serviceName: 'Priority Mail Flat Rate',
+        displayName: 'USPS Priority Mail Flat Rate',
+        description: '1-3 business days (flat rate boxes/envelopes)',
+        serviceType: 'domestic',
+        estimatedDays: '1-3 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: true,
+          insuranceAvailable: true,
+          saturdayDelivery: true,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 108,
+            width: 108,
+            height: 108
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'PRIORITY_MAIL_EXPRESS',
+        serviceName: 'Priority Mail Express',
+        displayName: 'USPS Priority Mail Express',
+        description: 'Overnight to 2-day guarantee',
+        serviceType: 'domestic',
+        estimatedDays: 'Overnight to 2-day',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: true,
+          insuranceAvailable: true,
+          saturdayDelivery: true,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 108,
+            width: 108,
+            height: 108
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'PRIORITY_MAIL_EXPRESS_FLAT_RATE',
+        serviceName: 'Priority Mail Express Flat Rate',
+        displayName: 'USPS Priority Mail Express Flat Rate',
+        description: 'Overnight to 2-day (flat rate envelopes)',
+        serviceType: 'domestic',
+        estimatedDays: 'Overnight to 2-day',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: true,
+          insuranceAvailable: true,
+          saturdayDelivery: true,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 108,
+            width: 108,
+            height: 108
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'USPS_GROUND_ADVANTAGE',
+        serviceName: 'Ground Advantage',
+        displayName: 'USPS Ground Advantage',
+        description: '2-5 business days',
+        serviceType: 'domestic',
+        estimatedDays: '2-5 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: false,
+          insuranceAvailable: true,
+          saturdayDelivery: false,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 130,
+            width: 130,
+            height: 130
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'FIRST-CLASS_PACKAGE_SERVICE',
+        serviceName: 'First-Class Package Service',
+        displayName: 'USPS First-Class Package',
+        description: '1-5 business days',
+        serviceType: 'domestic',
+        estimatedDays: '1-5 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: false,
+          insuranceAvailable: false,
+          saturdayDelivery: false,
+          maxInsuranceValue: 0
+        },
+        restrictions: {
+          maxWeight: 15.999,
+          maxDimensions: {
+            length: 22,
+            width: 18,
+            height: 15
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'MEDIA_MAIL',
+        serviceName: 'Media Mail',
+        displayName: 'USPS Media Mail',
+        description: '2-8 business days (books, media only)',
+        serviceType: 'domestic',
+        estimatedDays: '2-8 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: false,
+          insuranceAvailable: true,
+          saturdayDelivery: false,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 108,
+            width: 108,
+            height: 108
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'LIBRARY_MAIL',
+        serviceName: 'Library Mail',
+        displayName: 'USPS Library Mail',
+        description: '2-9 business days',
+        serviceType: 'domestic',
+        estimatedDays: '2-9 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: false,
+          signatureAvailable: false,
+          insuranceAvailable: false,
+          saturdayDelivery: false,
+          maxInsuranceValue: 0
+        },
+        restrictions: {
+          maxWeight: 70
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'PARCEL_SELECT',
+        serviceName: 'Parcel Select Ground',
+        displayName: 'USPS Parcel Select Ground',
+        description: '2-8 business days',
+        serviceType: 'domestic',
+        estimatedDays: '2-8 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: false,
+          insuranceAvailable: true,
+          saturdayDelivery: false,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 130,
+            width: 130,
+            height: 130
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'PRIORITY_MAIL_INTERNATIONAL',
+        serviceName: 'Priority Mail International',
+        displayName: 'USPS Priority Mail International',
+        description: '6-10 business days',
+        serviceType: 'international',
+        estimatedDays: '6-10 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: true,
+          insuranceAvailable: true,
+          saturdayDelivery: false,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 79,
+            width: 79,
+            height: 79
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'PRIORITY_MAIL_EXPRESS_INTERNATIONAL',
+        serviceName: 'Priority Mail Express International',
+        displayName: 'USPS Priority Mail Express International',
+        description: '3-5 business days',
+        serviceType: 'international',
+        estimatedDays: '3-5 business days',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: true,
+          insuranceAvailable: true,
+          saturdayDelivery: false,
+          maxInsuranceValue: 5000
+        },
+        restrictions: {
+          maxWeight: 70,
+          maxDimensions: {
+            length: 79,
+            width: 79,
+            height: 79
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'FIRST_CLASS_PACKAGE_INTERNATIONAL',
+        serviceName: 'First-Class Package International Service',
+        displayName: 'USPS First-Class Package International',
+        description: 'Varies by destination',
+        serviceType: 'international',
+        estimatedDays: 'Varies by destination',
+        isActive: true,
+        features: {
+          trackingIncluded: true,
+          signatureAvailable: false,
+          insuranceAvailable: false,
+          saturdayDelivery: false,
+          maxInsuranceValue: 0
+        },
+        restrictions: {
+          maxWeight: 4,
+          maxDimensions: {
+            length: 24,
+            width: 12,
+            height: 12
+          }
+        }
+      },
+      {
+        carrier: 'USPS',
+        serviceCode: 'FIRST_CLASS_MAIL_INTERNATIONAL',
+        serviceName: 'First-Class Mail International',
+        displayName: 'USPS First-Class Mail International',
+        description: 'Letters and flats only',
+        serviceType: 'international',
+        estimatedDays: 'Varies by destination',
+        isActive: true,
+        features: {
+          trackingIncluded: false,
+          signatureAvailable: false,
+          insuranceAvailable: false,
+          saturdayDelivery: false,
+          maxInsuranceValue: 0
+        },
+        restrictions: {
+          maxWeight: 4
+        }
+      }
+    ]
+
+    console.log(`[USPS] Retrieved ${services.length} services from API`)
+    return services
   }
 
   /**

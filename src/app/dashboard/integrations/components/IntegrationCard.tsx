@@ -59,7 +59,18 @@ export default function IntegrationCard({
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
             {integration.icon && (
-              <span className="text-3xl">{integration.icon}</span>
+              <>
+                {/* ✅ Check if icon is a URL/path (image) or emoji (text) */}
+                {integration.icon.startsWith('http') || integration.icon.startsWith('/') ? (
+                  <img
+                    src={integration.icon}
+                    alt={`${integration.name} logo`}
+                    className="h-10 w-10 object-contain"
+                  />
+                ) : (
+                  <span className="text-3xl">{integration.icon}</span>
+                )}
+              </>
             )}
             <div>
               <h3 className="text-lg font-semibold text-gray-900">

@@ -1,4 +1,4 @@
-// File: app/dashboard/warehouses/context/WarehouseContext.tsx
+//file path: app/dashboard/warehouses/context/WarehouseContext.tsx
 
 'use client'
 
@@ -37,7 +37,10 @@ const mockWarehouses: Warehouse[] = [
     },
     createdAt: '2025-01-01T10:00:00Z',
     updatedAt: '2025-09-15T14:30:00Z',
-    productCount: 150
+    productCount: 150,
+    // NEW: Return address fields
+    useDifferentReturnAddress: false,
+    returnAddress: undefined
   },
   {
     id: '2',
@@ -67,12 +70,15 @@ const mockWarehouses: Warehouse[] = [
       orderStatusSettings: {
         ...DEFAULT_ORDER_STATUS_SETTINGS,
         displayText: 'pending shipments',
-        toShipStatuses: ['PENDING', 'PROCESSING', 'PICKING', 'PACKING'] // Custom settings for LA warehouse
+        toShipStatuses: ['PENDING', 'PROCESSING', 'PICKING', 'PACKING']
       }
     },
     createdAt: '2025-02-15T10:00:00Z',
     updatedAt: '2025-09-15T14:30:00Z',
-    productCount: 85
+    productCount: 85,
+    // NEW: Return address fields
+    useDifferentReturnAddress: false,
+    returnAddress: undefined
   },
   {
     id: '3',
@@ -102,12 +108,15 @@ const mockWarehouses: Warehouse[] = [
       orderStatusSettings: {
         ...DEFAULT_ORDER_STATUS_SETTINGS,
         displayText: 'orders awaiting fulfillment',
-        excludedStatuses: ['CANCELLED', 'RETURNED'] // Exclude returned orders too
+        excludedStatuses: ['CANCELLED', 'RETURNED']
       }
     },
     createdAt: '2025-03-01T10:00:00Z',
     updatedAt: '2025-09-15T14:30:00Z',
-    productCount: 120
+    productCount: 120,
+    // NEW: Return address fields
+    useDifferentReturnAddress: false,
+    returnAddress: undefined
   }
 ]
 
@@ -122,7 +131,6 @@ interface WarehouseContextType {
   getActiveWarehouses: () => Warehouse[]
   refetchWarehouses: () => Promise<void>
   resetToMockData: () => void
-  // New method for updating order status settings
   updateWarehouseOrderSettings: (id: string, orderStatusSettings: Partial<Warehouse['settings']['orderStatusSettings']>) => Promise<void>
 }
 
@@ -148,14 +156,17 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
     }
   }
 
-  // Migrate existing warehouses to include order status settings
+  // Migrate existing warehouses to include order status settings and return address fields
   const migrateWarehouseData = (warehouses: Warehouse[]): Warehouse[] => {
     return warehouses.map(warehouse => ({
       ...warehouse,
       settings: {
         ...warehouse.settings,
         orderStatusSettings: warehouse.settings.orderStatusSettings || DEFAULT_ORDER_STATUS_SETTINGS
-      }
+      },
+      // NEW: Ensure return address fields exist
+      useDifferentReturnAddress: warehouse.useDifferentReturnAddress ?? false,
+      returnAddress: warehouse.returnAddress ?? undefined
     }))
   }
 
@@ -177,7 +188,7 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
         const storedWarehouses = localStorage.getItem('warehouses')
         if (storedWarehouses) {
           const parsed = JSON.parse(storedWarehouses)
-          // Migrate data to include order status settings if missing
+          // Migrate data to include order status settings and return address fields if missing
           const migratedWarehouses = migrateWarehouseData(parsed)
           setWarehouses(migratedWarehouses)
           // Update localStorage with migrated data
@@ -206,8 +217,6 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
   // Add new warehouse
   const addWarehouse = async (warehouseData: Omit<Warehouse, 'id' | 'createdAt' | 'updatedAt'>): Promise<Warehouse> => {
     try {
-      // In real app: const response = await fetch('/api/warehouses', { method: 'POST', ... })
-
       const newWarehouse: Warehouse = {
         ...warehouseData,
         id: Date.now().toString(),
@@ -217,7 +226,10 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
         settings: {
           ...warehouseData.settings,
           orderStatusSettings: warehouseData.settings.orderStatusSettings || DEFAULT_ORDER_STATUS_SETTINGS
-        }
+        },
+        // NEW: Ensure return address fields are included
+        useDifferentReturnAddress: warehouseData.useDifferentReturnAddress ?? false,
+        returnAddress: warehouseData.returnAddress ?? undefined
       }
 
       const updatedWarehouses = [...warehouses, newWarehouse]
@@ -234,8 +246,6 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
   // Update existing warehouse
   const updateWarehouse = async (id: string, updates: Partial<Warehouse>) => {
     try {
-      // In real app: await fetch(`/api/warehouses/${id}`, { method: 'PUT', ... })
-
       const updatedWarehouses = warehouses.map(warehouse =>
         warehouse.id === id
           ? { ...warehouse, ...updates, updatedAt: new Date().toISOString() }
@@ -283,8 +293,6 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
       if (warehouseToDelete?.isDefault) {
         throw new Error('Cannot delete the default warehouse')
       }
-
-      // In real app: await fetch(`/api/warehouses/${id}`, { method: 'DELETE' })
 
       const updatedWarehouses = warehouses.filter(w => w.id !== id)
       setWarehouses(updatedWarehouses)

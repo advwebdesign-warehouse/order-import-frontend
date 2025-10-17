@@ -7,6 +7,7 @@ import { XMarkIcon, PencilIcon, StarIcon } from '@heroicons/react/24/outline'
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid'
 import ReactCountryFlag from "react-country-flag"
 import { Warehouse } from '../utils/warehouseTypes'
+import { generateAddressPreview } from '../utils/addressVariables'
 
 interface WarehouseDetailsModalProps {
   isOpen: boolean
@@ -172,6 +173,50 @@ export default function WarehouseDetailsModal({
                           {warehouse.address.country}
                         </address>
                       </div>
+
+                      {/* Return Address Information - if different */}
+                      {warehouse.useDifferentReturnAddress && warehouse.returnAddress && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                            <CountryFlag countryCode={warehouse.returnAddress.countryCode} />
+                            <span className="ml-2">Return Address</span>
+                            <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                              Different from warehouse
+                            </span>
+                          </h4>
+
+                          {/* Show template with variables */}
+                          {warehouse.returnAddress.name && (
+                            <div className="mb-3">
+                              <p className="text-sm font-semibold text-gray-900">
+                                {warehouse.returnAddress.name}
+                              </p>
+                              {warehouse.returnAddress.name.includes('[') && (
+                                <p className="text-xs text-gray-600 mt-1">
+                                  Preview: {generateAddressPreview(warehouse.returnAddress.name, {
+                                    shop: 'Example Shop',
+                                    warehouse: warehouse.name,
+                                    code: warehouse.code,
+                                    platform: 'Shopify'
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          <address className="text-sm text-gray-600 not-italic leading-relaxed">
+                            {warehouse.returnAddress.address1}<br />
+                            {warehouse.returnAddress.address2 && (
+                              <>{warehouse.returnAddress.address2}<br /></>
+                            )}
+                            {warehouse.returnAddress.city}, {warehouse.returnAddress.state} {warehouse.returnAddress.zip}<br />
+                            {warehouse.returnAddress.country}
+                          </address>
+                          <p className="mt-2 text-xs text-gray-500">
+                            This address will be used as the return address on shipping labels
+                          </p>
+                        </div>
+                      )}
 
                       {/* Contact Information */}
                       <div className="bg-white border rounded-lg p-4">

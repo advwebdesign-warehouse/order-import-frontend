@@ -102,6 +102,47 @@ export function getUserUSPSCredentials(userId?: string): {
 }
 
 /**
+ * Get UPS credentials for a specific user
+ */
+export function getUserUPSCredentials(userId?: string): {
+  accountNumber: string
+  accessToken?: string
+  refreshToken?: string
+  tokenExpiry?: string
+  apiUrl: string
+  environment: 'sandbox' | 'production'
+} | null {
+  const uid = userId || getCurrentUserId()
+  const integrations = getUserIntegrations(uid)
+
+  if (!integrations) return null
+
+  const upsIntegration = integrations.integrations.find(i => i.id === 'ups' && i.enabled)
+
+  if (upsIntegration && upsIntegration.type === 'shipping' && upsIntegration.name === 'UPS') {
+    const config = upsIntegration.config as {
+      accountNumber: string
+      accessToken?: string
+      refreshToken?: string
+      tokenExpiry?: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
+
+    return {
+      accountNumber: config.accountNumber,
+      accessToken: config.accessToken,
+      refreshToken: config.refreshToken,
+      tokenExpiry: config.tokenExpiry,
+      apiUrl: config.apiUrl,
+      environment: config.environment
+    }
+  }
+
+  return null
+}
+
+/**
  * Get all users who have USPS integration enabled
  */
 export function getAllUsersWithUSPS(): Array<{
@@ -149,6 +190,69 @@ export function getAllUsersWithUSPS(): Array<{
       credentials: {
         consumerKey: config.consumerKey,
         consumerSecret: config.consumerSecret,
+        environment: config.environment,
+        apiUrl: config.apiUrl
+      }
+    })
+  }
+
+  return users
+}
+
+/**
+ * Get all users who have UPS integration enabled
+ */
+export function getAllUsersWithUPS(): Array<{
+  userId: string
+  credentials: {
+    accountNumber: string
+    accessToken?: string
+    refreshToken?: string
+    tokenExpiry?: string
+    environment: 'sandbox' | 'production'
+    apiUrl: string
+  }
+}> {
+  if (typeof window === 'undefined') return []
+
+  const users: Array<{
+    userId: string
+    credentials: {
+      accountNumber: string
+      accessToken?: string
+      refreshToken?: string
+      tokenExpiry?: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
+  }> = []
+
+  const currentUserId = getCurrentUserId()
+  const integrations = getUserIntegrations(currentUserId)
+
+  if (!integrations) return []
+
+  const upsIntegration = integrations.integrations.find(
+    i => i.id === 'ups' && i.enabled && i.type === 'shipping' && i.name === 'UPS'
+  )
+
+  if (upsIntegration && upsIntegration.type === 'shipping' && upsIntegration.name === 'UPS') {
+    const config = upsIntegration.config as {
+      accountNumber: string
+      accessToken?: string
+      refreshToken?: string
+      tokenExpiry?: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
+
+    users.push({
+      userId: currentUserId,
+      credentials: {
+        accountNumber: config.accountNumber,
+        accessToken: config.accessToken,
+        refreshToken: config.refreshToken,
+        tokenExpiry: config.tokenExpiry,
         environment: config.environment,
         apiUrl: config.apiUrl
       }

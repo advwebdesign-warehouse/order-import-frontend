@@ -5,6 +5,7 @@ import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { Warehouse, DEFAULT_ORDER_STATUS_SETTINGS } from '../utils/warehouseTypes'
+import { generateAddressPreview } from '../utils/addressVariables'
 
 interface AddWarehouseModalProps {
   isOpen: boolean
@@ -23,6 +24,10 @@ const COUNTRIES = [
   { code: 'FR', name: 'France' },
   { code: 'JP', name: 'Japan' }
 ]
+
+const generatePreview = (template: string, variables: any) => {
+  return generateAddressPreview(template, variables)
+}
 
 export default function AddWarehouseModal({
   isOpen,
@@ -57,7 +62,20 @@ export default function AddWarehouseModal({
       orderStatusSettings: DEFAULT_ORDER_STATUS_SETTINGS
     },
     status: 'active' as 'active' | 'inactive',
-    isDefault: false
+    isDefault: false,
+
+    // NEW: Add these fields
+    useDifferentReturnAddress: false,
+    returnAddress: {
+      name: '',
+      address1: '',
+      address2: '',
+      city: '',
+      state: '',
+      zip: '',
+      country: 'United States',
+      countryCode: 'US'
+    }
   })
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
@@ -74,7 +92,7 @@ export default function AddWarehouseModal({
           description: warehouse.description || '',
           address: {
             address1: warehouse.address.address1,
-            address2: warehouse.address.address2 || '',  // Provide default empty string if undefined
+            address2: warehouse.address.address2 || '',
             city: warehouse.address.city,
             state: warehouse.address.state,
             zip: warehouse.address.zip,
@@ -82,16 +100,29 @@ export default function AddWarehouseModal({
             countryCode: warehouse.address.countryCode
           },
           contactInfo: {
-            managerName: warehouse.contactInfo.managerName || '',  // Handle optional field
-            phone: warehouse.contactInfo.phone || '',  // Handle optional field
-            email: warehouse.contactInfo.email || ''  // Handle optional field
+            managerName: warehouse.contactInfo.managerName || '',
+            phone: warehouse.contactInfo.phone || '',
+            email: warehouse.contactInfo.email || ''
           },
           settings: { ...warehouse.settings },
           status: warehouse.status,
-          isDefault: warehouse.isDefault
+          isDefault: warehouse.isDefault,
+
+          // NEW: Load return address data
+          useDifferentReturnAddress: warehouse.useDifferentReturnAddress || false,
+          returnAddress: {
+            name: warehouse.returnAddress?.name || '',
+            address1: warehouse.returnAddress?.address1 || '',
+            address2: warehouse.returnAddress?.address2 || '',
+            city: warehouse.returnAddress?.city || '',
+            state: warehouse.returnAddress?.state || '',
+            zip: warehouse.returnAddress?.zip || '',
+            country: warehouse.returnAddress?.country || 'United States',
+            countryCode: warehouse.returnAddress?.countryCode || 'US'
+          }
         })
       } else {
-        // Adding new warehouse
+        // Adding new warehouse - keep existing reset logic plus new fields
         const hasDefault = warehouses.some(w => w.isDefault)
         setFormData({
           name: '',
@@ -112,14 +143,25 @@ export default function AddWarehouseModal({
             email: ''
           },
           settings: {
-            allowBackorders: false,  // Set default values even though not in UI
-            trackInventory: true,    // Set default values even though not in UI
-            autoFulfill: false,      // Set default values even though not in UI
+            allowBackorders: false,
+            trackInventory: true,
+            autoFulfill: false,
             priority: 1,
             orderStatusSettings: DEFAULT_ORDER_STATUS_SETTINGS
           },
-          status: 'active',
-          isDefault: !hasDefault // First warehouse becomes default
+          status: 'active' as 'active' | 'inactive',
+          isDefault: !hasDefault, // Set as default if no other default exists
+          useDifferentReturnAddress: false,
+          returnAddress: {
+            name: '',
+            address1: '',
+            address2: '',
+            city: '',
+            state: '',
+            zip: '',
+            country: 'United States',
+            countryCode: 'US'
+          }
         })
       }
       setErrors({})
@@ -138,7 +180,6 @@ export default function AddWarehouseModal({
     } else if (formData.code.length < 2) {
       newErrors.code = 'Warehouse code must be at least 2 characters'
     } else {
-      // Check if code is unique (excluding current warehouse when editing)
       const existingWarehouse = warehouses.find(w =>
         w.code.toLowerCase() === formData.code.toLowerCase() && w.id !== warehouse?.id
       )
@@ -161,6 +202,25 @@ export default function AddWarehouseModal({
 
     if (!formData.address.zip.trim()) {
       newErrors['address.zip'] = 'ZIP/Postal code is required'
+    }
+
+    // NEW: Validate return address if different return address is checked
+    if (formData.useDifferentReturnAddress) {
+      if (!formData.returnAddress.name?.trim()) {
+        newErrors['returnAddress.name'] = 'Return address name is required'
+      }
+      if (!formData.returnAddress.address1.trim()) {
+        newErrors['returnAddress.address1'] = 'Return address is required'
+      }
+      if (!formData.returnAddress.city.trim()) {
+        newErrors['returnAddress.city'] = 'Return city is required'
+      }
+      if (!formData.returnAddress.state.trim()) {
+        newErrors['returnAddress.state'] = 'Return state/province is required'
+      }
+      if (!formData.returnAddress.zip.trim()) {
+        newErrors['returnAddress.zip'] = 'Return ZIP/postal code is required'
+      }
     }
 
     if (formData.contactInfo.email && !isValidEmail(formData.contactInfo.email)) {
@@ -435,6 +495,227 @@ export default function AddWarehouseModal({
                             </select>
                           </div>
                         </div>
+                      </div>
+
+                      {/* Return Address Information */}
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-900 mb-4">Return Address</h4>
+
+                        <div className="mb-4">
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={formData.useDifferentReturnAddress}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                useDifferentReturnAddress: e.target.checked
+                              })}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">
+                              Use a different return address for shipping labels
+                            </span>
+                          </label>
+                          <p className="ml-6 mt-1 text-xs text-gray-500">
+                            By default, the warehouse address above will be used as the return address.
+                            Check this if you need returns sent to a different location.
+                          </p>
+                        </div>
+
+                        {formData.useDifferentReturnAddress && (
+                          <div className="space-y-4 pl-6 border-l-2 border-indigo-200">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Return Address Name/Label *
+                                <span className="text-gray-500 font-normal ml-1">
+                                  (e.g., "Chicago - Returns Dept", "Chicago - Return Code #1")
+                                </span>
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.returnAddress.name || ''}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  returnAddress: { ...formData.returnAddress, name: e.target.value }
+                                })}
+                                className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                  errors['returnAddress.name'] ? 'ring-red-300' : 'ring-gray-300'
+                                } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                                placeholder="Chicago - [shop] Returns"
+                              />
+                              {errors['returnAddress.name'] && (
+                                <p className="mt-1 text-sm text-red-600">{errors['returnAddress.name']}</p>
+                              )}
+                              {/* Helper text with variable examples */}
+                              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                <p className="text-xs font-medium text-blue-900 mb-1">
+                                  💡 You can use dynamic variables:
+                                </p>
+                                <div className="space-y-1 text-xs text-blue-700">
+                                  <div className="flex items-start gap-2">
+                                    <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">[shop]</code>
+                                    <span>- Shop/store name from the order</span>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">[warehouse]</code>
+                                    <span>- Warehouse name</span>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">[code]</code>
+                                    <span>- Warehouse code</span>
+                                  </div>
+                                  <div className="flex items-start gap-2">
+                                    <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">[platform]</code>
+                                    <span>- Platform name (Shopify, Amazon, etc.)</span>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-blue-600 mt-2 font-medium">
+                                  Example: "Chicago - [shop] Returns" → "Chicago - My Store Returns"
+                                </p>
+                              </div>
+
+                              {/* Live Preview */}
+                              {formData.returnAddress.name && (
+                                <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded">
+                                  <p className="text-xs text-gray-600 mb-1">Preview example:</p>
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {generatePreview(formData.returnAddress.name, {
+                                      shop: 'Example Shop',
+                                      warehouse: formData.name || 'Warehouse Name',
+                                      code: formData.code || 'WH-01',
+                                      platform: 'Shopify'
+                                    })}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Return Address Line 1 *
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.returnAddress.address1}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  returnAddress: { ...formData.returnAddress, address1: e.target.value }
+                                })}
+                                className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                  errors['returnAddress.address1'] ? 'ring-red-300' : 'ring-gray-300'
+                                } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                              />
+                              {errors['returnAddress.address1'] && (
+                                <p className="mt-1 text-sm text-red-600">{errors['returnAddress.address1']}</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Return Address Line 2
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.returnAddress.address2}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  returnAddress: { ...formData.returnAddress, address2: e.target.value }
+                                })}
+                                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  City *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={formData.returnAddress.city}
+                                  onChange={(e) => setFormData({
+                                    ...formData,
+                                    returnAddress: { ...formData.returnAddress, city: e.target.value }
+                                  })}
+                                  className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                    errors['returnAddress.city'] ? 'ring-red-300' : 'ring-gray-300'
+                                  } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                                />
+                                {errors['returnAddress.city'] && (
+                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.city']}</p>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  State/Province *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={formData.returnAddress.state}
+                                  onChange={(e) => setFormData({
+                                    ...formData,
+                                    returnAddress: { ...formData.returnAddress, state: e.target.value }
+                                  })}
+                                  className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                    errors['returnAddress.state'] ? 'ring-red-300' : 'ring-gray-300'
+                                  } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                                />
+                                {errors['returnAddress.state'] && (
+                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.state']}</p>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  ZIP/Postal Code *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={formData.returnAddress.zip}
+                                  onChange={(e) => setFormData({
+                                    ...formData,
+                                    returnAddress: { ...formData.returnAddress, zip: e.target.value }
+                                  })}
+                                  className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                    errors['returnAddress.zip'] ? 'ring-red-300' : 'ring-gray-300'
+                                  } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                                />
+                                {errors['returnAddress.zip'] && (
+                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.zip']}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Country *
+                              </label>
+                              <select
+                                value={formData.returnAddress.country}
+                                onChange={(e) => {
+                                  const country = COUNTRIES.find(c => c.name === e.target.value)
+                                  if (country) {
+                                    setFormData({
+                                      ...formData,
+                                      returnAddress: {
+                                        ...formData.returnAddress,
+                                        country: country.name,
+                                        countryCode: country.code
+                                      }
+                                    })
+                                  }
+                                }}
+                                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                              >
+                                {COUNTRIES.map((country) => (
+                                  <option key={country.code} value={country.name}>
+                                    {country.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Contact Information */}

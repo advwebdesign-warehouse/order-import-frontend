@@ -43,6 +43,25 @@ export default function AddBoxModal({
     availableFor: 'both' as ServiceType
   })
 
+  // ✅ ADD THIS - Get carrier name dynamically
+  const getCarrierName = (): string => {
+    if (!box) return 'Carrier'
+
+    // For custom boxes with carrierType
+    if (box.boxType === 'custom' && (box as any).carrierType) {
+      return (box as any).carrierType.toUpperCase()
+    }
+
+    // For carrier boxes
+    if (box.boxType !== 'custom') {
+      return box.boxType.toUpperCase()
+    }
+
+    return 'Carrier'
+  }
+
+  const carrierName = getCarrierName()
+
   const [applyToAllWarehouses, setApplyToAllWarehouses] = useState(false)
 
   // Show "Apply to All Warehouses" option when:
@@ -114,10 +133,7 @@ export default function AddBoxModal({
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                   <Dialog.Title className="text-2xl font-semibold text-gray-900">
-                    {box ?
-                      (box.boxType === 'custom' ? 'Edit Custom Box' : 'Edit Box')
-                      : 'Add Custom Box'
-                    }
+                    Edit Box Dimensions
                   </Dialog.Title>
                   <button
                     onClick={onClose}
@@ -236,60 +252,25 @@ export default function AddBoxModal({
                       Weight Limits *
                     </label>
 
-                    {/* For Carrier Boxes - Show as Read-Only Text */}
-                    {box && (box as any).mailClass ? (
-                      <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">Max Weight (Carrier Limit)</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Set by {((box as any).carrierType || box.boxType).toUpperCase()}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-bold text-gray-900">
-                              {formData.weight.maxWeight}
-                              <span className="text-base font-normal text-gray-600 ml-1">
-                                {formData.weight.unit}
-                              </span>
-                            </p>
-                          </div>
+                    {/* Always show as read-only since all boxes originate from USPS */}
+                    <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Max Weight (Carrier Limit)</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Set by {carrierName}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-gray-900">
+                            {formData.weight.maxWeight}
+                            <span className="text-base font-normal text-gray-600 ml-1">
+                              {formData.weight.unit}
+                            </span>
+                          </p>
                         </div>
                       </div>
-                    ) : (
-                      // For Custom Boxes - Show as Editable Fields
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Max Weight</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={formData.weight.maxWeight || ''}
-                            onChange={(e) => setFormData({
-                              ...formData,
-                              weight: { ...formData.weight, maxWeight: parseFloat(e.target.value) || 0 }
-                            })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            placeholder="70"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Unit</label>
-                          <select
-                            value={formData.weight.unit}
-                            onChange={(e) => setFormData({
-                              ...formData,
-                              weight: { ...formData.weight, unit: e.target.value as 'lbs' | 'kg' }
-                            })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          >
-                            <option value="lbs">lbs</option>
-                            <option value="kg">kg</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* Box Weight (Tare Weight) - Always Editable */}
@@ -333,20 +314,29 @@ export default function AddBoxModal({
                     </div>
                   </div>
 
-                  {/* Availability */}
+                  {/* Availability - ALWAYS READ-ONLY (all boxes from USPS) */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Available For
                     </label>
-                    <select
-                      value={formData.availableFor}
-                      onChange={(e) => setFormData({ ...formData, availableFor: e.target.value as ServiceType })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    >
-                      <option value="both">Domestic & International</option>
-                      <option value="domestic">Domestic Only</option>
-                      <option value="international">International Only</option>
-                    </select>
+
+                    {/* Always show as read-only since all boxes originate from USPS */}
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Service Availability</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Set by {carrierName} for this service type
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-base font-semibold text-gray-900">
+                            {formData.availableFor === 'both' ? 'Domestic & International' :
+                             formData.availableFor === 'domestic' ? 'Domestic Only' : 'International Only'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Apply to All Warehouses - Only show when editing carrier box in specific warehouse */}

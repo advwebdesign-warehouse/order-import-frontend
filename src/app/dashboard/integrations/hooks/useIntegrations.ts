@@ -8,7 +8,7 @@ import {
   getCurrentUserId,
   getUserIntegrations,
   saveUserIntegrations
-} from '@/lib/storage/integrationStorage'  // ← FIXED: Changed from @/app/lib to @/lib
+} from '@/lib/storage/integrationStorage'
 
 export function useIntegrations() {
   const [settings, setSettings] = useState<IntegrationSettings>(DEFAULT_INTEGRATION_SETTINGS)
@@ -54,27 +54,286 @@ export function useIntegrations() {
     }
   }
 
-  const updateIntegration = (integrationId: string, updates: Partial<Integration>) => {
-      const newSettings: IntegrationSettings = {
-        ...settings,
-        integrations: settings.integrations.map(integration => {
-          if (integration.id === integrationId) {
-            // Properly merge updates while maintaining type
-            return {
-              ...integration,
-              ...updates,
-              config: {
-                ...integration.config,
-                ...(updates.config || {})
-              }
-            } as Integration
-          }
-          return integration
-        }),
-        lastUpdated: new Date().toISOString()
+  // ✅ NEW - Smart merge for services (preserves user settings)
+  const smartMergeServices = (warehouseId: string, apiServices: any[]) => {
+    const storageKey = `shipping_services_${warehouseId}`
+    const existing = localStorage.getItem(storageKey)
+    const existingServices = existing ? JSON.parse(existing) : []
+
+    // Create map of existing services by unique key
+    const existingMap = new Map()
+    existingServices.forEach((svc: any) => {
+      const key = `${svc.carrier}-${svc.serviceCode}`
+      existingMap.set(key, svc)
+    })
+
+    // Merge API services with existing
+    const merged = apiServices.map((apiSvc, index) => {
+      const key = `${apiSvc.carrier}-${apiSvc.serviceCode}`
+      const existing = existingMap.get(key)
+
+      if (existing) {
+        // Update existing service but preserve user's isActive choice
+        return {
+          ...apiSvc,
+          id: existing.id,
+          isActive: existing.isActive,
+          createdAt: existing.createdAt,
+          updatedAt: new Date().toISOString()
+        }
       }
-      return saveSettings(newSettings)
+
+      // New service
+      return {
+        ...apiSvc,
+        id: `${apiSvc.carrier.toLowerCase()}-${warehouseId}-${Date.now()}-${index}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    })
+
+    localStorage.setItem(storageKey, JSON.stringify(merged))
+    console.log(`[useIntegrations] Merged ${merged.length} services for warehouse ${warehouseId}`)
+  }
+
+  // ✅ FIXED - Smart merge for boxes (properly detects user customizations)
+  const smartMergeBoxes = (warehouseId: string, apiBoxes: any[]) => {
+    const storageKey = `shipping_boxes_${warehouseId}`
+    const existing = localStorage.getItem(storageKey)
+    const existingBoxes = existing ? JSON.parse(existing) : []
+
+    // Identify truly user-customized boxes
+    const userCustomizedBoxes: any[] = []
+    const uncustomizedBoxes: any[] = []
+
+    existingBoxes.forEach((box: any) => {
+      // A box is "user-customized" if:
+      // 1. It's a custom box type, OR
+      // 2. It's a variable box AND user has set real dimensions (not 0x0x0)
+
+      const hasRealDimensions = box.dimensions &&
+        box.dimensions.length > 0 &&
+        box.dimensions.width > 0 &&
+        box.dimensions.height > 0
+
+      const isVariableBox = box.isEditable === true ||
+        box.needsDimensions === true ||
+        box.code === 'PACKAGE_VARIABLE' ||
+        box.code === 'PACKAGE_GROUND'
+
+      const isUserCustomized =
+        box.boxType === 'custom' || // Custom boxes are always user-created
+        (isVariableBox && hasRealDimensions) || // Variable box with user-set dimensions
+        (isVariableBox && box.needsDimensions === false) // Variable box marked as configured
+
+      if (isUserCustomized) {
+        userCustomizedBoxes.push(box)
+        console.log(`[smartMergeBoxes] User customized: ${box.name}`)
+      } else {
+        uncustomizedBoxes.push(box)
+      }
+    })
+
+    console.log(`[smartMergeBoxes] Found ${userCustomizedBoxes.length} user-customized boxes, ${uncustomizedBoxes.length} uncustomized boxes`)
+
+    // Create map of uncustomized boxes by carrier code (these can be updated)
+    const uncustomizedBoxMap = new Map()
+    uncustomizedBoxes.forEach((box: any) => {
+      const key = box.carrierCode || box.name
+      uncustomizedBoxMap.set(key, box)
+    })
+
+    // Create set of user-customized box codes (these should never be replaced)
+    const userBoxCodes = new Set(
+      userCustomizedBoxes.map(b => b.carrierCode || b.name)
+    )
+
+    // Process API boxes
+    const processedApiBoxes: any[] = []
+
+    apiBoxes.forEach((apiBox) => {
+      const key = apiBox.carrierCode || apiBox.name
+
+      // CRITICAL: If user has a customized version of this box, DO NOT touch it
+      if (userBoxCodes.has(key)) {
+        console.log(`[smartMergeBoxes] ⚠️  Skipping API box "${apiBox.name}" - user has customized version`)
+        return // Skip this API box entirely
+      }
+
+      // Check if we have an uncustomized version to update
+      const existing = uncustomizedBoxMap.get(key)
+
+      if (existing) {
+        // Update uncustomized box with API data, preserve isActive
+        processedApiBoxes.push({
+          ...apiBox,
+          id: existing.id,
+          isActive: existing.isActive,
+          createdAt: existing.createdAt,
+          updatedAt: new Date().toISOString()
+        })
+        console.log(`[smartMergeBoxes] ✓ Updated "${apiBox.name}" from API`)
+      } else {
+        // New box from API - add it
+        processedApiBoxes.push(apiBox)
+        console.log(`[smartMergeBoxes] ✓ Added new "${apiBox.name}"`)
+      }
+    })
+
+    // Combine: ALL user-customized boxes (untouched) + processed API boxes
+    const merged = [...userCustomizedBoxes, ...processedApiBoxes]
+
+    localStorage.setItem(storageKey, JSON.stringify(merged))
+    console.log(`[smartMergeBoxes] ✅ Final: ${merged.length} total boxes (${userCustomizedBoxes.length} custom, ${processedApiBoxes.length} from API)`)
+  }
+
+  // ✅ NEW - Auto-sync services and boxes when USPS integration is saved
+  const syncUSPSServicesAndBoxes = async (config: any) => {
+    try {
+      console.log('[useIntegrations] Starting auto-sync for USPS...')
+
+      // Get all warehouses
+      const warehousesStr = localStorage.getItem('warehouses')
+      const warehouses = warehousesStr ? JSON.parse(warehousesStr) : []
+
+      if (warehouses.length === 0) {
+        console.log('[useIntegrations] No warehouses found, skipping sync')
+        return
+      }
+
+      // Sync services
+      console.log('[useIntegrations] Syncing services...')
+      const servicesResponse = await fetch('/api/shipping/services/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carriers: ['USPS'],
+          credentials: {
+            userId: config.consumerKey,
+            apiKey: config.consumerSecret,
+            apiUrl: config.environment === 'sandbox'
+              ? 'https://apis-tem.usps.com'
+              : 'https://apis.usps.com'
+          }
+        })
+      })
+
+      if (servicesResponse.ok) {
+        const servicesData = await servicesResponse.json()
+        console.log('[useIntegrations] Synced', servicesData.count, 'services from API')
+
+        // Apply smart merge to all warehouses
+        warehouses.forEach((warehouse: any) => {
+          smartMergeServices(warehouse.id, servicesData.services)
+        })
+      } else {
+        console.error('[useIntegrations] Services sync failed:', await servicesResponse.text())
+      }
+
+      // Sync boxes
+      console.log('[useIntegrations] Syncing boxes...')
+      const boxesResponse = await fetch('/api/shipping/boxes/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carriers: ['USPS'],
+          credentials: {
+            consumerKey: config.consumerKey,
+            consumerSecret: config.consumerSecret,
+            environment: config.environment
+          }
+        })
+      })
+
+      if (boxesResponse.ok) {
+        const boxesData = await boxesResponse.json()
+        console.log('[useIntegrations] Synced', boxesData.count, 'boxes from API')
+
+        // Apply smart merge to all warehouses
+        warehouses.forEach((warehouse: any) => {
+          smartMergeBoxes(warehouse.id, boxesData.boxes)
+        })
+      } else {
+        console.error('[useIntegrations] Boxes sync failed:', await boxesResponse.text())
+      }
+
+      console.log('[useIntegrations] Auto-sync complete!')
+
+    } catch (error) {
+      console.error('[useIntegrations] Auto-sync failed:', error)
     }
+  }
+
+  const updateIntegration = (integrationId: string, updates: Partial<Integration>) => {
+    const newSettings = {
+      ...settings,
+      integrations: settings.integrations.map(integration => {
+        if (integration.id === integrationId) {
+          return { ...integration, ...updates } as Integration
+        }
+        return integration
+      })
+    }
+
+    // Auto-sync boxes when USPS integration is saved with credentials
+    if (integrationId === 'usps' && updates.config) {
+      // Type guard: check if this is a USPS config
+      const config = updates.config
+      if ('consumerKey' in config && 'consumerSecret' in config) {
+        const uspsConfig = config as {
+          consumerKey: string
+          consumerSecret: string
+          environment: 'sandbox' | 'production'
+          apiUrl: string
+        }
+
+        // Only sync if we have valid credentials
+        if (uspsConfig.consumerKey && uspsConfig.consumerSecret) {
+          console.log('[useIntegrations] USPS integration saved, triggering auto-sync...')
+
+          // Run sync asynchronously
+          setTimeout(async () => {
+            try {
+              const response = await fetch('/api/shipping/boxes/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  carriers: ['USPS'],
+                  credentials: {
+                    consumerKey: uspsConfig.consumerKey,
+                    consumerSecret: uspsConfig.consumerSecret,
+                    environment: uspsConfig.environment,
+                    apiUrl: uspsConfig.apiUrl
+                  }
+                })
+              })
+
+              if (response.ok) {
+                const data = await response.json()
+                console.log(`[useIntegrations] ✅ Auto-synced ${data.count} USPS boxes`)
+
+                if (data.boxes && data.boxes.length > 0) {
+                  const existingBoxes = localStorage.getItem('shipping_boxes')
+                  const parsed = existingBoxes ? JSON.parse(existingBoxes) : []
+                  const customBoxes = parsed.filter((box: any) => box.boxType === 'custom')
+                  const updated = [...customBoxes, ...data.boxes]
+
+                  localStorage.setItem('shipping_boxes', JSON.stringify(updated))
+                  console.log('[useIntegrations] ✅ Boxes stored in localStorage')
+                }
+              } else {
+                console.warn('[useIntegrations] Failed to auto-sync boxes:', await response.text())
+              }
+            } catch (error) {
+              console.error('[useIntegrations] Error auto-syncing boxes:', error)
+            }
+          }, 500)
+        }
+      }
+    }
+
+    return saveSettings(newSettings)
+  }
 
   const getIntegration = (integrationId: string): Integration | undefined => {
     return settings.integrations.find(i => i.id === integrationId)

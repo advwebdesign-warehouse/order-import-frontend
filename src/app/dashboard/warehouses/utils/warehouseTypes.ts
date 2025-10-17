@@ -1,4 +1,5 @@
 //file path: app/dashboard/warehouses/utils/warehouseTypes.ts
+
 export interface Warehouse {
   id: string
   name: string
@@ -9,13 +10,18 @@ export interface Warehouse {
   isDefault: boolean
   contactInfo: WarehouseContact
   settings: WarehouseSettings
-  layout?: WarehouseLayout  // NEW: Layout configuration
+  layout?: WarehouseLayout  // Layout configuration
   createdAt: string
   updatedAt: string
   productCount?: number
+
+  // NEW: Return address fields
+  useDifferentReturnAddress?: boolean
+  returnAddress?: WarehouseAddress
 }
 
 export interface WarehouseAddress {
+  name?: string
   address1: string
   address2?: string
   city: string
@@ -62,7 +68,7 @@ export interface WarehouseProduct {
   reorderPoint: number
   maxStock: number
   location?: string // Shelf/bin location
-  structuredLocation?: StructuredLocation // NEW: Detailed location breakdown
+  structuredLocation?: StructuredLocation // Detailed location breakdown
   lastStockUpdate: string
 }
 
@@ -70,7 +76,7 @@ export interface WarehouseFilterState {
   search: string
   status: string
   country: string
-  hasLayout: boolean // NEW: Filter by layout presence
+  hasLayout: boolean // Filter by layout presence
 }
 
 export interface WarehouseSortState {
@@ -112,11 +118,11 @@ export const AVAILABLE_ORDER_STATUSES = [
 
 export type OrderStatus = typeof AVAILABLE_ORDER_STATUSES[number]
 
-// NEW: Warehouse Layout Types
+// Warehouse Layout Types
 export interface WarehouseLayout {
   zones: Zone[]
   zonePositions?: {[key: string]: {x: number, y: number}} // Visual layout positions
-  zoneDimensions?: {[key: string]: {width: number, height: number}} // NEW: Zone dimensions for resizing
+  zoneDimensions?: {[key: string]: {width: number, height: number}} // Zone dimensions for resizing
   defaultLocationFormat: LocationFormat
   createdAt: string
   updatedAt: string
