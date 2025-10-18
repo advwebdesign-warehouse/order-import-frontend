@@ -5,32 +5,50 @@ import { IntegrationSettings } from '@/app/dashboard/integrations/types/integrat
 const INTEGRATION_STORAGE_PREFIX = 'orderSync_integrations_'
 
 /**
- * Get user ID from session/auth
+ * Get account ID from session/auth
+ * Account-level storage allows teams to share integrations
  */
-export function getCurrentUserId(): string {
-  if (typeof window === 'undefined') return 'default_user'
+export function getCurrentAccountId(): string {
+  if (typeof window === 'undefined') return 'default_account'
 
   try {
+    // First, try to get account from localStorage
+    const account = localStorage.getItem('account')
+    if (account) {
+      const parsed = JSON.parse(account)
+      return parsed.id || parsed.accountId || 'default_account'
+    }
+
+    // Fallback: Try to get from user object
     const user = localStorage.getItem('user')
     if (user) {
       const parsed = JSON.parse(user)
-      return parsed.id || parsed.email || 'default_user'
+      return parsed.accountId || parsed.account?.id || 'default_account'
     }
   } catch (error) {
-    console.error('Error getting user ID:', error)
+    console.error('Error getting account ID:', error)
   }
 
-  return 'default_user'
+  return 'default_account'
 }
 
 /**
- * Get integration settings for a specific user
+ * DEPRECATED: Use getCurrentAccountId() instead
+ * Kept for backwards compatibility
  */
-export function getUserIntegrations(userId?: string): IntegrationSettings | null {
+export function getCurrentUserId(): string {
+  console.warn('getCurrentUserId() is deprecated. Use getCurrentAccountId() for integrations.')
+  return getCurrentAccountId()
+}
+
+/**
+ * Get integration settings for a specific account
+ */
+export function getAccountIntegrations(accountId?: string): IntegrationSettings | null {
   if (typeof window === 'undefined') return null
 
-  const uid = userId || getCurrentUserId()
-  const storageKey = `${INTEGRATION_STORAGE_PREFIX}${uid}`
+  const aid = accountId || getCurrentAccountId()
+  const storageKey = `${INTEGRATION_STORAGE_PREFIX}${aid}`
 
   try {
     const stored = localStorage.getItem(storageKey)
@@ -38,51 +56,66 @@ export function getUserIntegrations(userId?: string): IntegrationSettings | null
       return JSON.parse(stored)
     }
   } catch (error) {
-    console.error('Error loading user integrations:', error)
+    console.error('Error loading account integrations:', error)
   }
 
   return null
 }
 
 /**
- * Save integration settings for a specific user
+ * DEPRECATED: Use getAccountIntegrations() instead
  */
-export function saveUserIntegrations(settings: IntegrationSettings, userId?: string): void {
+export function getUserIntegrations(userId?: string): IntegrationSettings | null {
+  console.warn('getUserIntegrations() is deprecated. Use getAccountIntegrations() instead.')
+  return getAccountIntegrations(userId)
+}
+
+/**
+ * Save integration settings for a specific account
+ */
+export function saveAccountIntegrations(settings: IntegrationSettings, accountId?: string): void {
   if (typeof window === 'undefined') return
 
-  const uid = userId || getCurrentUserId()
-  const storageKey = `${INTEGRATION_STORAGE_PREFIX}${uid}`
+  const aid = accountId || getCurrentAccountId()
+  const storageKey = `${INTEGRATION_STORAGE_PREFIX}${aid}`
 
   try {
     localStorage.setItem(storageKey, JSON.stringify({
       ...settings,
-      userId: uid,
+      accountId: aid,
       lastUpdated: new Date().toISOString()
     }))
+    console.log(`[Storage] Saved integrations for account: ${aid}`)
   } catch (error) {
-    console.error('Error saving user integrations:', error)
+    console.error('Error saving account integrations:', error)
   }
 }
 
 /**
- * Get USPS credentials for a specific user
- * FIXED: Now returns proper USPS API credentials
+ * DEPRECATED: Use saveAccountIntegrations() instead
  */
-export function getUserUSPSCredentials(userId?: string): {
+export function saveUserIntegrations(settings: IntegrationSettings, userId?: string): void {
+  console.warn('saveUserIntegrations() is deprecated. Use saveAccountIntegrations() instead.')
+  saveAccountIntegrations(settings, userId)
+}
+
+/**
+ * Get USPS credentials for a specific account
+ */
+export function getAccountUSPSCredentials(accountId?: string): {
   consumerKey: string
   consumerSecret: string
   apiUrl: string
   environment: 'sandbox' | 'production'
 } | null {
-  const uid = userId || getCurrentUserId()
-  const integrations = getUserIntegrations(uid)
+  const aid = accountId || getCurrentAccountId()
+  const integrations = getAccountIntegrations(aid)
 
   if (!integrations) return null
 
   const uspsIntegration = integrations.integrations.find(i => i.id === 'usps' && i.enabled)
 
   if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
-    // Type assertion to access USPS config
     const config = uspsIntegration.config as {
       consumerKey: string
       consumerSecret: string
@@ -102,9 +135,17 @@ export function getUserUSPSCredentials(userId?: string): {
 }
 
 /**
- * Get UPS credentials for a specific user
+ * DEPRECATED: Use getAccountUSPSCredentials() instead
  */
-export function getUserUPSCredentials(userId?: string): {
+export function getUserUSPSCredentials(userId?: string) {
+  console.warn('getUserUSPSCredentials() is deprecated. Use getAccountUSPSCredentials() instead.')
+  return getAccountUSPSCredentials(userId)
+}
+
+/**
+ * Get UPS credentials for a specific account
+ */
+export function getAccountUPSCredentials(accountId?: string): {
   accountNumber: string
   accessToken?: string
   refreshToken?: string
@@ -112,8 +153,8 @@ export function getUserUPSCredentials(userId?: string): {
   apiUrl: string
   environment: 'sandbox' | 'production'
 } | null {
-  const uid = userId || getCurrentUserId()
-  const integrations = getUserIntegrations(uid)
+  const aid = accountId || getCurrentAccountId()
+  const integrations = getAccountIntegrations(aid)
 
   if (!integrations) return null
 
@@ -143,131 +184,18 @@ export function getUserUPSCredentials(userId?: string): {
 }
 
 /**
- * Get all users who have USPS integration enabled
+ * DEPRECATED: Use getAccountUPSCredentials() instead
  */
-export function getAllUsersWithUSPS(): Array<{
-  userId: string
-  credentials: {
-    consumerKey: string
-    consumerSecret: string
-    environment: 'sandbox' | 'production'
-    apiUrl: string
-  }
-}> {
-  if (typeof window === 'undefined') return []
-
-  const users: Array<{
-    userId: string
-    credentials: {
-      consumerKey: string
-      consumerSecret: string
-      environment: 'sandbox' | 'production'
-      apiUrl: string
-    }
-  }> = []
-
-  // In browser, we can only access current user's data
-  const currentUserId = getCurrentUserId()
-  const integrations = getUserIntegrations(currentUserId)
-
-  if (!integrations) return []
-
-  const uspsIntegration = integrations.integrations.find(
-    i => i.id === 'usps' && i.enabled && i.type === 'shipping' && i.name === 'USPS'
-  )
-
-  if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
-    // Type assertion to tell TypeScript this is specifically a USPS integration
-    const config = uspsIntegration.config as {
-      consumerKey: string
-      consumerSecret: string
-      environment: 'sandbox' | 'production'
-      apiUrl: string
-    }
-
-    users.push({
-      userId: currentUserId,
-      credentials: {
-        consumerKey: config.consumerKey,
-        consumerSecret: config.consumerSecret,
-        environment: config.environment,
-        apiUrl: config.apiUrl
-      }
-    })
-  }
-
-  return users
+export function getUserUPSCredentials(userId?: string) {
+  console.warn('getUserUPSCredentials() is deprecated. Use getAccountUPSCredentials() instead.')
+  return getAccountUPSCredentials(userId)
 }
 
 /**
- * Get all users who have UPS integration enabled
+ * Check if account has any enabled shipping integrations
  */
-export function getAllUsersWithUPS(): Array<{
-  userId: string
-  credentials: {
-    accountNumber: string
-    accessToken?: string
-    refreshToken?: string
-    tokenExpiry?: string
-    environment: 'sandbox' | 'production'
-    apiUrl: string
-  }
-}> {
-  if (typeof window === 'undefined') return []
-
-  const users: Array<{
-    userId: string
-    credentials: {
-      accountNumber: string
-      accessToken?: string
-      refreshToken?: string
-      tokenExpiry?: string
-      environment: 'sandbox' | 'production'
-      apiUrl: string
-    }
-  }> = []
-
-  const currentUserId = getCurrentUserId()
-  const integrations = getUserIntegrations(currentUserId)
-
-  if (!integrations) return []
-
-  const upsIntegration = integrations.integrations.find(
-    i => i.id === 'ups' && i.enabled && i.type === 'shipping' && i.name === 'UPS'
-  )
-
-  if (upsIntegration && upsIntegration.type === 'shipping' && upsIntegration.name === 'UPS') {
-    const config = upsIntegration.config as {
-      accountNumber: string
-      accessToken?: string
-      refreshToken?: string
-      tokenExpiry?: string
-      environment: 'sandbox' | 'production'
-      apiUrl: string
-    }
-
-    users.push({
-      userId: currentUserId,
-      credentials: {
-        accountNumber: config.accountNumber,
-        accessToken: config.accessToken,
-        refreshToken: config.refreshToken,
-        tokenExpiry: config.tokenExpiry,
-        environment: config.environment,
-        apiUrl: config.apiUrl
-      }
-    })
-  }
-
-  return users
-}
-
-/**
- * NEW: Check if user has any enabled shipping integrations
- * Used to conditionally show the Shipping menu in navigation
- */
-export function hasShippingIntegration(userId?: string): boolean {
-  const integrations = getUserIntegrations(userId)
+export function hasShippingIntegration(accountId?: string): boolean {
+  const integrations = getAccountIntegrations(accountId)
 
   if (!integrations) return false
 
@@ -277,11 +205,10 @@ export function hasShippingIntegration(userId?: string): boolean {
 }
 
 /**
- * NEW: Get all enabled shipping carriers for a user
- * Returns array of carrier names: ['USPS', 'UPS', 'FedEx', 'DHL']
+ * Get all enabled shipping carriers for an account
  */
-export function getEnabledShippingCarriers(userId?: string): string[] {
-  const integrations = getUserIntegrations(userId)
+export function getEnabledShippingCarriers(accountId?: string): string[] {
+  const integrations = getAccountIntegrations(accountId)
 
   if (!integrations) return []
 
@@ -291,15 +218,14 @@ export function getEnabledShippingCarriers(userId?: string): string[] {
 }
 
 /**
- * NEW: Get credentials for any shipping carrier
- * Generic function to get credentials for UPS, FedEx, DHL when added
+ * Get credentials for any shipping carrier
  */
 export function getShippingCarrierCredentials(
   carrierName: string,
-  userId?: string
+  accountId?: string
 ): any | null {
-  const uid = userId || getCurrentUserId()
-  const integrations = getUserIntegrations(uid)
+  const aid = accountId || getCurrentAccountId()
+  const integrations = getAccountIntegrations(aid)
 
   if (!integrations) return null
 
@@ -312,4 +238,61 @@ export function getShippingCarrierCredentials(
   }
 
   return null
+}
+/**
+ * Get all accounts with USPS integration
+ * In production with database, this would query all accounts
+ * In browser with localStorage, we can only access current account
+ */
+export function getAllAccountsWithUSPS(): Array<{
+  accountId: string
+  credentials: {
+    consumerKey: string
+    consumerSecret: string
+    environment: 'sandbox' | 'production'
+    apiUrl: string
+  }
+}> {
+  if (typeof window === 'undefined') return []
+
+  const accounts: Array<{
+    accountId: string
+    credentials: {
+      consumerKey: string
+      consumerSecret: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
+  }> = []
+
+  // In browser, we can only access current account
+  const currentAccountId = getCurrentAccountId()
+  const integrations = getAccountIntegrations(currentAccountId)
+
+  if (!integrations) return []
+
+  const uspsIntegration = integrations.integrations.find(
+    i => i.id === 'usps' && i.enabled && i.type === 'shipping' && i.name === 'USPS'
+  )
+
+  if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
+    const config = uspsIntegration.config as {
+      consumerKey: string
+      consumerSecret: string
+      environment: 'sandbox' | 'production'
+      apiUrl: string
+    }
+
+    accounts.push({
+      accountId: currentAccountId,
+      credentials: {
+        consumerKey: config.consumerKey,
+        consumerSecret: config.consumerSecret,
+        environment: config.environment,
+        apiUrl: config.apiUrl
+      }
+    })
+  }
+
+  return accounts
 }

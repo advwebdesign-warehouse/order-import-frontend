@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { USPSTrackingService } from '@/lib/usps/trackingService'
-import { getAllUsersWithUSPS } from '@/lib/storage/integrationStorage'
+import { getAllAccountsWithUSPS } from '@/lib/storage/integrationStorage'
 import { getActiveTrackingNumbers, updateOrderTracking } from '@/lib/storage/orderStorage'
 
 export async function GET(request: NextRequest) {
@@ -22,17 +22,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log('[CRON] Starting multi-user tracking update job...')
+    console.log('[CRON] Starting multi-account tracking update job...')
 
-    const usersWithUSPS = getAllUsersWithUSPS()
+    const accountsWithUSPS = getAllAccountsWithUSPS()
 
-    console.log(`[CRON] Found ${usersWithUSPS.length} users with USPS integration`)
+    console.log(`[CRON] Found ${accountsWithUSPS.length} accounts with USPS integration`)
 
-    if (usersWithUSPS.length === 0) {
+    if (accountsWithUSPS.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'No users with USPS integration found',
-        totalUsers: 0,
+        message: 'No accounts with USPS integration found',
+        totalAccounts: 0,
         totalShipments: 0,
         duration: Date.now() - startTime
       })
@@ -43,41 +43,41 @@ export async function GET(request: NextRequest) {
     let totalExceptions = 0
     let totalShipments = 0
 
-    for (const user of usersWithUSPS) {
-      console.log(`[CRON] Processing user: ${user.userId}`)
+    for (const account of accountsWithUSPS) {
+      console.log(`[CRON] Processing account: ${account.accountId}`)
 
-      const trackingNumbers = getActiveTrackingNumbers(user.userId)
+      const trackingNumbers = getActiveTrackingNumbers(account.accountId)
 
       if (trackingNumbers.length === 0) {
-        console.log(`[CRON] No active shipments for user: ${user.userId}`)
+        console.log(`[CRON] No active shipments for account: ${account.accountId}`)
         continue
       }
 
-      console.log(`[CRON] User ${user.userId} has ${trackingNumbers.length} active shipments`)
+      console.log(`[CRON] Account ${account.accountId} has ${trackingNumbers.length} active shipments`)
       totalShipments += trackingNumbers.length
 
       const trackingService = new USPSTrackingService(
-        user.credentials.consumerKey,
-        user.credentials.consumerSecret,
-        user.credentials.environment
+        account.credentials.consumerKey,
+        account.credentials.consumerSecret,
+        account.credentials.environment
       )
 
       const updates = await trackingService.getMultipleTrackingUpdates(trackingNumbers)
 
-      console.log(`[CRON] Received ${updates.length} updates for user: ${user.userId}`)
+      console.log(`[CRON] Received ${updates.length} updates for account: ${account.accountId}`)
 
       for (const update of updates) {
-        updateOrderTracking(update.trackingNumber, update, user.userId)
+        updateOrderTracking(update.trackingNumber, update, account.accountId)
         totalUpdated++
 
         if (trackingService.isDelivered(update.statusCategory)) {
           totalDelivered++
-          console.log(`[CRON] Package delivered for user ${user.userId}: ${update.trackingNumber}`)
+          console.log(`[CRON] Package delivered for account ${account.accountId}: ${update.trackingNumber}`)
         }
 
         if (trackingService.needsAttention(update.statusCategory)) {
           totalExceptions++
-          console.log(`[CRON] Package needs attention for user ${user.userId}: ${update.trackingNumber}`)
+          console.log(`[CRON] Package needs attention for account ${account.accountId}: ${update.trackingNumber}`)
         }
       }
 
@@ -86,13 +86,13 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
-    console.log(`[CRON] Multi-user tracking update completed in ${duration}ms`)
+    console.log(`[CRON] Multi-account tracking update completed in ${duration}ms`)
 
     return NextResponse.json({
       success: true,
-      message: `Successfully updated ${totalUpdated} shipments across ${usersWithUSPS.length} users`,
+      message: `Successfully updated ${totalUpdated} shipments across ${accountsWithUSPS.length} accounts`,
       stats: {
-        totalUsers: usersWithUSPS.length,
+        totalAccounts: accountsWithUSPS.length,
         totalShipments,
         updated: totalUpdated,
         delivered: totalDelivered,
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('[CRON] Multi-user tracking update error:', error)
+    console.error('[CRON] Multi-account tracking update error:', error)
 
     return NextResponse.json(
       {

@@ -1,18 +1,19 @@
 //file path: src/lib/storage/orderStorage.ts
 
 import { Order } from '@/app/dashboard/orders/utils/orderTypes'
-import { getCurrentUserId } from './integrationStorage'
+import { getCurrentAccountId } from './integrationStorage'
 
 const ORDERS_STORAGE_PREFIX = 'orderSync_orders_'
 
 /**
- * Get all orders for a specific user
+ * Get all orders for a specific account
+ * Orders belong to the account, not individual users
  */
-export function getOrdersFromStorage(userId?: string): Order[] {
+export function getOrdersFromStorage(accountId?: string): Order[] {
   if (typeof window === 'undefined') return []
 
-  const uid = userId || getCurrentUserId()
-  const storageKey = `${ORDERS_STORAGE_PREFIX}${uid}`
+  const aid = accountId || getCurrentAccountId()
+  const storageKey = `${ORDERS_STORAGE_PREFIX}${aid}`
 
   try {
     const stored = localStorage.getItem(storageKey)
@@ -27,13 +28,13 @@ export function getOrdersFromStorage(userId?: string): Order[] {
 }
 
 /**
- * Save orders for a specific user
+ * Save orders for a specific account
  */
-export function saveOrdersToStorage(orders: Order[], userId?: string): void {
+export function saveOrdersToStorage(orders: Order[], accountId?: string): void {
   if (typeof window === 'undefined') return
 
-  const uid = userId || getCurrentUserId()
-  const storageKey = `${ORDERS_STORAGE_PREFIX}${uid}`
+  const aid = accountId || getCurrentAccountId()
+  const storageKey = `${ORDERS_STORAGE_PREFIX}${aid}`
 
   try {
     localStorage.setItem(storageKey, JSON.stringify(orders))
@@ -45,8 +46,8 @@ export function saveOrdersToStorage(orders: Order[], userId?: string): void {
 /**
  * Update order tracking information
  */
-export function updateOrderTracking(trackingNumber: string, trackingData: any, userId?: string): void {
-  const orders = getOrdersFromStorage(userId)
+export function updateOrderTracking(trackingNumber: string, trackingData: any, accountId?: string): void {
+  const orders = getOrdersFromStorage(accountId)
 
   const updatedOrders = orders.map(order => {
     if (order.trackingNumber === trackingNumber || order.shippingLabel?.trackingNumber === trackingNumber) {
@@ -66,14 +67,14 @@ export function updateOrderTracking(trackingNumber: string, trackingData: any, u
     return order
   })
 
-  saveOrdersToStorage(updatedOrders, userId)
+  saveOrdersToStorage(updatedOrders, accountId)
 }
 
 /**
- * Get all active tracking numbers for a specific user
+ * Get all active tracking numbers for a specific account
  */
-export function getActiveTrackingNumbers(userId?: string): string[] {
-  const orders = getOrdersFromStorage(userId)
+export function getActiveTrackingNumbers(accountId?: string): string[] {
+  const orders = getOrdersFromStorage(accountId)
 
   return orders
     .filter(order => {
@@ -88,13 +89,23 @@ export function getActiveTrackingNumbers(userId?: string): string[] {
 }
 
 /**
- * Get all user IDs who have active shipments
+ * Get all accounts that have active shipments
+ * In production with database, this would query all accounts
+ * In browser with localStorage, we can only check current account
  */
-export function getUsersWithActiveShipments(): string[] {
+export function getAccountsWithActiveShipments(): Array<{
+  accountId: string
+  trackingNumbers: string[]
+}> {
   if (typeof window === 'undefined') return []
 
-  const currentUserId = getCurrentUserId()
-  const activeTracking = getActiveTrackingNumbers(currentUserId)
+  const currentAccountId = getCurrentAccountId()
+  const activeTracking = getActiveTrackingNumbers(currentAccountId)
 
-  return activeTracking.length > 0 ? [currentUserId] : []
+  if (activeTracking.length === 0) return []
+
+  return [{
+    accountId: currentAccountId,
+    trackingNumbers: activeTracking
+  }]
 }

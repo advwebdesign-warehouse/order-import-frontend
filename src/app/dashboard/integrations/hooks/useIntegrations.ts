@@ -5,15 +5,15 @@
 import { useState, useEffect } from 'react'
 import { Integration, IntegrationSettings, DEFAULT_INTEGRATION_SETTINGS } from '../types/integrationTypes'
 import {
-  getCurrentUserId,
-  getUserIntegrations,
-  saveUserIntegrations
+  getCurrentAccountId,
+  getAccountIntegrations,
+  saveAccountIntegrations
 } from '@/lib/storage/integrationStorage'
 
 export function useIntegrations() {
   const [settings, setSettings] = useState<IntegrationSettings>(DEFAULT_INTEGRATION_SETTINGS)
   const [loading, setLoading] = useState(true)
-  const [userId, setUserId] = useState<string>('')
+  const [accountId, setAccountId] = useState<string>('')
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -21,20 +21,20 @@ export function useIntegrations() {
       return
     }
 
-    const uid = getCurrentUserId()
-    setUserId(uid)
+    const aid = getCurrentAccountId()
+    setAccountId(aid)
 
     try {
-      const userSettings = getUserIntegrations(uid)
-      if (userSettings) {
-        setSettings(userSettings)
+      const accountSettings = getAccountIntegrations(aid)
+      if (accountSettings) {
+        setSettings(accountSettings)
       } else {
         const defaultSettings = {
           ...DEFAULT_INTEGRATION_SETTINGS,
-          userId: uid
+          accountId: aid
         }
         setSettings(defaultSettings)
-        saveUserIntegrations(defaultSettings, uid)
+        saveAccountIntegrations(defaultSettings, aid)
       }
     } catch (error) {
       console.error('Error loading integrations:', error)
@@ -45,7 +45,7 @@ export function useIntegrations() {
 
   const saveSettings = (newSettings: IntegrationSettings) => {
     try {
-      saveUserIntegrations(newSettings, userId)
+      saveAccountIntegrations(newSettings, accountId)
       setSettings(newSettings)
       return true
     } catch (error) {
@@ -354,7 +354,7 @@ export function useIntegrations() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...integration.config,
-            accountUserId: userId
+            accountId: accountId // Changed from accountUserId
           })
         })
         return response.ok
@@ -386,7 +386,7 @@ export function useIntegrations() {
   return {
     settings,
     loading,
-    userId,
+    accountId, // Changed from userId
     updateIntegration,
     getIntegration,
     getIntegrationsByType,

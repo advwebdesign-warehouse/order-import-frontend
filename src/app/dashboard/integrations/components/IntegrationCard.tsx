@@ -19,6 +19,7 @@ interface IntegrationCardProps {
   onToggle: () => void
   onDisconnect: () => void
   onTest: () => void
+  isTesting?: boolean
 }
 
 export default function IntegrationCard({
@@ -26,7 +27,8 @@ export default function IntegrationCard({
   onConfigure,
   onToggle,
   onDisconnect,
-  onTest
+  onTest,
+  isTesting = false
 }: IntegrationCardProps) {
   const statusConfig = {
     connected: {
@@ -98,8 +100,8 @@ export default function IntegrationCard({
           )}
         </div>
 
-        {/* Features (for USPS) */}
-        {integration.id === 'usps' && integration.type === 'shipping' && (
+        {/* Features (for shipping integrations) */}
+        {integration.type === 'shipping' && integration.features && (
           <div className="mt-4 space-y-2">
             <p className="text-xs font-medium text-gray-500 uppercase">Features</p>
             <div className="flex flex-wrap gap-2">
@@ -148,10 +150,11 @@ export default function IntegrationCard({
             {integration.status === 'connected' && (
               <button
                 onClick={onTest}
-                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={isTesting}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ArrowPathIcon className="h-4 w-4 mr-1" />
-                Test
+                <ArrowPathIcon className={`h-4 w-4 mr-1 ${isTesting ? 'animate-spin' : ''}`} />
+                {isTesting ? 'Testing...' : 'Test'}
               </button>
             )}
 

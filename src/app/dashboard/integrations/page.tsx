@@ -22,6 +22,7 @@ function IntegrationsContent() {
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [testResults, setTestResults] = useState<{ [key: string]: { success: boolean; message: string } | null }>({})
+  const [testingId, setTestingId] = useState<string | null>(null)
 
   // Handle UPS OAuth callback success - MUST BE HERE AT THE TOP WITH OTHER HOOKS
   useEffect(() => {
@@ -143,6 +144,95 @@ function IntegrationsContent() {
   }
 
   const handleTestConnection = async (integration: Integration) => {
+    // Handle UPS OAuth test separately
+    if (integration.id === 'ups') {
+      // ✅ READ FRESH DATA FROM LOCALSTORAGE
+      const stored = localStorage.getItem('orderSync_integrations')
+      const freshIntegration = stored
+        ? JSON.parse(stored).integrations.find((i: Integration) => i.id === 'ups')
+        : null
+
+      console.log('[Test] Fresh integration from localStorage:', freshIntegration)
+      console.log('[Test] Has accessToken?', !!freshIntegration?.config?.accessToken)
+
+      // ✅ Type guard: Check if this is a UPS integration with accessToken
+      if (!freshIntegration || freshIntegration.name !== 'UPS' || !freshIntegration.config?.accessToken) {
+        console.log('[Test] ❌ No access token found!')
+        setTestResults(prev => ({
+          ...prev,
+          ups: { success: false, message: 'Please connect to UPS first by clicking "Configure"' }
+        }))
+
+        setTimeout(() => {
+          setTestResults(prev => ({
+            ...prev,
+            ups: null
+          }))
+        }, 5000)
+        return
+      }
+
+      setTestingId(integration.id)
+      setTestResults(prev => ({
+        ...prev,
+        [integration.id]: null
+      }))
+
+      try {
+        const response = await fetch('/api/integrations/ups/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accessToken: freshIntegration.config.accessToken,
+            environment: freshIntegration.config.environment
+          })
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          setTestResults(prev => ({
+            ...prev,
+            ups: { success: true, message: '✅ UPS connection verified successfully!' }
+          }))
+
+          updateIntegration(integration.id, {
+            status: 'connected',
+            lastSyncAt: new Date().toISOString()
+          })
+        } else {
+          setTestResults(prev => ({
+            ...prev,
+            ups: { success: false, message: `❌ ${data.error || 'Connection test failed'}` }
+          }))
+
+          updateIntegration(integration.id, {
+            status: 'error'
+          })
+        }
+      } catch (error) {
+        setTestResults(prev => ({
+          ...prev,
+          ups: { success: false, message: '❌ Failed to test UPS connection' }
+        }))
+
+        updateIntegration(integration.id, {
+          status: 'error'
+        })
+      } finally {
+        setTestingId(null)
+
+        setTimeout(() => {
+          setTestResults(prev => ({
+            ...prev,
+            ups: null
+          }))
+        }, 5000)
+      }
+      return
+    }
+
+    // Handle other integrations (USPS, etc.)
     setTestResults(prev => ({
       ...prev,
       [integration.id]: null
@@ -286,6 +376,7 @@ function IntegrationsContent() {
                 onToggle={() => handleToggleEnabled(integration)}
                 onDisconnect={() => handleDisconnect(integration)}
                 onTest={() => handleTestConnection(integration)}
+                isTesting={testingId === integration.id}
               />
 
               {testResults[integration.id] && (
@@ -296,7 +387,6 @@ function IntegrationsContent() {
                       : 'bg-red-50 text-red-700 border border-red-200'
                   }`}
                 >
-                  {testResults[integration.id]?.success ? '✓ ' : '✗ '}
                   {testResults[integration.id]?.message}
                 </div>
               )}
@@ -318,6 +408,7 @@ function IntegrationsContent() {
                   onToggle={() => handleToggleEnabled(integration)}
                   onDisconnect={() => handleDisconnect(integration)}
                   onTest={() => handleTestConnection(integration)}
+                  isTesting={testingId === integration.id}
                 />
 
                 {testResults[integration.id] && (
@@ -328,7 +419,6 @@ function IntegrationsContent() {
                         : 'bg-red-50 text-red-700 border border-red-200'
                     }`}
                   >
-                    {testResults[integration.id]?.success ? '✓ ' : '✗ '}
                     {testResults[integration.id]?.message}
                   </div>
                 )}
