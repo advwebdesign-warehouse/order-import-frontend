@@ -2,14 +2,7 @@
 
 import { Warehouse, WarehouseAddress } from '../utils/warehouseTypes'
 import { replaceAddressVariables, AddressVariables } from '../utils/addressVariables'
-
-export interface Order {
-  id: string
-  platform: string
-  shopName?: string
-  storeName?: string
-  // ... other order fields
-}
+import { Order } from '../../orders/utils/orderTypes' // ✅ Import instead of duplicate
 
 /**
  * Get the return address for a warehouse, with variables replaced
@@ -31,9 +24,9 @@ export function getReturnAddressForOrder(
     }
   }
 
-  // Replace variables with order data
+  // ✅ UPDATED: Replace variables with order data (removed shopName)
   const variables: AddressVariables = {
-    shop: order.shopName || order.storeName || 'Unknown Shop',
+    shop: order.storeName || 'Unknown Store',
     warehouse: warehouse.name,
     code: warehouse.code,
     platform: order.platform

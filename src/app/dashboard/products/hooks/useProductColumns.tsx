@@ -1,21 +1,111 @@
+//file path: app/dashboard/products/hooks/useProductColumns.tsx
+
 import { useState, useEffect, useMemo } from 'react'
 import { Product, ProductColumnConfig, ProductSortState } from '../utils/productTypes'
 import { DEFAULT_PRODUCT_COLUMNS, DEFAULT_PRODUCT_SORT } from '../constants/productConstants'
 import { useSettings } from '../../shared/hooks/useSettings'
+import { getCurrentUserId } from '@/lib/storage/userStorage'
 
 export function useProductColumns(products: Product[]) {
   const { settings } = useSettings()
   const [columns, setColumns] = useState<ProductColumnConfig[]>([])
   const [sortConfig, setSortConfig] = useState<ProductSortState>(DEFAULT_PRODUCT_SORT)
+  const [initialized, setInitialized] = useState(false)
+
+  // ✅ NEW: User-specific storage keys
+  const userId = getCurrentUserId()
+  const storageKeys = {
+    columns: `productColumns_${userId}`,
+    sortConfig: `productSort_${userId}`
+  }
+
+  // ✅ NEW: Load saved user preferences on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setInitialized(true)
+      return
+    }
+
+    try {
+      // Load sort config
+      const savedSort = localStorage.getItem(storageKeys.sortConfig)
+      if (savedSort) {
+        const parsedSort = JSON.parse(savedSort)
+        setSortConfig(parsedSort)
+      }
+
+      // Load column config
+      const savedColumns = localStorage.getItem(storageKeys.columns)
+      if (savedColumns) {
+        const parsedColumns = JSON.parse(savedColumns)
+
+        // Merge with defaults to handle new columns
+        const mergedColumns = []
+
+        // First, add saved columns in their saved order
+        for (const savedCol of parsedColumns) {
+          const defaultCol = DEFAULT_PRODUCT_COLUMNS.find(col => col.id === savedCol.id)
+          if (defaultCol) {
+            mergedColumns.push({
+              ...defaultCol,
+              ...savedCol // Override with saved preferences
+            })
+          }
+        }
+
+        // Then add any new default columns that weren't in saved config
+        for (const defaultCol of DEFAULT_PRODUCT_COLUMNS) {
+          if (!mergedColumns.find(col => col.id === defaultCol.id)) {
+            mergedColumns.push(defaultCol)
+          }
+        }
+
+        setColumns(mergedColumns)
+      }
+    } catch (error) {
+      console.error('Error loading product column settings:', error)
+    } finally {
+      setInitialized(true)
+    }
+  }, [storageKeys.columns, storageKeys.sortConfig])
+
+  // ✅ NEW: Save column settings when they change
+  useEffect(() => {
+    if (initialized && typeof window !== 'undefined' && columns.length > 0) {
+      try {
+        localStorage.setItem(storageKeys.columns, JSON.stringify(columns))
+      } catch (error) {
+        console.error('Error saving product column settings:', error)
+      }
+    }
+  }, [columns, initialized, storageKeys.columns])
+
+  // ✅ NEW: Save sort config when it changes
+  useEffect(() => {
+    if (initialized && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(storageKeys.sortConfig, JSON.stringify(sortConfig))
+      } catch (error) {
+        console.error('Error saving product sort config:', error)
+      }
+    }
+  }, [sortConfig, initialized, storageKeys.sortConfig])
 
   // Initialize columns based on stock management settings
   useEffect(() => {
+    // ✅ UPDATED: Only initialize if we don't have saved columns
+    if (!initialized) return
+
     const getFilteredColumns = () => {
+      // If we have saved columns, use those
+      if (columns.length > 0) {
+        return columns
+      }
+
+      // Otherwise, initialize from defaults based on stock management
       if (settings.inventory.manageStock) {
-        // Show all default columns when stock management is enabled
         return DEFAULT_PRODUCT_COLUMNS
       } else {
-        // Hide stock-related columns when stock management is disabled
         return DEFAULT_PRODUCT_COLUMNS.map(column => {
           if (column.field === 'stockStatus' || column.field === 'stockQuantity') {
             return { ...column, visible: false }
@@ -25,8 +115,11 @@ export function useProductColumns(products: Product[]) {
       }
     }
 
-    setColumns(getFilteredColumns())
-  }, [settings.inventory.manageStock])
+    // Only set if columns are empty (first load)
+    if (columns.length === 0) {
+      setColumns(getFilteredColumns())
+    }
+  }, [settings.inventory.manageStock, initialized, columns.length])
 
   // Filter columns for display based on stock management setting
   const visibleColumns = useMemo(() => {
@@ -224,6 +317,7 @@ export function useProductColumns(products: Product[]) {
     resetToDefaults,
     // Additional helpers
     isStockManagementEnabled: settings.inventory.manageStock,
-    stockSettings: settings.inventory
+    stockSettings: settings.inventory,
+    isLoading: !initialized // ✅ NEW: Expose loading state
   }
 }

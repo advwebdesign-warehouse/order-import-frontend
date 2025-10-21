@@ -1,7 +1,7 @@
 //file path: app/dashboard/warehouses/utils/addressVariables.ts
 
 export interface AddressVariables {
-  shop?: string
+  shop?: string // ✅ RENAME COMMENT: Store name (from order.storeName)
   warehouse?: string
   code?: string
   platform?: string

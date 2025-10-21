@@ -9,6 +9,7 @@ import {
   ShoppingBagIcon,
   CubeIcon,
   BuildingOffice2Icon,
+  BuildingStorefrontIcon,
   Cog6ToothIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
@@ -56,12 +57,8 @@ function DashboardLayoutContent({
     { name: 'Products', href: '/dashboard/products', icon: CubeIcon },
     { name: 'Orders', href: '/dashboard/orders', icon: ShoppingBagIcon },
     { name: 'Warehouses', href: '/dashboard/warehouses', icon: BuildingOffice2Icon },
-    {
-      name: 'Shipping',
-      href: '/dashboard/shipping',
-      icon: TruckIcon,
-      condition: () => showShipping // NEW: Only show if shipping integration exists
-    },
+    { name: 'Stores', href: '/dashboard/stores', icon: BuildingStorefrontIcon },
+    { name: 'Shipping', href: '/dashboard/shipping', icon: TruckIcon, condition: () => showShipping },
     { name: 'Integrations', href: '/dashboard/integrations', icon: Cog6ToothIcon },
     { name: 'Settings', href: '/dashboard/settings', icon: WrenchScrewdriverIcon }
   ]

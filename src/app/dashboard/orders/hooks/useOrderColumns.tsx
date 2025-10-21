@@ -3,25 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Order, ColumnConfig, SortState } from '../utils/orderTypes'
 import { DEFAULT_COLUMNS, WAREHOUSE_ORDER_COLUMNS, DEFAULT_SORT } from '../constants/orderConstants'
-
-// Generate user-specific storage keys
-function getUserId(): string {
-  if (typeof window === 'undefined') {
-    return 'user_ssr_fallback'
-  }
-
-  try {
-    let id = localStorage.getItem('userId')
-    if (!id) {
-      id = 'user_' + Math.random().toString(36).substr(2, 9)
-      localStorage.setItem('userId', id)
-    }
-    return id
-  } catch (error) {
-    console.warn('localStorage not available:', error)
-    return 'user_fallback_' + Math.random().toString(36).substr(2, 9)
-  }
-}
+import { getCurrentUserId } from '@/lib/storage/userStorage'
 
 export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
   // Use warehouse columns for warehouse-specific pages
@@ -31,7 +13,7 @@ export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
   const [sortConfig, setSortConfig] = useState<SortState>(DEFAULT_SORT)
   const [initialized, setInitialized] = useState(false)
 
-  const userId = getUserId()
+  const userId = getCurrentUserId()
   const storageKeys = {
     columns: `orderColumns_${userId}${useWarehouseColumns ? '_warehouse' : ''}`,
     sortConfig: `orderSort_${userId}${useWarehouseColumns ? '_warehouse' : ''}`

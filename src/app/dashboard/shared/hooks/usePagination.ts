@@ -1,28 +1,7 @@
-// File: app/dashboard/shared/hooks/usePagination.ts
+//file path: app/dashboard/shared/hooks/usePagination.ts
 
 import { useState, useEffect } from 'react'
-
-// Fixed getUserId function with client-side check
-function getUserId(): string {
-  // Check if we're on the client side
-  if (typeof window === 'undefined') {
-    // Return a default ID for server-side rendering
-    return 'user_ssr_fallback'
-  }
-
-  try {
-    let id = localStorage.getItem('userId')
-    if (!id) {
-      id = 'user_' + Math.random().toString(36).substr(2, 9)
-      localStorage.setItem('userId', id)
-    }
-    return id
-  } catch (error) {
-    // Fallback if localStorage is not available
-    console.warn('localStorage not available:', error)
-    return 'user_fallback_' + Math.random().toString(36).substr(2, 9)
-  }
-}
+import { getCurrentUserId } from '@/lib/storage/userStorage'
 
 interface PaginationSettings {
   ordersPerPage: number
@@ -38,12 +17,12 @@ export function usePagination() {
   const [settings, setSettings] = useState<PaginationSettings>(DEFAULT_PAGINATION)
   const [initialized, setInitialized] = useState(false)
 
-  const userId = getUserId()
+  // ✅ UPDATED: Use centralized user storage
+  const userId = getCurrentUserId()
   const storageKey = `pagination_settings_${userId}`
 
-  // Load saved settings on mount (same pattern as your other hooks)
+  // Load saved settings on mount
   useEffect(() => {
-    // Only run on client side
     if (typeof window === 'undefined') {
       setInitialized(true)
       return
@@ -65,7 +44,7 @@ export function usePagination() {
     }
   }, [storageKey])
 
-  // Save settings when they change (same pattern as your other hooks)
+  // Save settings when they change
   useEffect(() => {
     if (initialized && typeof window !== 'undefined') {
       try {
@@ -76,7 +55,6 @@ export function usePagination() {
     }
   }, [settings, initialized, storageKey])
 
-  // Update orders per page
   const setOrdersPerPage = (count: number) => {
     setSettings(prev => ({
       ...prev,
@@ -84,7 +62,6 @@ export function usePagination() {
     }))
   }
 
-  // Update products per page
   const setProductsPerPage = (count: number) => {
     setSettings(prev => ({
       ...prev,

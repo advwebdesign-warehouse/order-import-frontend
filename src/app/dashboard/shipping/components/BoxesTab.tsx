@@ -35,7 +35,7 @@ import { ShippingBox } from '../utils/shippingTypes'
 import AddBoxModal from './AddBoxModal'
 import Notification from '../../shared/components/Notification'
 import { useNotification } from '../../shared/hooks/useNotification'
-import { getEnabledShippingCarriers, getUserUSPSCredentials } from '@/lib/storage/integrationStorage'
+import { getEnabledShippingCarriers, getUserUSPSCredentials, getUserUPSCredentials } from '@/lib/storage/integrationStorage'
 import { useWarehouses } from '../../warehouses/hooks/useWarehouses'
 
 interface BoxesTabProps {
@@ -199,11 +199,29 @@ export default function BoxesTab({ selectedWarehouseId }: BoxesTabProps) {
     try {
       setIsSyncing(true)
 
-      const credentials = getUserUSPSCredentials()
+      // Gather credentials for all enabled carriers
+      const allCredentials: any = {}
 
-      if (!credentials && enabledCarriers.includes('USPS')) {
-        showError('USPS Credentials Missing', 'Please configure USPS in Integrations.')
-        return
+      if (enabledCarriers.includes('USPS')) {
+        const uspsCredentials = getUserUSPSCredentials()
+        if (uspsCredentials) {
+          allCredentials.usps = uspsCredentials
+        } else {
+          showError('USPS Credentials Missing', 'Please configure USPS in Integrations.')
+          setIsSyncing(false)
+          return
+        }
+      }
+
+      if (enabledCarriers.includes('UPS')) {
+        const upsCredentials = getUserUPSCredentials()
+        if (upsCredentials) {
+          allCredentials.ups = upsCredentials
+        } else {
+          showError('UPS Credentials Missing', 'Please configure UPS in Integrations.')
+          setIsSyncing(false)
+          return
+        }
       }
 
       console.log('[BoxesTab] Starting sync...')
@@ -213,7 +231,7 @@ export default function BoxesTab({ selectedWarehouseId }: BoxesTabProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           carriers: enabledCarriers,
-          credentials: credentials
+          credentials: allCredentials
         })
       })
 

@@ -7,7 +7,7 @@ import { CarrierService } from '../utils/shippingTypes'
 import { TruckIcon, CheckCircleIcon, XCircleIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import Notification from '../../shared/components/Notification'
 import { useNotification } from '../../shared/hooks/useNotification'
-import { getEnabledShippingCarriers, getUserUSPSCredentials } from '@/lib/storage/integrationStorage'
+import { getEnabledShippingCarriers, getUserUSPSCredentials, getUserUPSCredentials } from '@/lib/storage/integrationStorage'
 import { useWarehouses } from '../../warehouses/hooks/useWarehouses'
 
 interface ServicesTabProps {
@@ -143,15 +143,29 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
   const handleSyncFromAPI = async () => {
     setSyncing(true)
     try {
-      // Get credentials from localStorage (client-side)
-      const credentials = getUserUSPSCredentials()
+      // Gather credentials for all enabled carriers
+      const allCredentials: any = {}
 
-      console.log('[ServicesTab] Credentials from localStorage:', credentials ? 'Found' : 'Not found')
+      if (enabledCarriers.includes('USPS')) {
+        const uspsCredentials = getUserUSPSCredentials()
+        if (uspsCredentials) {
+          allCredentials.usps = uspsCredentials
+        } else {
+          showError('USPS credentials not found', 'Please configure USPS in Integrations.')
+          setSyncing(false)
+          return
+        }
+      }
 
-      if (!credentials && enabledCarriers.includes('USPS')) {
-        showError('USPS credentials not found', 'Please configure USPS in Integrations.')
-        setSyncing(false)
-        return
+      if (enabledCarriers.includes('UPS')) {
+        const upsCredentials = getUserUPSCredentials()
+        if (upsCredentials) {
+          allCredentials.ups = upsCredentials
+        } else {
+          showError('UPS credentials not found', 'Please configure UPS in Integrations.')
+          setSyncing(false)
+          return
+        }
       }
 
       // Determine which warehouses to sync
@@ -167,7 +181,7 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           carriers: enabledCarriers,
-          credentials: credentials
+          credentials: allCredentials
         })
       })
 

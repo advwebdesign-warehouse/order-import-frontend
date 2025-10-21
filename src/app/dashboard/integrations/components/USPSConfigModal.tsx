@@ -5,7 +5,9 @@
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, InformationCircleIcon, ChevronDownIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
+import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { USPSIntegration, Environment } from '../types/integrationTypes'
+
 
 interface USPSConfigModalProps {
   isOpen: boolean
@@ -36,6 +38,7 @@ export default function USPSConfigModal({
   const [showInstructions, setShowInstructions] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
+  const [environmentChanged, setEnvironmentChanged] = useState(false)
 
   const handleEnvironmentChange = (env: Environment) => {
     setConfig({
@@ -45,6 +48,13 @@ export default function USPSConfigModal({
         ? 'https://apis-tem.usps.com'
         : 'https://apis.usps.com'
     })
+
+    // Mark that environment changed from original
+    if (integration.status === 'connected' && integration.config?.environment !== env) {
+      setEnvironmentChanged(true)
+    } else {
+      setEnvironmentChanged(false)
+    }
   }
 
   const handleTest = async () => {
@@ -89,8 +99,9 @@ export default function USPSConfigModal({
       // Step 1: Save config manually to localStorage (don't call onSave yet)
       console.log('[USPS Config] Saving configuration to localStorage...')
 
-      // Get current integrations from localStorage
-      const storageKey = `orderSync_integrations_default_user`
+      // ✅ Get current account ID
+      const accountId = getCurrentAccountId()
+      const storageKey = `orderSync_integrations_${accountId}`
       const stored = localStorage.getItem(storageKey)
       const currentSettings = stored ? JSON.parse(stored) : null
 
@@ -116,7 +127,7 @@ export default function USPSConfigModal({
           lastUpdated: new Date().toISOString()
         }))
 
-        console.log('[USPS Config] ✅ Configuration saved to localStorage')
+        console.log('[USPS Config] ✅ Configuration saved to localStorage for account:', accountId)
       }
 
       await new Promise(resolve => setTimeout(resolve, 800))
@@ -240,7 +251,7 @@ export default function USPSConfigModal({
 
       // Reload the page to refresh all components with new data
       console.log('[USPS Config] 🔄 Reloading page to refresh data...')
-      
+
       // Close modal (config already saved earlier)
       onClose()
 
@@ -306,53 +317,115 @@ export default function USPSConfigModal({
               leaveTo="opacity-0 scale-95"
             >
               <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-lg bg-white shadow-xl transition-all flex flex-col max-h-[90vh]">
-                {/* Header */}
-                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-3xl">📮</span>
-                      <Dialog.Title className="text-lg font-semibold text-gray-900">
-                        Configure USPS Integration
-                      </Dialog.Title>
-                    </div>
-                    <button
-                      onClick={onClose}
-                      disabled={syncing}
-                      className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <XMarkIcon className="h-6 w-6" />
-                    </button>
+              {/* Header */}
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    {/* ✅ Replace emoji with USPS logo */}
+                    <img
+                      src="/logos/usps-logo.svg"
+                      alt="USPS"
+                      className="w-10 h-10"
+                    />
+                    <Dialog.Title className="text-lg font-semibold text-gray-900">
+                      Configure USPS Integration
+                    </Dialog.Title>
                   </div>
+                  <button
+                    onClick={onClose}
+                    disabled={syncing}
+                    className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
                 </div>
+              </div>
 
-                {/* Content - ScrollableI'll continue with the rest of the file... */}
-                <div className="px-6 py-6 space-y-6 overflow-y-auto flex-1">
-                  {/* Pending Approval Warning */}
-                  {testResult && !testResult.success && testResult.message?.includes('Pending') && (
-                    <div className="rounded-md bg-orange-50 border-2 border-orange-200 p-4">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <svg className="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <div className="ml-3 flex-1">
-                          <h3 className="text-sm font-medium text-orange-800">
-                            ⏳ App Approval Pending
-                          </h3>
-                          <div className="mt-2 text-sm text-orange-700">
-                            <p className="font-medium mb-2">Your USPS app is awaiting approval (typical wait: 1-48 hours)</p>
-                            <div className="space-y-1">
-                              <p>✓ Your credentials are saved and ready</p>
-                              <p>✓ Check your email for approval notification</p>
-                              <p>✓ Monitor status at <a href="https://verified.usps.com/" target="_blank" rel="noopener noreferrer" className="underline font-medium">USPS Developer Portal</a></p>
-                              <p>✓ Once status changes to "Accepted", test connection again</p>
-                            </div>
-                          </div>
-                        </div>
+              {/* Content */}
+              <div className="px-6 py-6 space-y-6 overflow-y-auto flex-1">
+                {/* Connection Status - Only show when connected */}
+                {integration.status === 'connected' && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-green-900 flex items-center gap-2">
+                          <CheckCircleIcon className="h-5 w-5" />
+                          Connected
+                        </p>
+                        <p className="text-sm text-green-700 mt-1">
+                          Consumer Key: {config.consumerKey.substring(0, 20)}...
+                        </p>
+                        <p className="text-xs text-green-600 mt-0.5">
+                          Connected {new Date(integration.connectedAt || '').toLocaleDateString()}
+                        </p>
                       </div>
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Are you sure you want to disconnect USPS?')) return
+
+                          setSyncing(true)
+                          setSyncStage('saving-config')
+
+                          try {
+                            // ✅ Use account-based storage
+                            const accountId = getCurrentAccountId()
+                            const storageKey = `orderSync_integrations_${accountId}`
+                            const stored = localStorage.getItem(storageKey)
+                            const currentSettings = stored ? JSON.parse(stored) : null
+
+                            if (currentSettings) {
+                              const updatedIntegrations = currentSettings.integrations.map((int: any) => {
+                                if (int.id === integration.id) {
+                                  return {
+                                    ...int,
+                                    config: {
+                                      consumerKey: '',
+                                      consumerSecret: '',
+                                      environment: 'sandbox',
+                                      apiUrl: 'https://apis-tem.usps.com'
+                                    },
+                                    status: 'disconnected',
+                                    enabled: false,
+                                    connectedAt: null
+                                  }
+                                }
+                                return int
+                              })
+
+                              localStorage.setItem(storageKey, JSON.stringify({
+                                ...currentSettings,
+                                integrations: updatedIntegrations,
+                                lastUpdated: new Date().toISOString()
+                              }))
+
+                              console.log('[USPS Config] ✅ Disconnected and saved to localStorage for account:', accountId)
+                            }
+
+                            await new Promise(resolve => setTimeout(resolve, 500))
+
+                            // Show success
+                            setSyncStage('success')
+                            await new Promise(resolve => setTimeout(resolve, 1000))
+
+                            // Close modal
+                            onClose()
+
+                            // Reload page
+                            window.location.reload()
+                          } catch (error) {
+                            console.error('[USPS Config] Disconnect error:', error)
+                            setSyncing(false)
+                            setSyncStage('idle')
+                          }
+                        }}
+                        disabled={syncing}
+                        className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Disconnect
+                      </button>
                     </div>
-                  )}
+                  </div>
+                )}
 
                   {/* Info Banner - Collapsible */}
                   <div className="rounded-md bg-blue-50 border border-blue-200">
@@ -484,62 +557,66 @@ export default function USPSConfigModal({
                     </div>
                   </div>
 
-                  {/* Consumer Key */}
-                  <div>
-                    <label htmlFor="consumerKey" className="block text-sm font-medium text-gray-700 mb-1">
-                      Consumer Key <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="consumerKey"
-                      value={config.consumerKey}
-                      onChange={(e) => setConfig({ ...config, consumerKey: e.target.value })}
-                      disabled={syncing}
-                      placeholder="Enter your USPS Consumer Key"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Found in your USPS Developer Portal under "Apps"
-                    </p>
-                  </div>
-
-                  {/* Consumer Secret */}
-                  <div>
-                    <label htmlFor="consumerSecret" className="block text-sm font-medium text-gray-700 mb-1">
-                      Consumer Secret <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
+                  {/* Consumer Key - Only show when not connected */}
+                  {integration.status !== 'connected' && (
+                    <div>
+                      <label htmlFor="consumerKey" className="block text-sm font-medium text-gray-700 mb-1">
+                        Consumer Key <span className="text-red-500">*</span>
+                      </label>
                       <input
-                        type={showSecret ? 'text' : 'password'}
-                        id="consumerSecret"
-                        value={config.consumerSecret}
-                        onChange={(e) => setConfig({ ...config, consumerSecret: e.target.value })}
+                        type="text"
+                        id="consumerKey"
+                        value={config.consumerKey}
+                        onChange={(e) => setConfig({ ...config, consumerKey: e.target.value })}
                         disabled={syncing}
-                        placeholder="Enter your USPS Consumer Secret"
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="Enter your USPS Consumer Key"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowSecret(!showSecret)}
-                        disabled={syncing}
-                        className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                      >
-                        {showSecret ? (
-                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                          </svg>
-                        ) : (
-                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        )}
-                      </button>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Found in your USPS Developer Portal under "Apps"
+                      </p>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Keep this secret secure - treat it like a password
-                    </p>
-                  </div>
+                  )}
+
+                  {/* Consumer Secret - Only show when not connected */}
+                  {integration.status !== 'connected' && (
+                    <div>
+                      <label htmlFor="consumerSecret" className="block text-sm font-medium text-gray-700 mb-1">
+                        Consumer Secret <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showSecret ? 'text' : 'password'}
+                          id="consumerSecret"
+                          value={config.consumerSecret}
+                          onChange={(e) => setConfig({ ...config, consumerSecret: e.target.value })}
+                          disabled={syncing}
+                          placeholder="Enter your USPS Consumer Secret"
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSecret(!showSecret)}
+                          disabled={syncing}
+                          className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        >
+                          {showSecret ? (
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          ) : (
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Keep this secret secure - treat it like a password
+                      </p>
+                    </div>
+                  )}
 
                   {/* Test Result */}
                   {testResult && !syncing && (
@@ -561,7 +638,11 @@ export default function USPSConfigModal({
                   <div className="flex items-center justify-between">
                     <button
                       onClick={handleTest}
-                      disabled={!isConfigValid || testing || syncing}
+                      disabled={
+                        integration.status === 'connected'
+                          ? testing || syncing  // ✅ When connected, only disable during testing/syncing
+                          : !isConfigValid || testing || syncing  // When not connected, check validation
+                      }
                       className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {testing ? 'Testing Connection...' : 'Test Connection'}
@@ -577,10 +658,18 @@ export default function USPSConfigModal({
                       </button>
                       <button
                         onClick={handleSave}
-                        disabled={!isConfigValid || syncing}
+                        disabled={
+                          integration.status === 'connected'
+                            ? syncing  // ✅ When connected, only disable during syncing
+                            : !isConfigValid || syncing  // When not connected, check validation
+                        }
                         className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Save Configuration
+                        {integration.status === 'connected' && !environmentChanged
+                          ? 'Sync USPS'
+                          : integration.status === 'connected' && environmentChanged
+                          ? 'Reconnect USPS'
+                          : 'Connect to USPS'}
                       </button>
                     </div>
                   </div>

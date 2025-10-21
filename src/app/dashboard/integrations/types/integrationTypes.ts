@@ -14,7 +14,8 @@ export interface BaseIntegration {
   icon?: string
   connectedAt?: string
   lastSyncAt?: string
-  userId?: string
+  accountId?: string
+  storeId?: string
 }
 
 export interface USPSIntegration extends BaseIntegration {
@@ -81,7 +82,7 @@ export type Integration = USPSIntegration | UPSIntegration | ShopifyIntegration 
 export interface IntegrationSettings {
   integrations: Integration[]
   lastUpdated: string
-  userId?: string
+  accountId?: string
 }
 
 export const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {

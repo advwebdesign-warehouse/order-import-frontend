@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useCallback } from 'react' // ✅ Add useCallback
 import { useSearchParams } from 'next/navigation'
 import {
   PlusIcon,
@@ -15,6 +15,7 @@ import IntegrationCard from './components/IntegrationCard'
 import USPSConfigModal from './components/USPSConfigModal'
 import UPSConfigModal from './components/UPSConfigModal'
 import { Integration } from './types/integrationTypes'
+import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 
 function IntegrationsContent() {
   const searchParams = useSearchParams()
@@ -24,7 +25,7 @@ function IntegrationsContent() {
   const [testResults, setTestResults] = useState<{ [key: string]: { success: boolean; message: string } | null }>({})
   const [testingId, setTestingId] = useState<string | null>(null)
 
-  // Handle UPS OAuth callback success - MUST BE HERE AT THE TOP WITH OTHER HOOKS
+  // ✅ Handle UPS OAuth callback success - FIX: Remove updateIntegration from dependencies
   useEffect(() => {
     const upsSuccess = searchParams.get('ups_success')
     const upsAccount = searchParams.get('ups_account')
@@ -45,6 +46,7 @@ function IntegrationsContent() {
     if (upsSuccess && upsAccessToken && upsRefreshToken && upsAccount && upsEnv) {
       console.log('[UPS OAuth] ✅ Connection successful, saving integration...')
 
+      // ✅ Call updateIntegration but don't add it to dependencies
       updateIntegration('ups', {
         config: {
           accountNumber: upsAccount,
@@ -76,7 +78,7 @@ function IntegrationsContent() {
       window.history.replaceState({}, '', '/dashboard/integrations')
       console.log('[UPS OAuth] ✅ Integration setup complete!')
     }
-  }, [searchParams, updateIntegration])
+  }, [searchParams]) // ✅ ONLY searchParams - removed updateIntegration
 
   const handleConfigureClick = (integration: Integration) => {
     setSelectedIntegration(integration)
@@ -146,12 +148,16 @@ function IntegrationsContent() {
   const handleTestConnection = async (integration: Integration) => {
     // Handle UPS OAuth test separately
     if (integration.id === 'ups') {
-      // ✅ READ FRESH DATA FROM LOCALSTORAGE
-      const stored = localStorage.getItem('orderSync_integrations')
+      // ✅ READ FRESH DATA FROM ACCOUNT-BASED LOCALSTORAGE
+      const accountId = getCurrentAccountId()
+      const storageKey = `orderSync_integrations_${accountId}`
+      const stored = localStorage.getItem(storageKey)
       const freshIntegration = stored
         ? JSON.parse(stored).integrations.find((i: Integration) => i.id === 'ups')
         : null
 
+      console.log('[Test] Account ID:', accountId)
+      console.log('[Test] Storage key:', storageKey)
       console.log('[Test] Fresh integration from localStorage:', freshIntegration)
       console.log('[Test] Has accessToken?', !!freshIntegration?.config?.accessToken)
 
@@ -184,6 +190,7 @@ function IntegrationsContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             accessToken: freshIntegration.config.accessToken,
+            tokenExpiry: freshIntegration.config.tokenExpiry,
             environment: freshIntegration.config.environment
           })
         })
@@ -282,6 +289,7 @@ function IntegrationsContent() {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8">
+      {/* Rest of the component stays the same... */}
       {/* Header */}
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>

@@ -16,13 +16,34 @@ export async function GET(request: NextRequest) {
   console.log('[UPS Callback] State:', state)
   console.log('[UPS Callback] Error:', error)
   console.log('[UPS Callback] Full URL:', request.url)
+  console.log('[UPS Callback] Headers host:', request.headers.get('host'))
+  console.log('[UPS Callback] Headers x-forwarded-host:', request.headers.get('x-forwarded-host'))
   console.log('[UPS Callback] ========================================')
+
+  // ✅ Get the correct base URL (handles ngrok, production, localhost)
+  const getBaseUrl = () => {
+    // Check for forwarded host (ngrok sets this)
+    const forwardedHost = request.headers.get('x-forwarded-host')
+    const forwardedProto = request.headers.get('x-forwarded-proto') || 'https'
+
+    if (forwardedHost) {
+      return `${forwardedProto}://${forwardedHost}`
+    }
+
+    // Fallback to request URL host
+    const host = request.headers.get('host')
+    const protocol = host?.includes('localhost') ? 'http' : 'https'
+    return `${protocol}://${host}`
+  }
+
+  const baseUrl = getBaseUrl()
+  console.log('[UPS Callback] Base URL for redirects:', baseUrl)
 
   // Handle OAuth errors
   if (error) {
     console.error('[UPS Callback] ❌ OAuth error:', error, errorDescription)
     return NextResponse.redirect(
-      new URL(`/dashboard/integrations?ups_error=${encodeURIComponent(error)}&ups_error_description=${encodeURIComponent(errorDescription || '')}`, request.url)
+      new URL(`/dashboard/integrations?ups_error=${encodeURIComponent(error)}&ups_error_description=${encodeURIComponent(errorDescription || '')}`, baseUrl)
     )
   }
 
@@ -30,7 +51,7 @@ export async function GET(request: NextRequest) {
   if (!code) {
     console.error('[UPS Callback] ❌ No authorization code received')
     return NextResponse.redirect(
-      new URL('/dashboard/integrations?ups_error=no_authorization_code', request.url)
+      new URL('/dashboard/integrations?ups_error=no_authorization_code', baseUrl)
     )
   }
 
@@ -73,11 +94,11 @@ export async function GET(request: NextRequest) {
       throw new Error('UPS credentials not configured in environment variables')
     }
 
-    const baseUrl = environment === 'production'
+    const upsBaseUrl = environment === 'production'
       ? 'https://onlinetools.ups.com'
       : 'https://wwwcie.ups.com'
 
-    const tokenUrl = `${baseUrl}/security/v1/oauth/token`
+    const tokenUrl = `${upsBaseUrl}/security/v1/oauth/token`
 
     console.log('[UPS Callback] Token URL:', tokenUrl)
     console.log('[UPS Callback] Exchanging code for tokens...')
@@ -120,8 +141,8 @@ export async function GET(request: NextRequest) {
     console.log('[UPS Callback] Expires in:', tokens.expires_in)
     console.log('[UPS Callback] Has refresh token:', !!tokens.refresh_token)
 
-    // Create response with redirect
-    const redirectUrl = new URL('/dashboard/integrations', request.url)
+    // ✅ Create response with redirect using the correct base URL
+    const redirectUrl = new URL('/dashboard/integrations', baseUrl)
     redirectUrl.searchParams.set('ups_success', 'true')
     redirectUrl.searchParams.set('ups_account', accountNumber)
     redirectUrl.searchParams.set('ups_env', environment)
@@ -146,7 +167,7 @@ export async function GET(request: NextRequest) {
 
     // Clear cookies on error
     const errorResponse = NextResponse.redirect(
-      new URL(`/dashboard/integrations?ups_error=${encodeURIComponent(error.message)}`, request.url)
+      new URL(`/dashboard/integrations?ups_error=${encodeURIComponent(error.message)}`, baseUrl)
     )
     errorResponse.cookies.delete('ups_oauth_state')
     errorResponse.cookies.delete('ups_account_number')

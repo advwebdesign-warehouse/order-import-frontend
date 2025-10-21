@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { USPSServiceV2 } from '@/lib/usps/uspsServiceV2'
+import { UPSService } from '@/lib/ups/upsService'
 
 export async function POST(request: NextRequest) {
   console.log('=================================')
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     if (carriers.includes('USPS')) {
       console.log('[Sync] USPS found in carriers list')
 
-      if (!credentials) {
+      if (!credentials?.usps) {
         console.error('[Sync] No USPS credentials provided')
         return NextResponse.json(
           { error: 'USPS credentials are required' },
@@ -28,13 +29,13 @@ export async function POST(request: NextRequest) {
       }
 
       console.log('[Sync] USPS credentials found, initializing service...')
-      console.log('[Sync] Environment:', credentials.environment)
+      console.log('[Sync] Environment:', credentials.usps.environment)
 
       // Create USPS service with OAuth credentials
       const uspsService = new USPSServiceV2(
-        credentials.consumerKey,
-        credentials.consumerSecret,
-        credentials.environment
+        credentials.usps.consumerKey,
+        credentials.usps.consumerSecret,
+        credentials.usps.environment
       )
 
       // Get available containers from API
@@ -99,26 +100,98 @@ export async function POST(request: NextRequest) {
 
       if (uspsBoxes.length === 0) {
         console.warn('[Sync] No USPS boxes found via API')
+      }
+    }
+
+    // Sync UPS boxes from API
+    if (carriers.includes('UPS')) {
+      console.log('[Sync] UPS found in carriers list')
+
+      if (!credentials?.ups) {
+        console.error('[Sync] No UPS credentials provided')
+        return NextResponse.json(
+          { error: 'UPS credentials are required' },
+          { status: 400 }
+        )
+      }
+
+      console.log('[Sync] UPS credentials found, initializing service...')
+      console.log('[Sync] Environment:', credentials.ups.environment)
+
+      try {
+        // Create UPS service
+        const upsService = new UPSService(
+          credentials.ups.accountNumber,
+          credentials.ups.accessToken,
+          credentials.ups.refreshToken,
+          credentials.ups.environment
+        )
+
+        // Get available containers from API
+        console.log('[Sync] Fetching available UPS containers...')
+        const upsContainers = await upsService.getAvailableContainers()
+
+        console.log(`[Sync] Found ${upsContainers.length} available UPS containers`)
+
+        // Map UPS containers to our box format
+        const upsBoxes = upsContainers.map((container: any, index: number) => {
+          const isVariableBox = container.code === 'CUSTOMER_SUPPLIED'
+          const hasZeroDimensions = container.dimensions.length === 0 &&
+                                     container.dimensions.width === 0 &&
+                                     container.dimensions.height === 0
+
+          return {
+            id: `ups-${Date.now()}-${index}`,
+            name: container.name,
+            boxType: 'ups' as const,
+            carrierCode: container.code,
+            dimensions: container.dimensions,
+            weight: container.weight,
+            description: container.description,
+            isActive: isVariableBox && hasZeroDimensions ? false : true,
+            flatRate: container.flatRate,
+            flatRatePrice: container.flatRatePrice,
+            availableFor: container.availableFor,
+            packageType: container.packageType,
+            isEditable: isVariableBox,
+            needsDimensions: isVariableBox && hasZeroDimensions,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }
+        })
+
+        boxes.push(...upsBoxes)
+        console.log(`[Sync] Successfully synced ${upsBoxes.length} UPS boxes`)
+      } catch (error: any) {
+        console.error('[Sync] UPS sync error:', error)
         return NextResponse.json(
           {
-            error: 'No boxes available from USPS API. Please check your account configuration.',
+            error: `Failed to sync UPS boxes: ${error.message}`,
             boxes: [],
             count: 0
           },
-          { status: 200 } // Still return 200 so UI doesn't show error
+          { status: 500 }
         )
       }
     }
 
-    // Future: Sync UPS, FedEx, DHL boxes
-    if (carriers.includes('UPS')) {
-      console.log('[Sync] UPS sync not yet implemented')
-    }
+    // Future: Sync FedEx, DHL boxes
     if (carriers.includes('FedEx') || carriers.includes('FEDEX')) {
       console.log('[Sync] FedEx sync not yet implemented')
     }
 
     console.log(`[Sync] Sync complete: ${boxes.length} total boxes`)
+
+    if (boxes.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'No boxes available from carrier APIs. Please check your account configuration.',
+          boxes: [],
+          count: 0
+        },
+        { status: 200 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
@@ -133,7 +206,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: `Failed to sync boxes: ${error.message}. Please check your USPS credentials and try again.`,
+        error: `Failed to sync boxes: ${error.message}. Please check your credentials and try again.`,
         boxes: [],
         count: 0
       },

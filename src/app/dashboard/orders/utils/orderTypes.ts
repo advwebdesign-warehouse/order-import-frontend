@@ -43,7 +43,7 @@ export interface Order {
   status: string
   fulfillmentStatus: string
   platform: string
-  shopName?: string
+  storeId?: string
   storeName?: string
   orderDate: string
   itemCount: number
@@ -55,6 +55,7 @@ export interface Order {
   // Add warehouse support
   warehouseId?: string
   warehouseName?: string
+  // ADD STORE FIELDS:
 
   // ADD THESE SHIPPING ADDRESS FIELDS:
   shippingAddress1?: string

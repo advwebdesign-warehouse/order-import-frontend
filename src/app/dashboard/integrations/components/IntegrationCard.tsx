@@ -1,4 +1,4 @@
-//file path: app/dashboard/integrations/components/IntegrationCard.tsx
+//file path: src/app/dashboard/integrations/components/IntegrationCard.tsx
 
 'use client'
 
@@ -85,7 +85,7 @@ export default function IntegrationCard({
           </div>
         </div>
 
-        {/* Status */}
+        {/* Status with Environment Badge */}
         <div className="mt-4 flex items-center space-x-2">
           <div className={`flex items-center space-x-1 px-2 py-1 rounded-full ${status.bg}`}>
             <StatusIcon className={`h-4 w-4 ${status.color}`} />
@@ -93,9 +93,36 @@ export default function IntegrationCard({
               {status.text}
             </span>
           </div>
+
+          {/* Enabled Badge */}
           {integration.enabled && (
             <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full">
               Enabled
+            </span>
+          )}
+
+          {/* Environment Badge - Only for connected shipping integrations with environment config */}
+          {integration.status === 'connected' &&
+           integration.type === 'shipping' &&
+           integration.config?.environment && (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                integration.config.environment === 'production'
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-blue-100 text-blue-700'
+              }`}
+            >
+              {integration.config.environment === 'production' ? (
+                <>
+                  <span className="mr-1">🚀</span>
+                  Production
+                </>
+              ) : (
+                <>
+                  <span className="mr-1">🧪</span>
+                  Sandbox
+                </>
+              )}
             </span>
           )}
         </div>

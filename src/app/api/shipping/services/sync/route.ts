@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { USPSServiceV2 } from '@/lib/usps/uspsServiceV2'
+import { UPSService } from '@/lib/ups/upsService'
 
 export async function POST(request: NextRequest) {
   console.log('=================================')
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     if (carriers.includes('USPS')) {
       console.log('[Services Sync] USPS found in carriers list')
 
-      if (!credentials) {
+      if (!credentials?.usps) {
         console.error('[Services Sync] No USPS credentials provided')
         return NextResponse.json(
           { error: 'USPS credentials are required' },
@@ -28,14 +29,14 @@ export async function POST(request: NextRequest) {
       }
 
       console.log('[Services Sync] USPS credentials found, initializing service...')
-      console.log('[Services Sync] Environment:', credentials.environment)
+      console.log('[Services Sync] Environment:', credentials.usps.environment)
 
       try {
-        // Create USPS service with OAuth credentials - CORRECTED PROPERTY NAMES
+        // Create USPS service with OAuth credentials
         const uspsService = new USPSServiceV2(
-          credentials.consumerKey,  // ✅ Correct property from integrationTypes.ts
-          credentials.consumerSecret,  // ✅ Correct property from integrationTypes.ts
-          credentials.environment
+          credentials.usps.consumerKey,
+          credentials.usps.consumerSecret,
+          credentials.usps.environment
         )
 
         // Get available USPS services from API
@@ -67,10 +68,60 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Future: Sync UPS, FedEx, DHL services
+    // Sync UPS Services
     if (carriers.includes('UPS')) {
-      console.log('[Services Sync] UPS sync not yet implemented')
+      console.log('[Services Sync] UPS found in carriers list')
+
+      if (!credentials?.ups) {
+        console.error('[Services Sync] No UPS credentials provided')
+        return NextResponse.json(
+          { error: 'UPS credentials are required' },
+          { status: 400 }
+        )
+      }
+
+      console.log('[Services Sync] UPS credentials found, initializing service...')
+      console.log('[Services Sync] Environment:', credentials.ups.environment)
+
+      try {
+        // Create UPS service
+        const upsService = new UPSService(
+          credentials.ups.accountNumber,
+          credentials.ups.accessToken,
+          credentials.ups.refreshToken,
+          credentials.ups.environment
+        )
+
+        // Get available UPS services from API
+        console.log('[Services Sync] Fetching available UPS services...')
+        const upsServices = await upsService.getAvailableServices()
+
+        console.log(`[Services Sync] Found ${upsServices.length} UPS services`)
+
+        // Add unique IDs and timestamps to each service
+        const servicesWithIds = upsServices.map((service: any, index: number) => ({
+          ...service,
+          id: `ups-${Date.now()}-${index}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }))
+
+        services.push(...servicesWithIds)
+        console.log(`[Services Sync] Successfully synced ${servicesWithIds.length} UPS services`)
+      } catch (error: any) {
+        console.error('[Services Sync] UPS sync error:', error)
+        return NextResponse.json(
+          {
+            error: `Failed to sync UPS services: ${error.message}`,
+            services: [],
+            count: 0
+          },
+          { status: 500 }
+        )
+      }
     }
+
+    // Future: Sync FedEx, DHL services
     if (carriers.includes('FedEx') || carriers.includes('FEDEX')) {
       console.log('[Services Sync] FedEx sync not yet implemented')
     }

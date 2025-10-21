@@ -1,6 +1,7 @@
 // File: app/dashboard/orders/utils/orderUtils.ts
 
 import { Order, OrderWithDetails, OrderItem } from './orderTypes'
+import { getCurrentUserId } from '@/lib/storage/userStorage'
 
 /**
  * Calculate total item count from items array (sum of all quantities)
@@ -224,24 +225,7 @@ export function calculateTotalWeight(items: { weight?: number; quantity: number 
 
 // Fixed getUserId function with client-side check
 export function getUserId(): string {
-  // Check if we're on the client side
-  if (typeof window === 'undefined') {
-    // Return a default ID for server-side rendering
-    return 'user_ssr_fallback'
-  }
-
-  try {
-    let id = localStorage.getItem('userId')
-    if (!id) {
-      id = 'user_' + Math.random().toString(36).substr(2, 9)
-      localStorage.setItem('userId', id)
-    }
-    return id
-  } catch (error) {
-    // Fallback if localStorage is not available
-    console.warn('localStorage not available:', error)
-    return 'user_fallback_' + Math.random().toString(36).substr(2, 9)
-  }
+  return getCurrentUserId()
 }
 
 export function generateStorageKeys(userId: string) {
