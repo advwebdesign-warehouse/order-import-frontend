@@ -2,105 +2,94 @@
 
 'use client'
 
-import { useState, useEffect, Fragment } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import { Store, StoreFormData } from '../utils/storeTypes'
+import { Store, StoreFormData, WarehouseConfig, US_STATES } from '../utils/storeTypes'
 import { createStore, updateStore } from '../utils/storeStorage'
+import { useWarehouses } from '../../warehouses/context/WarehouseContext'
+import WarehouseAssignmentTab from './WarehouseAssignmentTab'
 
 interface StoreModalProps {
   store: Store | null
   onClose: (updated: boolean) => void
 }
 
-const COUNTRIES = [
-  { code: 'US', name: 'United States' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'MX', name: 'Mexico' },
-]
-
-const BUSINESS_TYPES = [
-  { value: 'sole_proprietor', label: 'Sole Proprietor' },
-  { value: 'llc', label: 'LLC' },
-  { value: 'corporation', label: 'Corporation' },
-  { value: 'partnership', label: 'Partnership' },
-]
-
 export default function StoreModal({ store, onClose }: StoreModalProps) {
+  const { warehouses } = useWarehouses()
+  const [isSaving, setIsSaving] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Store Information Form State - All fields explicitly set to ensure controlled inputs
   const [formData, setFormData] = useState<StoreFormData>({
-    companyName: '',
-    storeName: '',
-    logo: '',
-    website: '',
-    email: '',
-    phone: '',
-    address1: '',
-    address2: '',
-    city: '',
-    state: '',
-    zip: '',
-    country: 'United States',
-    countryCode: 'US',
-    taxId: '',
-    businessType: undefined,
-    defaultShippingFrom: false
+    storeName: store?.storeName ?? '',
+    logo: store?.logo ?? '',
+    website: store?.website ?? '',
+    email: store?.email ?? '',
+    phone: store?.phone ?? '',
+    address1: store?.address.address1 ?? '',
+    address2: store?.address.address2 ?? '',
+    city: store?.address.city ?? '',
+    state: store?.address.state ?? '',
+    zip: store?.address.zip ?? '',
+    country: store?.address.country ?? 'United States',
+    countryCode: store?.address.countryCode ?? 'US'
   })
 
-  const [errors, setErrors] = useState<Partial<Record<keyof StoreFormData, string>>>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  // Warehouse Configuration State
+  const [warehouseConfig, setWarehouseConfig] = useState<WarehouseConfig | undefined>(
+    store?.warehouseConfig
+  )
 
-  useEffect(() => {
-    if (store) {
-      setFormData({
-        companyName: store.companyName,
-        storeName: store.storeName || '',
-        logo: store.logo || '',
-        website: store.website || '',
-        email: store.email || '',
-        phone: store.phone || '',
-        address1: store.address.address1,
-        address2: store.address.address2 || '',
-        city: store.address.city,
-        state: store.address.state,
-        zip: store.address.zip,
-        country: store.address.country,
-        countryCode: store.address.countryCode,
-        taxId: store.taxId || '',
-        businessType: store.businessType,
-        defaultShippingFrom: store.defaultShippingFrom || false
+  const [logoUploadMethod, setLogoUploadMethod] = useState<'upload' | 'url'>('upload')
+
+  const handleChange = (field: keyof StoreFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[field]
+        return newErrors
       })
     }
-  }, [store])
+  }
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // In a real app, you'd upload to a server
+      // For now, create a local URL
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        handleChange('logo', reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   const validate = (): boolean => {
-    const newErrors: Partial<Record<keyof StoreFormData, string>> = {}
+    const newErrors: Record<string, string> = {}
 
-    if (!formData.companyName.trim()) {
-      newErrors.companyName = 'Company name is required'
+    if (!formData.storeName?.trim()) {
+      newErrors.storeName = 'Store name is required'
     }
 
-    if (!formData.address1.trim()) {
+    if (!formData.address1?.trim()) {
       newErrors.address1 = 'Address is required'
     }
 
-    if (!formData.city.trim()) {
+    if (!formData.city?.trim()) {
       newErrors.city = 'City is required'
     }
 
-    if (!formData.state.trim()) {
+    if (!formData.state?.trim()) {
       newErrors.state = 'State is required'
     }
 
-    if (!formData.zip.trim()) {
+    if (!formData.zip?.trim()) {
       newErrors.zip = 'ZIP code is required'
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email format'
-    }
-
-    if (formData.website && !/^https?:\/\/.+/.test(formData.website)) {
-      newErrors.website = 'Website must start with http:// or https://'
     }
 
     setErrors(newErrors)
@@ -110,35 +99,36 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!validate()) return
+    if (!validate()) {
+      return
+    }
 
-    setIsSubmitting(true)
+    setIsSaving(true)
 
     try {
-      const storeData = {
-        companyName: formData.companyName,
-        storeName: formData.storeName || undefined,
-        logo: formData.logo || undefined,
-        website: formData.website || undefined,
-        email: formData.email || undefined,
-        phone: formData.phone || undefined,
+      const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt' | 'accountId'> = {
+        storeName: formData.storeName!, // Non-null assertion - validation ensures it exists
+        ...(formData.logo && { logo: formData.logo }),
+        ...(formData.website && { website: formData.website }),
+        ...(formData.email && { email: formData.email }),
+        ...(formData.phone && { phone: formData.phone }),
         address: {
           address1: formData.address1,
-          address2: formData.address2 || undefined,
+          ...(formData.address2 && { address2: formData.address2 }),
           city: formData.city,
           state: formData.state,
           zip: formData.zip,
           country: formData.country,
           countryCode: formData.countryCode
         },
-        taxId: formData.taxId || undefined,
-        businessType: formData.businessType,
-        defaultShippingFrom: formData.defaultShippingFrom
+        warehouseConfig: warehouseConfig
       }
 
       if (store) {
+        // Update existing store
         updateStore(store.id, storeData)
       } else {
+        // Create new store
         createStore(storeData)
       }
 
@@ -147,21 +137,12 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
       console.error('Error saving store:', error)
       alert('Failed to save store. Please try again.')
     } finally {
-      setIsSubmitting(false)
+      setIsSaving(false)
     }
   }
 
-  const handleCountryChange = (country: string) => {
-    const selectedCountry = COUNTRIES.find(c => c.name === country)
-    setFormData(prev => ({
-      ...prev,
-      country,
-      countryCode: selectedCountry?.code || ''
-    }))
-  }
-
   return (
-    <Transition appear show={true} as={Fragment}>
+    <Transition.Root show={true} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={() => onClose(false)}>
         <Transition.Child
           as={Fragment}
@@ -172,308 +153,276 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black bg-opacity-25" />
+          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 z-10 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
+              enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enterTo="opacity-100 translate-y-0 sm:scale-100"
               leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
+              leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+              leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all">
-                <div className="flex items-center justify-between mb-6">
-                  <Dialog.Title className="text-lg font-medium text-gray-900">
-                    {store ? 'Edit Store' : 'Add New Store'}
-                  </Dialog.Title>
-                  <button
-                    onClick={() => onClose(false)}
-                    className="text-gray-400 hover:text-gray-500"
-                  >
-                    <XMarkIcon className="h-6 w-6" />
-                  </button>
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
+                {/* Header */}
+                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                  <div className="flex items-start justify-between">
+                    <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                      {store ? 'Edit Store' : 'Add Store'}
+                    </Dialog.Title>
+                    <button
+                      type="button"
+                      className="rounded-md bg-white text-gray-400 hover:text-gray-500"
+                      onClick={() => onClose(false)}
+                    >
+                      <span className="sr-only">Close</span>
+                      <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Store information will be used for order-related documents such as packing slips and shipping labels.
+                  </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Company Information */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-4">Company Information</h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Company Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.companyName}
-                          onChange={(e) => setFormData(prev => ({ ...prev, companyName: e.target.value }))}
-                          className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                            errors.companyName ? 'border-red-300' : 'border-gray-300'
-                          } focus:border-indigo-500 focus:ring-indigo-500`}
-                        />
-                        {errors.companyName && (
-                          <p className="mt-1 text-sm text-red-600">{errors.companyName}</p>
-                        )}
-                      </div>
-
+                {/* Form */}
+                <form onSubmit={handleSubmit}>
+                  <div className="bg-white px-4 pb-4 sm:px-6">
+                    <div className="space-y-6">
+                      {/* Store Information */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Store Name
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.storeName}
-                          onChange={(e) => setFormData(prev => ({ ...prev, storeName: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        />
-                      </div>
+                        <h4 className="text-sm font-medium text-gray-900 mb-4">Store Information</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Store Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.storeName ?? ''}
+                              onChange={(e) => handleChange('storeName', e.target.value)}
+                              className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                                errors.storeName ? 'border-red-300' : 'border-gray-300'
+                              } focus:border-indigo-500 focus:ring-indigo-500`}
+                              placeholder="2nd Store"
+                            />
+                            {errors.storeName && (
+                              <p className="mt-1 text-sm text-red-600">{errors.storeName}</p>
+                            )}
+                          </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Business Type
-                        </label>
-                        <select
-                          value={formData.businessType || ''}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            businessType: e.target.value as any || undefined
-                          }))}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        >
-                          <option value="">Select type...</option>
-                          {BUSINESS_TYPES.map(type => (
-                            <option key={type.value} value={type.value}>
-                              {type.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                          {/* Logo Upload Section */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Store Logo <span className="text-gray-500 text-xs">PNG, JPG up to 2MB</span>
+                            </label>
 
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Logo URL
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.logo}
-                          onChange={(e) => setFormData(prev => ({ ...prev, logo: e.target.value }))}
-                          placeholder="https://example.com/logo.png"
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        />
-                      </div>
+                            <div className="flex gap-2 mb-3">
+                              <button
+                                type="button"
+                                onClick={() => setLogoUploadMethod('upload')}
+                                className={`px-3 py-1.5 text-sm rounded-md ${
+                                  logoUploadMethod === 'upload'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white text-gray-700 border border-gray-300'
+                                }`}
+                              >
+                                Upload Logo
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setLogoUploadMethod('url')}
+                                className={`px-3 py-1.5 text-sm rounded-md ${
+                                  logoUploadMethod === 'url'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-white text-gray-700 border border-gray-300'
+                                }`}
+                              >
+                                Use URL
+                              </button>
+                            </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Tax ID / EIN
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.taxId}
-                          onChange={(e) => setFormData(prev => ({ ...prev, taxId: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                            {logoUploadMethod === 'upload' ? (
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/jpg"
+                                onChange={handleLogoUpload}
+                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                              />
+                            ) : (
+                              <input
+                                type="url"
+                                value={formData.logo ?? ''}
+                                onChange={(e) => handleChange('logo', e.target.value)}
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                placeholder="https://example.com/logo.png"
+                              />
+                            )}
 
-                  {/* Contact Information */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-4">Contact Information</h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={formData.email}
-                          onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                          className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                            errors.email ? 'border-red-300' : 'border-gray-300'
-                          } focus:border-indigo-500 focus:ring-indigo-500`}
-                        />
-                        {errors.email && (
-                          <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Phone
-                        </label>
-                        <input
-                          type="tel"
-                          value={formData.phone}
-                          onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Website
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.website}
-                          onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                          placeholder="https://example.com"
-                          className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                            errors.website ? 'border-red-300' : 'border-gray-300'
-                          } focus:border-indigo-500 focus:ring-indigo-500`}
-                        />
-                        {errors.website && (
-                          <p className="mt-1 text-sm text-red-600">{errors.website}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Address */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-4">Address</h3>
-                    <div className="grid grid-cols-1 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Address Line 1 *
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.address1}
-                          onChange={(e) => setFormData(prev => ({ ...prev, address1: e.target.value }))}
-                          className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                            errors.address1 ? 'border-red-300' : 'border-gray-300'
-                          } focus:border-indigo-500 focus:ring-indigo-500`}
-                        />
-                        {errors.address1 && (
-                          <p className="mt-1 text-sm text-red-600">{errors.address1}</p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Address Line 2
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.address2}
-                          onChange={(e) => setFormData(prev => ({ ...prev, address2: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-6 gap-4">
-                        <div className="col-span-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            City *
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.city}
-                            onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
-                            className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                              errors.city ? 'border-red-300' : 'border-gray-300'
-                            } focus:border-indigo-500 focus:ring-indigo-500`}
-                          />
-                          {errors.city && (
-                            <p className="mt-1 text-sm text-red-600">{errors.city}</p>
-                          )}
-                        </div>
-
-                        <div className="col-span-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            State/Province *
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.state}
-                            onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
-                            className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                              errors.state ? 'border-red-300' : 'border-gray-300'
-                            } focus:border-indigo-500 focus:ring-indigo-500`}
-                          />
-                          {errors.state && (
-                            <p className="mt-1 text-sm text-red-600">{errors.state}</p>
-                          )}
-                        </div>
-
-                        <div className="col-span-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            ZIP/Postal Code *
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.zip}
-                            onChange={(e) => setFormData(prev => ({ ...prev, zip: e.target.value }))}
-                            className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                              errors.zip ? 'border-red-300' : 'border-gray-300'
-                            } focus:border-indigo-500 focus:ring-indigo-500`}
-                          />
-                          {errors.zip && (
-                            <p className="mt-1 text-sm text-red-600">{errors.zip}</p>
-                          )}
+                            {formData.logo && (
+                              <div className="mt-2">
+                                <img
+                                  src={formData.logo}
+                                  alt="Store logo preview"
+                                  className="h-16 w-auto object-contain border border-gray-200 rounded"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Country *
-                        </label>
-                        <select
-                          value={formData.country}
-                          onChange={(e) => handleCountryChange(e.target.value)}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        >
-                          {COUNTRIES.map(country => (
-                            <option key={country.code} value={country.name}>
-                              {country.name}
-                            </option>
-                          ))}
-                        </select>
+                      {/* Address Section */}
+                      <div className="pt-4 border-t border-gray-200">
+                        <h4 className="text-sm font-medium text-gray-900 mb-4">Store Address</h4>
+                        <div className="grid grid-cols-1 gap-4">
+                          {/* Address Line 1 */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Address Line 1 *
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.address1 ?? ''}
+                              onChange={(e) => handleChange('address1', e.target.value)}
+                              className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                                errors.address1 ? 'border-red-300' : 'border-gray-300'
+                              } focus:border-indigo-500 focus:ring-indigo-500`}
+                              placeholder="123 Main Street"
+                            />
+                            {errors.address1 && (
+                              <p className="mt-1 text-sm text-red-600">{errors.address1}</p>
+                            )}
+                          </div>
+
+                          {/* Address Line 2 */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Address Line 2
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.address2 ?? ''}
+                              onChange={(e) => handleChange('address2', e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              placeholder="Suite 100"
+                            />
+                          </div>
+
+                          {/* City, State, ZIP */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                City *
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.city ?? ''}
+                                onChange={(e) => handleChange('city', e.target.value)}
+                                className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                                  errors.city ? 'border-red-300' : 'border-gray-300'
+                                } focus:border-indigo-500 focus:ring-indigo-500`}
+                                placeholder="San Diego"
+                              />
+                              {errors.city && (
+                                <p className="mt-1 text-sm text-red-600">{errors.city}</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                State *
+                              </label>
+                              <select
+                                value={formData.state ?? ''}
+                                onChange={(e) => handleChange('state', e.target.value)}
+                                className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                                  errors.state ? 'border-red-300' : 'border-gray-300'
+                                } focus:border-indigo-500 focus:ring-indigo-500`}
+                              >
+                                <option value="">Select State</option>
+                                {US_STATES.map(state => (
+                                  <option key={state.code} value={state.code}>
+                                    {state.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {errors.state && (
+                                <p className="mt-1 text-sm text-red-600">{errors.state}</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                ZIP Code *
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.zip ?? ''}
+                                onChange={(e) => handleChange('zip', e.target.value)}
+                                className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                                  errors.zip ? 'border-red-300' : 'border-gray-300'
+                                } focus:border-indigo-500 focus:ring-indigo-500`}
+                                placeholder="92101"
+                              />
+                              {errors.zip && (
+                                <p className="mt-1 text-sm text-red-600">{errors.zip}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Country */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Country *
+                            </label>
+                            <select
+                              value={formData.country ?? 'United States'}
+                              onChange={(e) => {
+                                handleChange('country', e.target.value)
+                                handleChange('countryCode', e.target.value === 'United States' ? 'US' : 'OTHER')
+                              }}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            >
+                              <option value="United States">United States</option>
+                              <option value="Canada">Canada</option>
+                              <option value="Mexico">Mexico</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Warehouse Assignment Section */}
+                      <div className="pt-4 border-t border-gray-200">
+                        <WarehouseAssignmentTab
+                          warehouseConfig={warehouseConfig}
+                          warehouses={warehouses}
+                          onChange={setWarehouseConfig}
+                          storeId={store?.id}
+                        />
                       </div>
                     </div>
                   </div>
 
-                  {/* Shipping Settings */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-4">Shipping Settings</h3>
-                    <div className="flex items-center">
-                      <input
-                        id="defaultShipping"
-                        type="checkbox"
-                        checked={formData.defaultShippingFrom}
-                        onChange={(e) => setFormData(prev => ({
-                          ...prev,
-                          defaultShippingFrom: e.target.checked
-                        }))}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="defaultShipping" className="ml-2 block text-sm text-gray-900">
-                        Use this address as default "Ship From" address
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex justify-end space-x-3 pt-4">
+                  {/* Footer */}
+                  <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-3">
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? 'Saving...' : store ? 'Update Store' : 'Add Store'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => onClose(false)}
-                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
                     >
                       Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                    >
-                      {isSubmitting ? 'Saving...' : store ? 'Update Store' : 'Create Store'}
                     </button>
                   </div>
                 </form>
@@ -482,6 +431,6 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
           </div>
         </div>
       </Dialog>
-    </Transition>
+    </Transition.Root>
   )
 }

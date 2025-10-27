@@ -28,9 +28,10 @@ export const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'orderDate', field: 'orderDate', label: 'Date', sortable: true, visible: true },
   { id: 'orderNumber', field: 'orderNumber', label: 'Order', sortable: true, visible: true },
   { id: 'itemCount', field: 'itemCount', label: 'Items', sortable: true, visible: true },
-  { id: 'customerName', field: 'customerName', label: 'Customer', sortable: true, visible: true },
   { id: 'status', field: 'status', label: 'Status', sortable: true, visible: true },
+  { id: 'fulfillmentStatus', field: 'fulfillmentStatus', label: 'Fulfillment Status', sortable: true, visible: false },
   { id: 'totalAmount', field: 'totalAmount', label: 'Total', sortable: true, visible: true },
+  { id: 'storeName', field: 'storeName', label: 'Store', sortable: true, visible: true },
   { id: 'platform', field: 'platform', label: 'Platform', sortable: true, visible: true },
   { id: 'warehouseName', field: 'warehouseName', label: 'Warehouse', sortable: true, visible: true }, // NEW: Add warehouse column
   { id: 'requestedShipping', field: 'requestedShipping', label: 'Shipping Method', sortable: true, visible: true },
@@ -61,6 +62,7 @@ export const DEFAULT_FILTERS = {
   status: [],                    // Array, not string
   fulfillmentStatus: [],         // Array, not string
   platform: [],                 // Array, not string
+  storeId: [],
   dateRange: '',                 // String
   startDate: '',                 // String
   endDate: '',                   // String
@@ -112,5 +114,6 @@ export const FILTER_OPTIONS = {
     { value: 'Magento', label: 'Magento' },
     { value: 'Amazon', label: 'Amazon' },
     { value: 'eBay', label: 'eBay' }
-  ]
+  ],
+   STORE: []
 }

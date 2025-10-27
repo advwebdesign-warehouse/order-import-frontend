@@ -13,7 +13,6 @@ import OrdersFilters from './components/OrdersFilters'
 import OrdersTable from './components/OrdersTable'
 import OrdersPagination from './components/OrdersPagination'
 
-
 // Custom hooks
 import { useOrders } from './hooks/useOrders'
 import { useOrderFilters } from './hooks/useOrderFilters'
@@ -559,6 +558,7 @@ export default function OrdersPage() {
       status: [],
       fulfillmentStatus: [],
       platform: [],
+      storeId: [],
       dateRange: '',
       startDate: '',
       endDate: '',
@@ -844,6 +844,7 @@ export default function OrdersPage() {
         columns={columns}
         onColumnVisibilityChange={handleColumnVisibilityChange}
         onResetLayout={handleResetLayout}
+        orders={warehouseFilteredOrders}
       />
 
 

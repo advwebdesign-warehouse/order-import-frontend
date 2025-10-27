@@ -134,6 +134,10 @@ export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
           aValue = a.itemCount || 0
           bValue = b.itemCount || 0
           break
+        case 'storeName':
+          aValue = a.storeName || ''
+          bValue = b.storeName || ''
+          break
         case 'platform':
           aValue = a.platform || ''
           bValue = b.platform || ''

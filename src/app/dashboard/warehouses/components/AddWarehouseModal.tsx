@@ -6,6 +6,7 @@ import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { Warehouse, DEFAULT_ORDER_STATUS_SETTINGS } from '../utils/warehouseTypes'
 import { generateAddressPreview } from '../utils/addressVariables'
+import { COUNTRIES, DEFAULT_COUNTRY } from '../../shared/utils/countries'
 
 interface AddWarehouseModalProps {
   isOpen: boolean
@@ -14,16 +15,6 @@ interface AddWarehouseModalProps {
   warehouse?: Warehouse | null
   warehouses: Warehouse[]
 }
-
-const COUNTRIES = [
-  { code: 'US', name: 'United States' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'FR', name: 'France' },
-  { code: 'JP', name: 'Japan' }
-]
 
 const generatePreview = (template: string, variables: any) => {
   return generateAddressPreview(template, variables)
@@ -46,8 +37,8 @@ export default function AddWarehouseModal({
       city: '',
       state: '',
       zip: '',
-      country: 'United States',
-      countryCode: 'US'
+      country: DEFAULT_COUNTRY.name,
+      countryCode: DEFAULT_COUNTRY.code
     },
     contactInfo: {
       managerName: '',
@@ -73,8 +64,8 @@ export default function AddWarehouseModal({
       city: '',
       state: '',
       zip: '',
-      country: 'United States',
-      countryCode: 'US'
+      country: DEFAULT_COUNTRY.name,
+      countryCode: DEFAULT_COUNTRY.code
     }
   })
 

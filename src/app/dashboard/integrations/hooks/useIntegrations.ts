@@ -370,17 +370,41 @@ export function useIntegrations() {
   const addIntegration = (integration: Integration) => {
     const newSettings = {
       ...settings,
-      integrations: [...settings.integrations, integration]
+      integrations: [...settings.integrations, integration],
+      lastUpdated: new Date().toISOString()
     }
-    return saveSettings(newSettings)
+
+    const success = saveSettings(newSettings)
+
+    if (success) {
+      // ✅ Update local state immediately
+      setSettings(newSettings)
+    }
+
+    return success
   }
 
-  const removeIntegration = (integrationId: string) => {
+  const removeIntegration = (integrationId: string, storeId?: string) => {
     const newSettings = {
       ...settings,
-      integrations: settings.integrations.filter(i => i.id !== integrationId)
+      integrations: settings.integrations.filter(i => {
+        // ✅ If storeId provided, only remove integration for THAT store
+        if (storeId) {
+          return !(i.id === integrationId && i.storeId === storeId)
+        }
+        // Otherwise remove all instances (fallback)
+        return i.id !== integrationId
+      }),
+      lastUpdated: new Date().toISOString()
     }
-    return saveSettings(newSettings)
+    const success = saveSettings(newSettings)
+
+    if (success) {
+      // ✅ Update local state immediately
+      setSettings(newSettings)
+    }
+
+    return success
   }
 
   return {

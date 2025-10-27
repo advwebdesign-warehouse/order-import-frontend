@@ -545,6 +545,7 @@ export default function WarehouseOrdersPage() {
       status: [],
       fulfillmentStatus: [],
       platform: [],
+      storeId: [],
       dateRange: '',
       startDate: '',
       endDate: '',

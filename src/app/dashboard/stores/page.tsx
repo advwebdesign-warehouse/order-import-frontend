@@ -2,34 +2,95 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
-import { PlusIcon, BuildingStorefrontIcon } from '@heroicons/react/24/outline'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { BuildingStorefrontIcon } from '@heroicons/react/24/outline'
 import StoresTable from './components/StoresTable'
 import StoreModal from './components/StoreModal'
-import { Store, StoreFilterState, StoreSortState } from './utils/storeTypes'
-import { getStoresFromStorage } from './utils/storeStorage'
+import StoresToolbar from './components/StoresToolbar'
+import { Store, StoreSortState } from './utils/storeTypes'
+import { getStoresFromStorage, ensureDefaultStore } from './utils/storeStorage'
+import { useStoreFilters } from './hooks/useStoreFilters'
+import { useStoreSelection } from './hooks/useStoreSelection'
+import { useStoreColumns } from './hooks/useStoreColumns'
 
-export default function StoresPage() {
+// Loading component for Suspense fallback
+function StoresLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-96">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading stores...</p>
+      </div>
+    </div>
+  )
+}
+
+// Main content component
+function StoresContent() {
+  const searchParams = useSearchParams()
   const [stores, setStores] = useState<Store[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedStore, setSelectedStore] = useState<Store | null>(null)
-  const [filters, setFilters] = useState<StoreFilterState>({
-    search: '',
-    country: '',
-    state: ''
-  })
-  const [sort, setSort] = useState<StoreSortState>({
-    field: 'companyName',
-    direction: 'asc'
-  })
+  const [loading, setLoading] = useState(true)
+
+  // Use the custom hooks
+  const {
+    searchTerm,
+    setSearchTerm,
+    showFilters,
+    setShowFilters,
+    filteredStores,
+    clearAllFilters
+  } = useStoreFilters(stores)
+
+  const {
+    selectedStores,
+    handleSelectStore,
+    handleSelectAll,
+    clearSelection
+  } = useStoreSelection()
+
+  const {
+    columns,
+    sortConfig,
+    sortedStores,
+    handleSort,
+    handleColumnVisibilityChange,
+    resetToDefaults
+  } = useStoreColumns(filteredStores)
 
   useEffect(() => {
+    ensureDefaultStore()
     loadStores()
   }, [])
 
+  // Check for URL parameters to reopen modal after returning from warehouse creation
+  useEffect(() => {
+    const action = searchParams.get('action')
+    const storeId = searchParams.get('storeId')
+
+    if (action === 'edit' && storeId) {
+      // Find the store by ID and open the modal
+      const store = stores.find(s => s.id === storeId)
+      if (store) {
+        setSelectedStore(store)
+        setIsModalOpen(true)
+      }
+
+      // Clean up URL parameters
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete('action')
+      newUrl.searchParams.delete('storeId')
+      window.history.replaceState({}, '', newUrl.toString())
+    }
+  }, [searchParams, stores])
+
   const loadStores = () => {
+    setLoading(true)
     const loadedStores = getStoresFromStorage()
     setStores(loadedStores)
+    setLoading(false)
   }
 
   const handleCreateStore = () => {
@@ -42,6 +103,11 @@ export default function StoresPage() {
     setIsModalOpen(true)
   }
 
+  const handleViewStore = (store: Store) => {
+    setSelectedStore(store)
+    // You can add a view-only modal here if needed
+  }
+
   const handleModalClose = (updated: boolean) => {
     setIsModalOpen(false)
     setSelectedStore(null)
@@ -50,142 +116,50 @@ export default function StoresPage() {
     }
   }
 
-  // Filter stores
-  const filteredStores = stores.filter(store => {
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase()
-      const matchesSearch =
-        store.companyName.toLowerCase().includes(searchLower) ||
-        store.storeName?.toLowerCase().includes(searchLower) ||
-        store.email?.toLowerCase().includes(searchLower) ||
-        store.phone?.includes(filters.search)
-      if (!matchesSearch) return false
+  const handleBulkAction = (action: string) => {
+    if (selectedStores.size === 0) {
+      alert('Please select at least one store.')
+      return
     }
 
-    if (filters.country && store.address.country !== filters.country) {
-      return false
-    }
+    // Implement bulk actions
+    console.log('Bulk action:', action, 'for stores:', Array.from(selectedStores))
+    // Add your bulk action logic here
+    clearSelection()
+  }
 
-    if (filters.state && store.address.state !== filters.state) {
-      return false
-    }
-
-    return true
-  })
-
-  // Sort stores
-  const sortedStores = [...filteredStores].sort((a, b) => {
-    let aValue: any
-    let bValue: any
-
-    switch (sort.field) {
-      case 'companyName':
-        aValue = a.companyName.toLowerCase()
-        bValue = b.companyName.toLowerCase()
-        break
-      case 'storeName':
-        aValue = (a.storeName || '').toLowerCase()
-        bValue = (b.storeName || '').toLowerCase()
-        break
-      case 'city':
-        aValue = a.address.city.toLowerCase()
-        bValue = b.address.city.toLowerCase()
-        break
-      case 'state':
-        aValue = a.address.state.toLowerCase()
-        bValue = b.address.state.toLowerCase()
-        break
-      case 'createdAt':
-        aValue = new Date(a.createdAt).getTime()
-        bValue = new Date(b.createdAt).getTime()
-        break
-      default:
-        return 0
-    }
-
-    if (aValue < bValue) return sort.direction === 'asc' ? -1 : 1
-    if (aValue > bValue) return sort.direction === 'asc' ? 1 : -1
-    return 0
-  })
+  if (loading) {
+    return <StoresLoading />
+  }
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
-      <div className="sm:flex sm:items-center sm:justify-between mb-6">
-        <div>
-          <div className="flex items-center">
-            <BuildingStorefrontIcon className="h-8 w-8 text-indigo-600 mr-3" />
-            <h1 className="text-2xl font-bold text-gray-900">Stores</h1>
-          </div>
-          <p className="mt-2 text-sm text-gray-700">
-            Manage your store locations and shipping information
-          </p>
-        </div>
-        <div className="mt-4 sm:mt-0">
-          <button
-            onClick={handleCreateStore}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Add Store
-          </button>
-        </div>
-      </div>
+    <div className="px-4 sm:px-6 lg:px-8">
+      <StoresToolbar
+        selectedStoresCount={selectedStores.size}
+        onBulkAction={handleBulkAction}
+        onAddStore={handleCreateStore}
+        onResetLayout={resetToDefaults}
+        columns={columns}
+        onColumnVisibilityChange={handleColumnVisibilityChange}
+        totalStores={stores.length}
+        filteredStores={filteredStores.length}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        showFilters={showFilters}
+        onToggleFilters={() => setShowFilters(!showFilters)}
+        onClearAllFilters={clearAllFilters}
+      />
 
-      {/* Filters */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div>
-          <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
-            Search
-          </label>
-          <input
-            type="text"
-            id="search"
-            value={filters.search}
-            onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-            placeholder="Search by name, email, phone..."
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-1">
-            Country
-          </label>
-          <select
-            id="country"
-            value={filters.country}
-            onChange={(e) => setFilters(prev => ({ ...prev, country: e.target.value }))}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-          >
-            <option value="">All Countries</option>
-            <option value="United States">United States</option>
-            <option value="Canada">Canada</option>
-            <option value="Mexico">Mexico</option>
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1">
-            State
-          </label>
-          <input
-            type="text"
-            id="state"
-            value={filters.state}
-            onChange={(e) => setFilters(prev => ({ ...prev, state: e.target.value }))}
-            placeholder="Filter by state..."
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-          />
-        </div>
-      </div>
-
-      {/* Table */}
       <StoresTable
         stores={sortedStores}
-        sort={sort}
-        onSort={setSort}
-        onEdit={handleEditStore}
+        columns={columns}
+        sortConfig={sortConfig}
+        selectedStores={selectedStores}
+        onSort={handleSort}
+        onSelectStore={handleSelectStore}
+        onSelectAll={() => handleSelectAll(sortedStores)}
+        onViewStore={handleViewStore}
+        onEditStore={handleEditStore}
         onRefresh={loadStores}
       />
 
@@ -197,5 +171,14 @@ export default function StoresPage() {
         />
       )}
     </div>
+  )
+}
+
+// Export the page wrapped in Suspense
+export default function StoresPage() {
+  return (
+    <Suspense fallback={<StoresLoading />}>
+      <StoresContent />
+    </Suspense>
   )
 }

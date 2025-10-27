@@ -2,10 +2,10 @@
 
 'use client'
 
-import { Fragment } from 'react'
+import { Fragment, useMemo } from 'react'
 import { Listbox, Transition } from '@headlessui/react'
 import { ChevronUpDownIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, FunnelIcon, ArrowDownTrayIcon } from '@heroicons/react/20/solid'
-import { FilterState } from '../utils/orderTypes'
+import { FilterState, Order } from '../utils/orderTypes'
 import { FILTER_OPTIONS } from '../constants/orderConstants'
 import { useWarehouses } from '../../warehouses/context/WarehouseContext'
 import ScreenOptions from '../../shared/components/ScreenOptions'
@@ -30,6 +30,7 @@ interface OrdersFiltersProps {
   columns?: ColumnConfig[]
   onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
   onResetLayout?: () => void
+  orders?: Order[]
 }
 
 export default function OrdersFilters({
@@ -50,9 +51,38 @@ export default function OrdersFilters({
   onMaxPickingOrdersChange,
   columns,
   onColumnVisibilityChange,
-  onResetLayout
+  onResetLayout,
+  orders = []
 }: OrdersFiltersProps) {
   const { warehouses } = useWarehouses()
+
+  // NEW: Dynamically generate store options from orders
+  const storeOptions = useMemo(() => {
+    const storeMap = new Map<string, string>()
+
+    orders.forEach(order => {
+      // Use storeId (required) and storeName (optional)
+      const storeId = order.storeId
+      const storeName = order.storeName || order.storeId // Use storeName if available, fallback to storeId
+
+      if (storeId && typeof storeId === 'string' && storeId.trim() !== '') {
+        storeMap.set(storeId, storeName || storeId)
+      }
+    })
+
+    return Array.from(storeMap.entries())
+      .map(([id, name]) => ({
+        value: id || '',
+        label: name || 'Unknown Store'
+      }))
+      .filter(option => option.value && option.label) // Remove any invalid options
+      .sort((a, b) => {
+        // Safe sorting that handles undefined/null
+        const labelA = a.label || ''
+        const labelB = b.label || ''
+        return labelA.localeCompare(labelB)
+      })
+  }, [orders])
 
   // Helper function to safely render filter values
   const renderFilterValue = (value: any): string => {
@@ -103,6 +133,7 @@ export default function OrdersFilters({
     status: Array.isArray(filters.status) ? filters.status : [],
     fulfillmentStatus: Array.isArray(filters.fulfillmentStatus) ? filters.fulfillmentStatus : [],
     platform: Array.isArray(filters.platform) ? filters.platform : [],
+    storeId: Array.isArray(filters.storeId) ? filters.storeId : [],
     dateRange: typeof filters.dateRange === 'string' ? filters.dateRange : '',
     startDate: typeof filters.startDate === 'string' ? filters.startDate : '',
     endDate: typeof filters.endDate === 'string' ? filters.endDate : '',
@@ -239,6 +270,7 @@ export default function OrdersFilters({
     (safeFilters.status && safeFilters.status.length > 0) ||
     (safeFilters.fulfillmentStatus && safeFilters.fulfillmentStatus.length > 0) ||
     (safeFilters.platform && safeFilters.platform.length > 0) ||
+    (safeFilters.storeId && safeFilters.storeId.length > 0) ||
     safeFilters.dateRange ||
     safeFilters.startDate ||
     safeFilters.endDate ||
@@ -277,6 +309,7 @@ export default function OrdersFilters({
               {(safeFilters.status?.length || 0) +
                (safeFilters.fulfillmentStatus?.length || 0) +
                (safeFilters.platform?.length || 0) +
+               (safeFilters.storeId?.length || 0) +
                (safeFilters.dateRange ? 1 : 0) +
                (safeFilters.warehouseId ? 1 : 0)}
             </span>
@@ -352,6 +385,14 @@ export default function OrdersFilters({
               values={safeFilters.platform}
               options={FILTER_OPTIONS.PLATFORM}
               field="platform"
+            />
+
+            {/* NEW: Store Filter */}
+            <MultiSelectFilter
+              label="Store"
+              values={safeFilters.storeId}
+              options={storeOptions}
+              field="storeId"
             />
 
             {/* Warehouse Filter - Only show if not hidden */}
@@ -447,6 +488,19 @@ export default function OrdersFilters({
                     <button
                       onClick={() => handleMultiSelectChange('platform', platform)}
                       className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-purple-400 hover:bg-purple-200 hover:text-purple-500"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+
+                {/* NEW: Store filters - Safe array access */}
+                {safeFilters.storeId.map(storeId => (
+                  <span key={storeId} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                    Store: {storeOptions.find(s => s.value === storeId)?.label || storeId}
+                    <button
+                      onClick={() => handleMultiSelectChange('storeId', storeId)}
+                      className="flex-shrink-0 ml-1.5 h-4 w-4 rounded-full inline-flex items-center justify-center text-pink-400 hover:bg-pink-200 hover:text-pink-500"
                     >
                       <XMarkIcon className="h-3 w-3" />
                     </button>

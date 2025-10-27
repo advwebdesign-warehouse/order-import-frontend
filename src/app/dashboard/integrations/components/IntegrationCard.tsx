@@ -2,6 +2,7 @@
 
 'use client'
 
+import { useState } from 'react'
 import { Switch } from '@headlessui/react'
 import {
   Cog6ToothIcon,
@@ -9,7 +10,8 @@ import {
   XCircleIcon,
   ExclamationTriangleIcon,
   TrashIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  BuildingStorefrontIcon
 } from '@heroicons/react/24/outline'
 import { Integration } from '../types/integrationTypes'
 
@@ -18,8 +20,10 @@ interface IntegrationCardProps {
   onConfigure: () => void
   onToggle: () => void
   onDisconnect: () => void
-  onTest: () => void
+  onTest: () => Promise<boolean>
+  onDelete: () => void
   isTesting?: boolean
+  storeName?: string // ✅ NEW: Store name prop
 }
 
 export default function IntegrationCard({
@@ -28,8 +32,13 @@ export default function IntegrationCard({
   onToggle,
   onDisconnect,
   onTest,
-  isTesting = false
+  onDelete,
+  isTesting = false,
+  storeName // ✅ NEW
 }: IntegrationCardProps) {
+  const [isToggling, setIsToggling] = useState(false)
+  const [testMessage, setTestMessage] = useState<string>('')
+
   const statusConfig = {
     connected: {
       icon: CheckCircleIcon,
@@ -54,15 +63,49 @@ export default function IntegrationCard({
   const status = statusConfig[integration.status]
   const StatusIcon = status.icon
 
+  // Handle toggle with connection test
+  const handleToggle = async () => {
+    if (integration.enabled) {
+      onToggle()
+      return
+    }
+
+    if (integration.status !== 'connected') {
+      setTestMessage('Please configure and connect the integration first')
+      setTimeout(() => setTestMessage(''), 3000)
+      return
+    }
+
+    setIsToggling(true)
+    setTestMessage('Testing connection...')
+
+    try {
+      const testPassed = await onTest()
+
+      if (testPassed) {
+        setTestMessage('✅ Test passed! Enabling...')
+        onToggle()
+        setTimeout(() => setTestMessage(''), 2000)
+      } else {
+        setTestMessage('❌ Connection test failed. Please check your configuration.')
+        setTimeout(() => setTestMessage(''), 4000)
+      }
+    } catch (error) {
+      setTestMessage('❌ Test failed. Please try again.')
+      setTimeout(() => setTestMessage(''), 3000)
+    } finally {
+      setIsToggling(false)
+    }
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
       <div className="p-6">
-        {/* Header */}
+        {/* Header with Delete Button */}
         <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 flex-1">
             {integration.icon && (
               <>
-                {/* ✅ Check if icon is a URL/path (image) or emoji (text) */}
                 {integration.icon.startsWith('http') || integration.icon.startsWith('/') ? (
                   <img
                     src={integration.icon}
@@ -74,15 +117,31 @@ export default function IntegrationCard({
                 )}
               </>
             )}
-            <div>
+            <div className="flex-1">
               <h3 className="text-lg font-semibold text-gray-900">
                 {integration.name}
               </h3>
               <p className="text-sm text-gray-500 mt-1">
                 {integration.description}
               </p>
+              {/* Store Name Display */}
+              {storeName && (
+                <div className="flex items-center mt-2 px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-md w-fit">
+                  <BuildingStorefrontIcon className="h-4 w-4 mr-1.5 text-indigo-600" />
+                  <span className="text-xs font-medium text-indigo-700">{storeName}</span>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Delete Button */}
+          <button
+            onClick={onDelete}
+            className="ml-2 text-gray-400 hover:text-red-600 transition-colors"
+            title="Delete integration"
+          >
+            <TrashIcon className="h-5 w-5" />
+          </button>
         </div>
 
         {/* Status with Environment Badge */}
@@ -94,14 +153,7 @@ export default function IntegrationCard({
             </span>
           </div>
 
-          {/* Enabled Badge */}
-          {integration.enabled && (
-            <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full">
-              Enabled
-            </span>
-          )}
-
-          {/* Environment Badge - Only for connected shipping integrations with environment config */}
+          {/* Environment Badge */}
           {integration.status === 'connected' &&
            integration.type === 'shipping' &&
            integration.config?.environment && (
@@ -127,7 +179,7 @@ export default function IntegrationCard({
           )}
         </div>
 
-        {/* Features (for shipping integrations) */}
+        {/* Features */}
         {integration.type === 'shipping' && integration.features && (
           <div className="mt-4 space-y-2">
             <p className="text-xs font-medium text-gray-500 uppercase">Features</p>
@@ -163,9 +215,20 @@ export default function IntegrationCard({
           </div>
         )}
 
+        {/* Test Message */}
+        {testMessage && (
+          <div className={`mt-3 text-xs font-medium ${
+            testMessage.includes('✅') ? 'text-green-600' :
+            testMessage.includes('❌') ? 'text-red-600' :
+            'text-blue-600'
+          }`}>
+            {testMessage}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="mt-6 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             <button
               onClick={onConfigure}
               className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -175,42 +238,56 @@ export default function IntegrationCard({
             </button>
 
             {integration.status === 'connected' && (
-              <button
-                onClick={onTest}
-                disabled={isTesting}
-                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ArrowPathIcon className={`h-4 w-4 mr-1 ${isTesting ? 'animate-spin' : ''}`} />
-                {isTesting ? 'Testing...' : 'Test'}
-              </button>
-            )}
+              <>
+                <button
+                  onClick={onTest}
+                  disabled={isTesting}
+                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowPathIcon className={`h-4 w-4 mr-1 ${isTesting ? 'animate-spin' : ''}`} />
+                  {isTesting ? 'Testing...' : 'Test'}
+                </button>
 
-            {integration.status === 'connected' && (
-              <button
-                onClick={onDisconnect}
-                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded text-red-600 hover:text-red-700"
-                title="Disconnect"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
+                <button
+                  onClick={onDisconnect}
+                  className="inline-flex items-center px-3 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-600 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  title="Disconnect"
+                >
+                  Disconnect
+                </button>
+              </>
             )}
           </div>
 
-          {integration.status === 'connected' && (
+          {/* Smart Toggle for Enable/Disable */}
+          <div className="flex items-center space-x-2">
+            <span className={`text-xs ${
+              integration.status !== 'connected' ? 'text-gray-400' : 'text-gray-700'
+            }`}>
+              {integration.enabled ? 'Enabled' : 'Disabled'}
+            </span>
             <Switch
               checked={integration.enabled}
-              onChange={onToggle}
+              onChange={handleToggle}
+              disabled={isToggling || (integration.status !== 'connected' && !integration.enabled)}
               className={`${
-                integration.enabled ? 'bg-blue-600' : 'bg-gray-200'
-              } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+                integration.enabled ? 'bg-blue-600' :
+                integration.status !== 'connected' ? 'bg-gray-200 cursor-not-allowed' :
+                'bg-gray-200'
+              } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed`}
             >
+              <span className="sr-only">
+                {integration.enabled ? 'Disable' : 'Enable'} integration
+              </span>
               <span
                 className={`${
                   integration.enabled ? 'translate-x-6' : 'translate-x-1'
-                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isToggling ? 'animate-pulse' : ''
+                }`}
               />
             </Switch>
-          )}
+          </div>
         </div>
       </div>
     </div>

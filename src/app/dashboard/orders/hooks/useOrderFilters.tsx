@@ -10,6 +10,7 @@ const DEFAULT_FILTERS_WITH_PRESETS: FilterState = {
   status: ['PROCESSING'], // Processing status
   fulfillmentStatus: ['SHIPPED', 'DELIVERED'], // Shipped and Delivered fulfillment statuses
   platform: [],
+  storeId: [],
   dateRange: '',
   startDate: '',
   endDate: '',
@@ -22,6 +23,7 @@ const validateFilterState = (filters: any): FilterState => {
     status: Array.isArray(filters?.status) ? filters.status : [],
     fulfillmentStatus: Array.isArray(filters?.fulfillmentStatus) ? filters.fulfillmentStatus : [],
     platform: Array.isArray(filters?.platform) ? filters.platform : [],
+    storeId: Array.isArray(filters?.storeId) ? filters.storeId : [],
     dateRange: filters?.dateRange || '',
     startDate: filters?.startDate || '',
     endDate: filters?.endDate || '',
@@ -149,6 +151,14 @@ export function useOrderFilters(orders: Order[]) {
       // Warehouse filter (single select)
       if (safeFilters.warehouseId && order.warehouseId !== safeFilters.warehouseId) {
         return false
+      }
+
+      // Store filter - check storeId (required field in Order interface)
+      if (safeFilters.storeId.length > 0) {
+        const orderStoreId = order.storeId || ''
+        if (!safeFilters.storeId.includes(orderStoreId)) {
+          return false
+        }
       }
 
       // Date range filter

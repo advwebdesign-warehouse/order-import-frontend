@@ -4,6 +4,12 @@ import { IntegrationSettings } from '@/app/dashboard/integrations/types/integrat
 
 const INTEGRATION_STORAGE_PREFIX = 'orderSync_integrations_'
 
+const DEFAULT_SETTINGS: IntegrationSettings = {
+  integrations: [], // ✅ Start with empty array - users add via Browse
+  lastUpdated: new Date().toISOString(),  // <-- Changed from lastSyncedAt
+  accountId: 'default'
+}
+
 /**
  * Get account ID from session/auth
  * Account-level storage allows teams to share integrations

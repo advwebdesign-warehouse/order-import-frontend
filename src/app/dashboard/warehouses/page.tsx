@@ -1,4 +1,5 @@
-// File path: app/dashboard/warehouses/page.tsx
+//file path: app/dashboard/warehouses/page.tsx
+
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
@@ -40,6 +41,9 @@ function WarehousesContent() {
   const [selectedWarehouse, setSelectedWarehouse] = useState<Warehouse | null>(null)
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null)
 
+  // Store return parameters from URL
+  const [returnParams, setReturnParams] = useState<{ returnTo?: string; storeId?: string }>({})
+
   // Custom hooks for state management
   const { warehouses, loading, addWarehouse, updateWarehouse, deleteWarehouse } = useWarehouses()
 
@@ -72,11 +76,19 @@ function WarehousesContent() {
   // Check for URL parameters on component mount
   useEffect(() => {
     const action = searchParams.get('action')
+    const returnTo = searchParams.get('returnTo')
+    const storeId = searchParams.get('storeId')
+
+    // Store return parameters for later use
+    if (returnTo) {
+      setReturnParams({ returnTo, storeId: storeId || undefined })
+    }
+
     if (action === 'add') {
       setEditingWarehouse(null)
       setShowAddWarehouse(true)
 
-      // Clean up the URL parameter after opening the modal
+      // Clean up the action parameter from URL but keep returnTo and storeId
       const newUrl = new URL(window.location.href)
       newUrl.searchParams.delete('action')
       window.history.replaceState({}, '', newUrl.toString())
@@ -121,6 +133,36 @@ function WarehousesContent() {
     }
   }
 
+  const handleSaveWarehouse = async (warehouseData: Partial<Warehouse>) => {
+    try {
+      if (editingWarehouse) {
+        await updateWarehouse(editingWarehouse.id, warehouseData)
+      } else {
+        // When adding, ensure all required fields are present
+        await addWarehouse(warehouseData as Omit<Warehouse, 'id' | 'createdAt' | 'updatedAt'>)
+      }
+
+      setShowAddWarehouse(false)
+      setEditingWarehouse(null)
+
+      // Handle return redirect after successful warehouse creation
+      if (returnParams.returnTo === 'stores') {
+        const returnUrl = returnParams.storeId
+          ? `/dashboard/stores?action=edit&storeId=${returnParams.storeId}`
+          : '/dashboard/stores'
+
+        // Clear return params
+        setReturnParams({})
+
+        // Redirect back to stores
+        router.push(returnUrl)
+      }
+    } catch (error) {
+      console.error('Error saving warehouse:', error)
+      alert('Failed to save warehouse. Please try again.')
+    }
+  }
+
   const handleBulkAction = async (action: string) => {
     if (selectedWarehouses.size === 0) {
       alert('Please select at least one warehouse.')
@@ -159,21 +201,6 @@ function WarehousesContent() {
           clearSelection()
         }
         break
-    }
-  }
-
-  const handleSaveWarehouse = async (warehouseData: Partial<Warehouse>) => {
-    try {
-      if (editingWarehouse) {
-        await updateWarehouse(editingWarehouse.id, warehouseData)
-      } else {
-        await addWarehouse(warehouseData as Omit<Warehouse, 'id' | 'createdAt' | 'updatedAt'>)
-      }
-      setShowAddWarehouse(false)
-      setEditingWarehouse(null)
-    } catch (error) {
-      console.error('Error saving warehouse:', error)
-      alert('Failed to save warehouse. Please try again.')
     }
   }
 
@@ -240,6 +267,15 @@ function WarehousesContent() {
         onClose={() => {
           setShowAddWarehouse(false)
           setEditingWarehouse(null)
+
+          // If closing without saving and we have return params, redirect back
+          if (returnParams.returnTo === 'stores') {
+            const returnUrl = returnParams.storeId
+              ? `/dashboard/stores?action=edit&storeId=${returnParams.storeId}`
+              : '/dashboard/stores'
+            setReturnParams({})
+            router.push(returnUrl)
+          }
         }}
         onSave={handleSaveWarehouse}
         warehouse={editingWarehouse}

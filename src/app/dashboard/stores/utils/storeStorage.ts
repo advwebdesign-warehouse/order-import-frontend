@@ -15,7 +15,36 @@ function getAccountStorageKey(accountId?: string): string {
 }
 
 /**
+ * Create a default store if none exists
+ */
+function createDefaultStore(accountId?: string): Store {
+  const defaultStore: Store = {
+    id: `store_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    storeName: 'Main Store',
+    logo: undefined,
+    website: undefined,
+    email: undefined,
+    phone: undefined,
+    address: {
+      address1: '123 Main Street',
+      address2: undefined,
+      city: 'San Diego',
+      state: 'CA',
+      zip: '92101',
+      country: 'United States',
+      countryCode: 'US'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    accountId: accountId || getCurrentAccountId()
+  }
+
+  return defaultStore
+}
+
+/**
  * Get all stores for the current account
+ * If no stores exist, create a default one
  */
 export function getStoresFromStorage(accountId?: string): Store[] {
   if (typeof window === 'undefined') return []
@@ -23,10 +52,22 @@ export function getStoresFromStorage(accountId?: string): Store[] {
   try {
     const key = getAccountStorageKey(accountId)
     const stored = localStorage.getItem(key)
-    return stored ? JSON.parse(stored) : []
+    let stores: Store[] = stored ? JSON.parse(stored) : []
+
+    // ✅ If no stores exist, create a default one
+    if (stores.length === 0) {
+      const defaultStore = createDefaultStore(accountId)
+      stores = [defaultStore]
+      saveStoresToStorage(stores, accountId)
+      console.log('✅ Created default store:', defaultStore)
+    }
+
+    return stores
   } catch (error) {
     console.error('Error loading stores:', error)
-    return []
+    // ✅ Even on error, return a default store
+    const defaultStore = createDefaultStore(accountId)
+    return [defaultStore]
   }
 }
 
@@ -55,7 +96,7 @@ export function getStoreById(id: string, accountId?: string): Store | null {
 /**
  * Create a new store
  */
-export function createStore(storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'>, accountId?: string): Store {
+export function createStore(storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt' | 'accountId'>, accountId?: string): Store {
   const stores = getStoresFromStorage(accountId)
 
   const newStore: Store = {
@@ -75,7 +116,7 @@ export function createStore(storeData: Omit<Store, 'id' | 'createdAt' | 'updated
 /**
  * Update an existing store
  */
-export function updateStore(id: string, updates: Partial<Store>, accountId?: string): Store | null {
+export function updateStore(id: string, updates: Partial<Omit<Store, 'id' | 'createdAt' | 'accountId'>>, accountId?: string): Store | null {
   const stores = getStoresFromStorage(accountId)
   const index = stores.findIndex(store => store.id === id)
 
@@ -84,6 +125,9 @@ export function updateStore(id: string, updates: Partial<Store>, accountId?: str
   stores[index] = {
     ...stores[index],
     ...updates,
+    id: stores[index].id, // Preserve ID
+    createdAt: stores[index].createdAt, // Preserve creation date
+    accountId: stores[index].accountId, // Preserve account ID
     updatedAt: new Date().toISOString()
   }
 
@@ -93,9 +137,18 @@ export function updateStore(id: string, updates: Partial<Store>, accountId?: str
 
 /**
  * Delete a store
+ * ✅ Prevent deletion if it's the last store
  */
 export function deleteStore(id: string, accountId?: string): boolean {
   const stores = getStoresFromStorage(accountId)
+
+  // ✅ Prevent deletion of the last store
+  if (stores.length <= 1) {
+    console.warn('Cannot delete the last store. At least one store is required.')
+    alert('Cannot delete the last store. At least one store is required.')
+    return false
+  }
+
   const filteredStores = stores.filter(store => store.id !== id)
 
   if (filteredStores.length === stores.length) return false
@@ -105,9 +158,17 @@ export function deleteStore(id: string, accountId?: string): boolean {
 }
 
 /**
- * Get default shipping store (if any)
+ * Get the first store (default store)
  */
-export function getDefaultShippingStore(accountId?: string): Store | null {
+export function getDefaultStore(accountId?: string): Store | null {
   const stores = getStoresFromStorage(accountId)
-  return stores.find(store => store.defaultShippingFrom) || stores[0] || null
+  return stores[0] || null
+}
+
+/**
+ * Ensure at least one store exists
+ * Call this on app initialization
+ */
+export function ensureDefaultStore(accountId?: string): void {
+  getStoresFromStorage(accountId) // This will create a default store if none exists
 }
