@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   PlusIcon,
@@ -18,7 +18,7 @@ import ShopifyConfigModal from './components/ShopifyConfigModal'
 import StoreSelector from './components/StoreSelector'
 import BrowseIntegrationsModal from './components/BrowseIntegrationsModal'
 import { Integration, ShopifyIntegration } from './types/integrationTypes'
-import { getCurrentAccountId, saveAccountIntegrations } from '@/lib/storage/integrationStorage'
+import { getCurrentAccountId, saveAccountIntegrations, getAccountIntegrations } from '@/lib/storage/integrationStorage'
 import { getStoresFromStorage } from '../../../app/dashboard/stores/utils/storeStorage'
 import Notification from '@/app/dashboard/shared/components/Notification'
 
@@ -124,6 +124,148 @@ function IntegrationsContent() {
       console.log('[UPS OAuth] ✅ Integration setup complete!')
     }
   }, [searchParams])
+  // Track if we've already processed the Shopify OAuth callback
+    const shopifyCallbackProcessed = useRef(false)
+
+    // Handle Shopify OAuth callback success
+    useEffect(() => {
+      // Skip if already processed
+      if (shopifyCallbackProcessed.current) {
+        return
+      }
+
+      const shopifyAuth = searchParams.get('shopify_auth')
+      const shop = searchParams.get('shop')
+      const accessToken = searchParams.get('access_token')
+      const storeIdParam = searchParams.get('store_id')
+      const errorParam = searchParams.get('error')
+
+      // Only process if we have OAuth params
+      if (!shopifyAuth && !errorParam) {
+        return
+      }
+
+      // Mark as processed immediately to prevent duplicates
+      shopifyCallbackProcessed.current = true
+
+      // Handle error
+      if (shopifyAuth === 'error' || errorParam) {
+        console.error('[Shopify OAuth] Error:', errorParam)
+        setNotification({
+          show: true,
+          type: 'error',
+          title: 'Shopify Connection Failed',
+          message: errorParam || 'Failed to connect to Shopify'
+        })
+        window.history.replaceState({}, '', '/dashboard/integrations')
+        setTimeout(() => {
+          shopifyCallbackProcessed.current = false
+        }, 1000)
+        return
+      }
+
+      // Handle success
+      if (shopifyAuth === 'success' && shop && accessToken) {
+        console.log('[Shopify OAuth] ✅ Connection successful, saving integration...')
+
+        const integrationStoreId = storeIdParam || selectedStoreId
+
+        if (!integrationStoreId) {
+          console.error('[Shopify OAuth] No store ID available')
+          setNotification({
+            show: true,
+            type: 'error',
+            title: 'Store Required',
+            message: 'Please select a store before connecting Shopify'
+          })
+          window.history.replaceState({}, '', '/dashboard/integrations')
+          setTimeout(() => {
+            shopifyCallbackProcessed.current = false
+          }, 1000)
+          return
+        }
+
+        // 🔥 CRITICAL FIX: Read fresh data from localStorage to prevent data loss
+        const aid = getCurrentAccountId()
+        const freshSettings = getAccountIntegrations(aid) || settings
+
+        console.log('[Shopify OAuth] Current integrations count:', freshSettings.integrations.length)
+        console.log('[Shopify OAuth] Integrations:', freshSettings.integrations.map(i => ({ id: i.id, name: i.name, storeId: i.storeId })))
+
+        // Check if integration already exists for this store using FRESH data
+        // ✅ Better approach: Check by name instead of ID prefix
+        const existingIntegration = freshSettings.integrations.find(
+          i => i.name === 'Shopify' && i.storeId === integrationStoreId
+        )
+
+        if (existingIntegration) {
+          // Update existing integration
+          updateIntegration(existingIntegration.id, {
+            config: {
+              shopUrl: shop,
+              accessToken: accessToken,
+            },
+            status: 'connected',
+            enabled: true,
+            connectedAt: new Date().toISOString()
+          })
+          console.log('[Shopify OAuth] Updated existing integration:', existingIntegration.id)
+        } else {
+          // Create new integration
+          const timestamp = Date.now()
+          const newIntegration: ShopifyIntegration = {
+            id: `shopify-${integrationStoreId}-${timestamp}`,
+            name: 'Shopify',
+            type: 'ecommerce',
+            status: 'connected',
+            enabled: true,
+            storeId: integrationStoreId,
+            description: 'Sync orders, products, and inventory with your Shopify store',
+            icon: '/logos/shopify-logo.svg',
+            config: {
+              shopUrl: shop,
+              accessToken: accessToken,
+            },
+            connectedAt: new Date().toISOString(),
+            features: {
+              orderSync: true,
+              productSync: true,
+              inventorySync: true,
+              fulfillmentSync: true,
+            }
+          }
+
+          addIntegration(newIntegration)
+          console.log('[Shopify OAuth] Creating new integration:', newIntegration.id)
+          console.log('[Shopify OAuth] ✅ Integration setup complete!')
+        }
+
+        setNotification({
+          show: true,
+          type: 'success',
+          title: 'Shopify Connected',
+          message: `Successfully connected to ${shop}`
+        })
+
+        setTestResults(prev => ({
+          ...prev,
+          [`shopify-${integrationStoreId}`]: {
+            success: true,
+            message: '✅ Shopify connected successfully!'
+          }
+        }))
+
+        setTimeout(() => {
+          setTestResults(prev => ({
+            ...prev,
+            [`shopify-${integrationStoreId}`]: null
+          }))
+        }, 5000)
+
+        window.history.replaceState({}, '', '/dashboard/integrations')
+        console.log('[Shopify OAuth] ✅ Integration setup complete!')
+      }
+    }, [searchParams])
 
   // ✅ Handle store change
   const handleStoreChange = (storeId: string) => {
@@ -347,10 +489,10 @@ function IntegrationsContent() {
   const handleConfigureClick = (integration: Integration) => {
     setSelectedIntegration(integration)
 
-    // ✅ Route to correct modal based on integration ID prefix
-    if (integration.id.startsWith('shopify')) {
+    // ✅ Route to correct modal based on integration name (better than ID prefix)
+    if (integration.name === 'Shopify') {
       setShowShopifyModal(true)
-    } else if (integration.id.startsWith('usps') || integration.id.startsWith('ups')) {
+    } else if (integration.name === 'USPS' || integration.name === 'UPS') {
       setShowConfigModal(true)
     }
   }
@@ -716,7 +858,7 @@ function IntegrationsContent() {
       {/* Configuration Modal */}
       {showConfigModal && selectedIntegration && (
         <>
-          {selectedIntegration.id.startsWith('usps') && (
+          {selectedIntegration.name === 'USPS' && (
             <USPSConfigModal
               isOpen={showConfigModal}
               onClose={() => {
@@ -728,7 +870,7 @@ function IntegrationsContent() {
             />
           )}
 
-          {selectedIntegration.id.startsWith('ups') && (
+          {selectedIntegration.name === 'UPS' && (
             <UPSConfigModal
               isOpen={showConfigModal}
               onClose={() => {
@@ -760,15 +902,9 @@ function IntegrationsContent() {
         onClose={() => setShowBrowseModal(false)}
         onAddIntegration={handleAddIntegration}
         existingIntegrationIds={filteredIntegrations.map(i => {
-          // ✅ Extract base integration type (remove store-specific suffix)
-          if (i.id.startsWith('usps-')) return 'usps'
-          if (i.id.startsWith('ups-')) return 'ups'
-          if (i.id.startsWith('shopify-')) return 'shopify'
-          if (i.id.startsWith('woocommerce-')) return 'woocommerce'
-          if (i.id.startsWith('etsy-')) return 'etsy'
-          if (i.id.startsWith('ebay-')) return 'ebay'
-          if (i.id.startsWith('walmart-')) return 'walmart'
-          return i.id
+          // ✅ Better approach: Use name field instead of ID prefix
+          // Convert to lowercase for consistent comparison (e.g., "Shopify" → "shopify")
+          return i.name.toLowerCase()
         })}
         selectedStoreId={selectedStoreId}
       />

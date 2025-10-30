@@ -68,9 +68,14 @@ export interface ShopifyIntegration extends BaseIntegration {
   config: {
     shopUrl: string
     accessToken: string
-    apiKey: string
   }
   warehouseConfig?: WarehouseConfig  // ✅ NEW: Warehouse assignment
+  features: {
+    orderSync: boolean
+    productSync: boolean
+    inventorySync: boolean
+    fulfillmentSync: boolean
+  }
 }
 
 export interface WooCommerceIntegration extends BaseIntegration {

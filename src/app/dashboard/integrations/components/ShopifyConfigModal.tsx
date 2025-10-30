@@ -22,67 +22,48 @@ export default function ShopifyConfigModal({
   existingIntegration,
   selectedStoreId
 }: ShopifyConfigModalProps) {
-  // Form state - Only Shopify credentials
+  // OAuth flow only
   const [shopUrl, setShopUrl] = useState(existingIntegration?.config?.shopUrl || '')
-  const [apiKey, setApiKey] = useState(existingIntegration?.config?.apiKey || '')
-  const [accessToken, setAccessToken] = useState(existingIntegration?.config?.accessToken || '')
-
+  const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [isSaving, setIsSaving] = useState(false)
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {}
-
+  const handleOAuthConnect = async () => {
     if (!shopUrl.trim()) {
-      newErrors.shopUrl = 'Shop URL is required'
-    } else if (!shopUrl.includes('.myshopify.com')) {
-      newErrors.shopUrl = 'Must be a valid Shopify URL (e.g., your-store.myshopify.com)'
+      setErrors({ shopUrl: 'Shop URL is required to start OAuth' })
+      return
     }
 
-    if (!apiKey.trim()) {
-      newErrors.apiKey = 'API Key is required'
+    // Normalize and validate shop URL
+    let normalizedShop = shopUrl.trim().toLowerCase()
+    normalizedShop = normalizedShop.replace(/^https?:\/\//, '')
+    normalizedShop = normalizedShop.replace(/\/$/, '')
+    normalizedShop = normalizedShop.split('/')[0]
+
+    if (!normalizedShop.includes('.myshopify.com')) {
+      normalizedShop = `${normalizedShop}.myshopify.com`
     }
 
-    if (!accessToken.trim()) {
-      newErrors.accessToken = 'Access Token is required'
+    // Validate format
+    if (!normalizedShop.match(/^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/)) {
+      setErrors({ shopUrl: 'Must be a valid Shopify URL (e.g., your-store.myshopify.com)' })
+      return
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!validate()) return
-
-    setIsSaving(true)
+    setIsAuthenticating(true)
+    setErrors({})
 
     try {
-      const integration: Partial<ShopifyIntegration> = {
-        id: existingIntegration?.id || `shopify-${selectedStoreId}-${Date.now()}`,
-        name: 'Shopify',
-        type: 'ecommerce',
-        status: 'connected',
-        enabled: true,
-        storeId: selectedStoreId,
-        description: 'Shopify integration',
-        icon: '/logos/shopify-logo.svg',
-        config: {
-          shopUrl: shopUrl.trim(),
-          apiKey: apiKey.trim(),
-          accessToken: accessToken.trim()
-        },
-        connectedAt: existingIntegration?.connectedAt || new Date().toISOString()
-      }
+      // Build OAuth URL
+      const authUrl = `/api/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}`
 
-      onSave(integration)
-      onClose()
-    } catch (error) {
-      console.error('Error saving Shopify integration:', error)
-      alert('Failed to save integration. Please try again.')
-    } finally {
-      setIsSaving(false)
+      console.log('[Shopify Modal] Redirecting to OAuth:', authUrl)
+
+      // Redirect to OAuth
+      window.location.href = authUrl
+    } catch (error: any) {
+      console.error('OAuth initiation error:', error)
+      setErrors({ oauth: error.message || 'Failed to start OAuth flow' })
+      setIsAuthenticating(false)
     }
   }
 
@@ -118,6 +99,7 @@ export default function ShopifyConfigModal({
                     type="button"
                     className="rounded-md bg-white text-gray-400 hover:text-gray-500"
                     onClick={onClose}
+                    disabled={isAuthenticating}
                   >
                     <span className="sr-only">Close</span>
                     <XMarkIcon className="h-6 w-6" aria-hidden="true" />
@@ -127,88 +109,88 @@ export default function ShopifyConfigModal({
                 <div className="sm:flex sm:items-start">
                   <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
                     <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
-                      {existingIntegration ? 'Edit' : 'Configure'} Shopify Integration
+                      {existingIntegration ? 'Reconnect' : 'Connect'} Shopify Store
                     </Dialog.Title>
                     <p className="mt-2 text-sm text-gray-500">
-                      Connect your Shopify store to automatically sync orders and inventory
+                      Connect your Shopify store to automatically sync orders, products, and inventory
                     </p>
 
-                    <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-                      {/* Shopify Credentials */}
-                      <div className="space-y-4">
-                        <h4 className="text-sm font-medium text-gray-900">Shopify Credentials</h4>
+                    {/* Error display */}
+                    {errors.oauth && (
+                      <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-3">
+                        <p className="text-sm text-red-600">{errors.oauth}</p>
+                      </div>
+                    )}
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Shop URL *
-                          </label>
-                          <input
-                            type="text"
-                            value={shopUrl}
-                            onChange={(e) => setShopUrl(e.target.value)}
-                            placeholder="your-store.myshopify.com"
-                            className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                              errors.shopUrl ? 'border-red-300' : 'border-gray-300'
-                            } focus:border-indigo-500 focus:ring-indigo-500`}
-                          />
-                          {errors.shopUrl && (
-                            <p className="mt-1 text-sm text-red-600">{errors.shopUrl}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            API Key *
-                          </label>
-                          <input
-                            type="text"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                              errors.apiKey ? 'border-red-300' : 'border-gray-300'
-                            } focus:border-indigo-500 focus:ring-indigo-500`}
-                          />
-                          {errors.apiKey && (
-                            <p className="mt-1 text-sm text-red-600">{errors.apiKey}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Access Token *
-                          </label>
-                          <input
-                            type="password"
-                            value={accessToken}
-                            onChange={(e) => setAccessToken(e.target.value)}
-                            className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                              errors.accessToken ? 'border-red-300' : 'border-gray-300'
-                            } focus:border-indigo-500 focus:ring-indigo-500`}
-                          />
-                          {errors.accessToken && (
-                            <p className="mt-1 text-sm text-red-600">{errors.accessToken}</p>
-                          )}
-                        </div>
+                    {/* OAuth Flow */}
+                    <div className="mt-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Shop URL *
+                        </label>
+                        <input
+                          type="text"
+                          value={shopUrl}
+                          onChange={(e) => {
+                            setShopUrl(e.target.value)
+                            setErrors({})
+                          }}
+                          placeholder="your-store.myshopify.com"
+                          disabled={isAuthenticating}
+                          className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                            errors.shopUrl ? 'border-red-300' : 'border-gray-300'
+                          } focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed`}
+                        />
+                        {errors.shopUrl && (
+                          <p className="mt-1 text-sm text-red-600">{errors.shopUrl}</p>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500">
+                          Enter your Shopify store URL (e.g., my-store.myshopify.com)
+                        </p>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
-                        <button
-                          type="submit"
-                          disabled={isSaving}
-                          className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isSaving ? 'Saving...' : existingIntegration ? 'Update' : 'Connect'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={onClose}
-                          className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
-                        >
-                          Cancel
-                        </button>
+                      {/* OAuth Info Box */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                        <h4 className="text-sm font-medium text-blue-900 mb-2">
+                          🔐 Secure OAuth Connection
+                        </h4>
+                        <ul className="text-sm text-blue-800 space-y-1">
+                          <li>• You'll be redirected to Shopify to authorize access</li>
+                          <li>• We never store your Shopify password</li>
+                          <li>• You can revoke access anytime from your Shopify admin</li>
+                        </ul>
                       </div>
-                    </form>
+
+                      {/* Connect Button */}
+                      <button
+                        type="button"
+                        onClick={handleOAuthConnect}
+                        disabled={isAuthenticating || !shopUrl.trim()}
+                        className="w-full inline-flex justify-center items-center rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isAuthenticating ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Connecting...
+                          </>
+                        ) : (
+                          '🔗 Connect with Shopify'
+                        )}
+                      </button>
+
+                      {/* Cancel Button */}
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={isAuthenticating}
+                        className="w-full inline-flex justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 </div>
               </Dialog.Panel>

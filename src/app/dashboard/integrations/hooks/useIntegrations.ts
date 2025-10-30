@@ -3,7 +3,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Integration, IntegrationSettings, DEFAULT_INTEGRATION_SETTINGS } from '../types/integrationTypes'
+import {
+  Integration,
+  IntegrationSettings,
+  DEFAULT_INTEGRATION_SETTINGS,
+  ShopifyIntegration,
+  WooCommerceIntegration,
+  EtsyIntegration,
+  EbayIntegration
+} from '../types/integrationTypes'
 import {
   getCurrentAccountId,
   getAccountIntegrations,
@@ -347,23 +355,121 @@ export function useIntegrations() {
     const integration = getIntegration(integrationId)
     if (!integration) return false
 
-    if (integration.id === 'usps' && integration.type === 'shipping') {
+    // Handle USPS integration test
+    if (integration.name === 'USPS' && integration.type === 'shipping') {
       try {
         const response = await fetch('/api/integrations/usps/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...integration.config,
-            accountId: accountId // Changed from accountUserId
+            accountId: accountId
           })
         })
         return response.ok
       } catch (error) {
-        console.error('Integration test failed:', error)
+        console.error('USPS integration test failed:', error)
         return false
       }
     }
 
+    // Handle UPS integration test
+    if (integration.name === 'UPS' && integration.type === 'shipping') {
+      try {
+        const response = await fetch('/api/integrations/ups/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...integration.config,
+            accountId: accountId
+          })
+        })
+        return response.ok
+      } catch (error) {
+        console.error('UPS integration test failed:', error)
+        return false
+      }
+    }
+
+    // Handle Shopify integration test
+    if (integration.name === 'Shopify' && integration.type === 'ecommerce') {
+      try {
+        console.log('[testIntegration] Testing Shopify connection...')
+
+        // Type assertion: We know this is a Shopify integration
+        const shopifyIntegration = integration as ShopifyIntegration
+
+        const response = await fetch('/api/integrations/shopify/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shopUrl: shopifyIntegration.config.shopUrl,
+            accessToken: shopifyIntegration.config.accessToken
+          })
+        })
+
+        const data = await response.json()
+        console.log('[testIntegration] Shopify test result:', data)
+
+        return data.success === true
+      } catch (error) {
+        console.error('Shopify integration test failed:', error)
+        return false
+      }
+    }
+
+    // Handle WooCommerce integration test (if you add it later)
+    if (integration.name === 'WooCommerce' && integration.type === 'ecommerce') {
+      try {
+        console.log('[testIntegration] Testing WooCommerce connection...')
+
+        const wooIntegration = integration as WooCommerceIntegration
+
+        const response = await fetch('/api/integrations/woocommerce/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeUrl: wooIntegration.config.storeUrl,
+            consumerKey: wooIntegration.config.consumerKey,
+            consumerSecret: wooIntegration.config.consumerSecret
+          })
+        })
+
+        const data = await response.json()
+        return data.success === true
+      } catch (error) {
+        console.error('WooCommerce integration test failed:', error)
+        return false
+      }
+    }
+
+    // Handle Etsy integration test (if you add it later)
+    if (integration.name === 'Etsy' && integration.type === 'ecommerce') {
+      try {
+        console.log('[testIntegration] Testing Etsy connection...')
+
+        const etsyIntegration = integration as EtsyIntegration
+
+        const response = await fetch('/api/integrations/etsy/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: etsyIntegration.config.apiKey,
+            sharedSecret: etsyIntegration.config.sharedSecret,
+            shopId: etsyIntegration.config.shopId
+          })
+        })
+
+        const data = await response.json()
+        return data.success === true
+      } catch (error) {
+        console.error('Etsy integration test failed:', error)
+        return false
+      }
+    }
+
+    // Unsupported integration type
+    console.warn(`Test not implemented for integration: ${integration.name}`)
     return false
   }
 
