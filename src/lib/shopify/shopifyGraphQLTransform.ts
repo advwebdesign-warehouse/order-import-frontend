@@ -10,7 +10,6 @@ import { LineItemWithWeight } from './shopifyTypes'
 export function transformGraphQLOrder(
   graphqlOrder: any,
   storeId: string,
-  storeName: string,
   warehouseId?: string
 ): Order {
   // Extract numeric ID from GraphQL global ID
@@ -74,7 +73,6 @@ export function transformGraphQLOrder(
     fulfillmentStatus: fulfillmentStatus,
     platform: 'Shopify',
     storeId: storeId,
-    storeName: storeName,
     orderDate: graphqlOrder.createdAt,
     itemCount: lineItems.reduce((sum: number, item: OrderItem) => sum + item.quantity, 0),
     shippingFirstName: graphqlOrder.shippingAddress?.firstName || '',
@@ -103,7 +101,7 @@ export function transformGraphQLOrder(
     trackingNumber: trackingInfo?.number || undefined,
 
     // Warehouse assignment (if provided)
-    warehouseId: warehouseId,
+    warehouseId: warehouseId
   };
 
   return order;
@@ -290,11 +288,10 @@ function mapProductStatus(status: string): 'active' | 'archived' | 'draft' | 'in
 export function transformGraphQLOrders(
   graphqlOrders: any[],
   storeId: string,
-  storeName: string,
-  warehouseId?: string
+  warehouseId?: string,
 ): Order[] {
   return graphqlOrders.map(order =>
-    transformGraphQLOrder(order, storeId, storeName, warehouseId)
+    transformGraphQLOrder(order, storeId, warehouseId)
   );
 }
 

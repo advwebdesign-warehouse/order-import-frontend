@@ -39,13 +39,31 @@ export function useIntegrationHandlers({
 
     if (existingShopify) {
       console.log(`[handleSaveShopify] ${isDisconnecting ? 'Disconnecting' : 'Updating'} existing Shopify integration`)
-      updateIntegration(existingShopify.id, {
-        // ✅ FIX: Set defaults first, then spread data to allow overrides
-        status: 'connected',
-        enabled: true,
-        ...data,
-      })
+
+      // ✅ FIX: For disconnect, explicitly set all disconnect properties
+      if (isDisconnecting) {
+        updateIntegration(existingShopify.id, {
+          status: 'disconnected',
+          enabled: false,
+          config: {
+            ...existingShopify.config,
+            accessToken: '', // Clear sensitive data
+          }
+        })
+      } else {
+        // For normal updates, merge with defaults
+        updateIntegration(existingShopify.id, {
+          status: 'connected',
+          enabled: true,
+          ...data,
+        })
+      }
     } else {
+      if (isDisconnecting) {
+        console.warn('[handleSaveShopify] Attempted to disconnect non-existent integration')
+        return
+      }
+
       console.log('[handleSaveShopify] Creating new Shopify integration')
       const newIntegration: ShopifyIntegration = {
         id: `shopify-${selectedStoreId}-${timestamp}`,
@@ -99,13 +117,31 @@ export function useIntegrationHandlers({
 
     if (existingUsps) {
       console.log(`[handleSaveUsps] ${isDisconnecting ? 'Disconnecting' : 'Updating'} existing USPS integration`)
-      updateIntegration(existingUsps.id, {
-        // ✅ FIX: Set defaults first, then spread data to allow overrides
-        status: 'connected',
-        enabled: true,
-        ...data,
-      })
+
+      // ✅ FIX: For disconnect, explicitly set all disconnect properties
+      if (isDisconnecting) {
+        updateIntegration(existingUsps.id, {
+          status: 'disconnected',
+          enabled: false,
+          config: {
+            ...existingUsps.config,
+            consumerKey: '', // Clear sensitive data
+            consumerSecret: '',
+          }
+        })
+      } else {
+        updateIntegration(existingUsps.id, {
+          status: 'connected',
+          enabled: true,
+          ...data,
+        })
+      }
     } else {
+      if (isDisconnecting) {
+        console.warn('[handleSaveUsps] Attempted to disconnect non-existent integration')
+        return
+      }
+
       console.log('[handleSaveUsps] Creating new USPS integration')
       const newIntegration: USPSIntegration = {
         id: `usps-${selectedStoreId}-${timestamp}`,
@@ -129,7 +165,6 @@ export function useIntegrationHandlers({
           addressValidation: true,
           tracking: true
         },
-        // ✅ FIX: Spread data last to allow overrides
         ...data,
       }
 
@@ -164,13 +199,31 @@ export function useIntegrationHandlers({
 
     if (existingUps) {
       console.log(`[handleSaveUps] ${isDisconnecting ? 'Disconnecting' : 'Updating'} existing UPS integration`)
-      updateIntegration(existingUps.id, {
-        // ✅ FIX: Set defaults first, then spread data to allow overrides
-        status: hasOAuthTokens ? 'connected' : 'disconnected',
-        enabled: hasOAuthTokens,
-        ...data,
-      })
+
+      // ✅ FIX: For disconnect, explicitly set all disconnect properties
+      if (isDisconnecting) {
+        updateIntegration(existingUps.id, {
+          status: 'disconnected',
+          enabled: false,
+          config: {
+            ...existingUps.config,
+            accessToken: '', // Clear sensitive data
+            refreshToken: '',
+          }
+        })
+      } else {
+        updateIntegration(existingUps.id, {
+          status: hasOAuthTokens ? 'connected' : 'disconnected',
+          enabled: hasOAuthTokens,
+          ...data,
+        })
+      }
     } else {
+      if (isDisconnecting) {
+        console.warn('[handleSaveUps] Attempted to disconnect non-existent integration')
+        return
+      }
+
       console.log('[handleSaveUps] Creating new UPS integration')
       const newIntegration: UPSIntegration = {
         id: `ups-${selectedStoreId}-${timestamp}`,
@@ -194,7 +247,6 @@ export function useIntegrationHandlers({
           tracking: true,
           pickupScheduling: true
         },
-        // ✅ FIX: Spread data last to allow overrides
         ...data,
       }
 

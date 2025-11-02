@@ -54,14 +54,13 @@ export async function POST(request: NextRequest) {
     // For now, we'll extract from localStorage or use a default
     const accountId = 'default'; // TODO: Get from your database
     const storeId = `shopify-${shop}`;
-    const storeName = shop?.replace('.myshopify.com', '') || 'Unknown Store';
 
     // Process webhook based on topic
     switch (topic) {
       case 'orders/create':
       case 'orders/updated':
         console.log('[Shopify Webhook] Processing order webhook:', data.id);
-        await ShopifyWebhooks.processOrderWebhook(data, accountId, storeId, storeName);
+        await ShopifyWebhooks.processOrderWebhook(data, accountId, storeId);
         break;
 
       case 'orders/cancelled':

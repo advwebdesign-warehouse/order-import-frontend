@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { shop, accessToken, accountId, syncType, warehouseId, storeId: providedStoreId, storeName: providedStoreName } = body;
+    const { shop, accessToken, accountId, syncType, warehouseId, storeId: providedStoreId } = body;
 
     console.log('[Shopify Sync] Sync Type:', syncType);
     console.log('[Shopify Sync] Shop:', shop);
@@ -30,8 +30,7 @@ export async function POST(request: NextRequest) {
       accessToken,
     });
 
-    // Use provided store info or derive from shop name
-    const storeName = providedStoreName || shop.replace('.myshopify.com', '');
+    // Use provided store info
     const storeId = providedStoreId || `shopify-${accountId}`;
 
     if (syncType === 'orders') {
@@ -57,7 +56,6 @@ export async function POST(request: NextRequest) {
           const order = transformGraphQLOrder(
             graphqlOrder,
             storeId,
-            storeName,
             warehouseId
           );
           orders.push(order);
@@ -139,7 +137,6 @@ export async function POST(request: NextRequest) {
           const order = transformGraphQLOrder(
             graphqlOrder,
             storeId,
-            storeName,
             warehouseId
           );
           orders.push(order);

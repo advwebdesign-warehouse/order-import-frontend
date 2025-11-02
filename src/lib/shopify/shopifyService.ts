@@ -1,6 +1,6 @@
 //file path: src/lib/shopify/shopifyService.ts
 
-import { ShopifyGraphQLClient } from './shopifyGraphQLClient'
+import { ShopifyGraphQLClient, ShopifyPermissionError } from './shopifyGraphQLClient'
 import { transformGraphQLOrder, transformGraphQLProduct } from './shopifyGraphQLTransform'
 import { saveShopifyOrder, saveShopifyProduct } from './shopifyStorage'
 import { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
@@ -10,7 +10,6 @@ export interface ShopifyServiceConfig {
   accessToken: string
   accountId: string
   storeId: string
-  storeName: string
   warehouseId?: string
 }
 
@@ -28,7 +27,7 @@ export class ShopifyService {
 
   /**
    * Sync orders from Shopify using GraphQL
-   * NOTE: This method should only be called server-side
+   * Automatically called on connection and can be triggered periodically
    */
   async syncOrders(): Promise<{ success: boolean; count: number; error?: string }> {
     try {
@@ -55,7 +54,6 @@ export class ShopifyService {
           const order = transformGraphQLOrder(
             graphqlOrder,
             this.config.storeId,
-            this.config.storeName,
             this.config.warehouseId
           )
 
@@ -80,7 +78,7 @@ export class ShopifyService {
 
   /**
    * Sync products from Shopify using GraphQL
-   * NOTE: This method should only be called server-side
+   * Automatically called on connection
    */
   async syncProducts(): Promise<{ success: boolean; count: number; error?: string }> {
     try {
@@ -130,7 +128,7 @@ export class ShopifyService {
 
   /**
    * Sync both orders and products
-   * NOTE: This method should only be called server-side
+   * This is called automatically on first connection
    */
   async syncAll(): Promise<{
     success: boolean
@@ -172,9 +170,17 @@ export class ShopifyService {
 
   /**
    * Test connection to Shopify using GraphQL
-   * NOTE: This method should only be called server-side
    */
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<{
+    success: boolean
+    error?: string
+    shop?: {
+      id: string
+      name: string
+      email: string
+      currencyCode: string
+    }
+  }> {
     try {
       console.log('[Shopify Service] 🔍 Testing connection with GraphQL...')
 
@@ -182,14 +188,32 @@ export class ShopifyService {
 
       if (result.success) {
         console.log('[Shopify Service] ✅ Connection test successful:', result.shop.name)
-        return true
+        return {
+          success: true,
+          shop: result.shop
+        }
       } else {
         console.error('[Shopify Service] ❌ Connection test failed')
-        return false
+        return {
+          success: false,
+          error: 'Connection test failed'
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Shopify Service] ❌ Connection test error:', error)
-      return false
+
+      // ✅ NEW: Handle permission errors specifically
+      if (error instanceof ShopifyPermissionError) {
+        return {
+          success: false,
+          error: 'Permission error: ' + error.message
+        }
+      }
+
+      return {
+        success: false,
+        error: error.message || 'Unknown connection error'
+      }
     }
   }
 
@@ -221,7 +245,6 @@ export class ShopifyService {
    */
   static fromIntegration(
     integration: ShopifyIntegration,
-    storeName: string,
     warehouseId: string | undefined,
     accountId: string = 'default'
   ): ShopifyService {
@@ -230,7 +253,6 @@ export class ShopifyService {
       accessToken: integration.config.accessToken,
       accountId: accountId,
       storeId: integration.storeId,
-      storeName: storeName,
       warehouseId: warehouseId,
     })
   }
@@ -246,7 +268,6 @@ export class ShopifyService {
     accessToken: string,
     accountId: string,
     storeId: string,
-    storeName: string,
     warehouseId: string | undefined,
     syncType: 'orders' | 'products' | 'all'
   ): Promise<any> {
@@ -263,7 +284,6 @@ export class ShopifyService {
           accessToken,
           accountId,
           storeId,
-          storeName,
           warehouseId,
           syncType, // Using 'syncType' to match your API
         }),
@@ -286,37 +306,118 @@ export class ShopifyService {
   }
 
   /**
+   * ✅ NEW: CLIENT-SAFE: Test connection without doing a full sync
+   * Use this before marking integration as "connected"
+   * This method can be safely called from the client (browser)
+   */
+  static async testConnectionViaAPI(
+    shop: string,
+    accessToken: string
+  ): Promise<{ success: boolean; error?: string; message?: string; details?: any }> {
+    try {
+      console.log('[Shopify Service] 🔍 Testing connection via API...')
+
+      const response = await fetch('/api/integrations/shopify/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shopUrl: shop,
+          accessToken,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok && response.status !== 200) {
+        // Server error (500)
+        return {
+          success: false,
+          error: result.error || 'Connection test failed',
+          message: result.message || 'An error occurred while testing the connection'
+        }
+      }
+
+      // Response is 200, but might still be unsuccessful
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Connection test failed',
+          message: result.message || 'Unable to connect to Shopify'
+        }
+      }
+
+      console.log('[Shopify Service] ✅ Connection test successful')
+      return {
+        success: true,
+        message: result.message,
+        details: result.details
+      }
+    } catch (error: any) {
+      console.error('[Shopify Service] ❌ Connection test error:', error)
+      return {
+        success: false,
+        error: 'Network error',
+        message: error.message || 'Failed to reach the server'
+      }
+    }
+  }
+
+  /**
    * CLIENT-SAFE: Auto-sync on integration connection via API route
-   * This is called automatically when a Shopify store is first connected
-   * This method is safe to call from the client (browser)
-   * Fetches data from API and saves it client-side
    *
-   * ✅ FIXED: warehouseId now comes from the store, not from integration
+   * This is called when a Shopify store is first connected.
+   * If sync fails, it will throw an error so the calling code can handle it appropriately
+   * (e.g., show error to user, don't mark as connected)
+   *
+   * ✅ storeId comes from integration.storeId (no need for separate parameter)
+   * @param integration - The Shopify integration config
+   * @param warehouseId - Optional warehouse ID
+   * @param accountId - Account ID
+   * @param onProgress - Optional callback for progress updates
+   * @throws Error if sync fails (including permission errors)
    */
   static async autoSyncOnConnection(
     integration: ShopifyIntegration,
-    storeName: string,
     warehouseId: string | undefined,
     accountId: string = 'default',
     onProgress?: (message: string) => void
   ): Promise<void> {
     console.log('[Shopify Service] 🚀 Auto-sync triggered on connection (via API route)')
 
-    if (onProgress) onProgress('Starting sync via API...')
+    if (onProgress) onProgress('Testing connection to Shopify...')
 
     try {
+      // ✅ NEW: First, test the connection before attempting sync
+      const testResult = await ShopifyService.testConnectionViaAPI(
+        integration.config.storeUrl,
+        integration.config.accessToken
+      )
+
+      if (!testResult.success) {
+        // ✅ CRITICAL: Throw error so caller knows connection failed
+        throw new Error(testResult.error || testResult.message || 'Connection test failed')
+      }
+
+      if (onProgress) onProgress('Connection successful! Syncing data...')
+
       // Call the API route to fetch data
       const result = await ShopifyService.syncViaAPI(
         integration.config.storeUrl,
         integration.config.accessToken,
         accountId,
         integration.storeId,
-        storeName,
         warehouseId,
         'all' // Sync both orders and products
       )
 
-      if (result.success && result.data) {
+      if (!result.success) {
+        // ✅ CRITICAL: Throw error so caller knows sync failed
+        throw new Error(result.error || result.message || 'Sync failed')
+      }
+
+      if (result.data) {
         console.log('[Shopify Service] 💾 Saving data to localStorage...')
 
         // Save orders to localStorage (client-side)
@@ -338,20 +439,23 @@ export class ShopifyService {
         // Update last sync time
         ShopifyService.updateLastSyncTime(integration.id)
 
-        const message = `✅ Synced ${result.orderCount || 0} orders and ${result.productCount || 0} products`
+        const message = `✅ Synced ${result.orderCount || result.data.orders?.length || 0} orders and ${result.productCount || result.data.products?.length || 0} products`
 
         if (onProgress) onProgress(message)
         console.log('[Shopify Service] ✅ Auto-sync complete via API')
       } else {
-        const message = `❌ Sync failed: ${result.error || result.message || 'Unknown error'}`
-        if (onProgress) onProgress(message)
-        console.error('[Shopify Service] ❌ Auto-sync failed via API')
+        throw new Error('No data returned from sync')
       }
     } catch (error: any) {
       const message = `❌ Sync error: ${error.message}`
-      if (onProgress) onProgress(message)
+
       console.error('[Shopify Service] ❌ Auto-sync error:', error)
-      throw error
+
+      if (onProgress) onProgress(message)
+
+      // ✅ CRITICAL: Re-throw the error so the caller knows the sync failed
+      // This is essential so the integration doesn't get marked as "Connected"
+      throw new Error(`Shopify sync failed: ${error.message}`)
     }
   }
 }

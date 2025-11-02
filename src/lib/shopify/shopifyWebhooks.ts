@@ -26,8 +26,7 @@ export class ShopifyWebhooks {
   static async processOrderWebhook(
     order: any,
     accountId: string,
-    storeId: string,
-    storeName: string
+    storeId: string
   ): Promise<void> {
     // Import GraphQL transformation functions
     const { transformGraphQLOrder } = await import('./shopifyGraphQLTransform');
@@ -35,7 +34,7 @@ export class ShopifyWebhooks {
 
     // Transform using the REST-format webhook data
     // (Shopify webhooks still use REST format regardless of API)
-    const transformedOrder = transformGraphQLOrder(order, storeId, storeName, accountId);
+    const transformedOrder = transformGraphQLOrder(order, storeId, accountId);
     await saveShopifyOrder(transformedOrder, accountId);
   }
 

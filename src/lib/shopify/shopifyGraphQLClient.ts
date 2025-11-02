@@ -3,12 +3,30 @@
 /**
  * Shopify GraphQL Admin API Client
  * API Version: 2025-10
+ *
+ * ✅ UPDATED: Added custom error classes and better permission error detection
+ * ✅ FIXED: Removed deprecated 'requiresShipping' field from ProductVariant query
  */
 
 export interface ShopifyGraphQLConfig {
   shop: string;
   accessToken: string;
   apiVersion?: string;
+}
+
+// ✅ NEW: Custom error classes for better error handling
+export class ShopifyPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ShopifyPermissionError';
+  }
+}
+
+export class ShopifyGraphQLError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ShopifyGraphQLError';
+  }
 }
 
 export class ShopifyGraphQLClient {
@@ -26,6 +44,7 @@ export class ShopifyGraphQLClient {
 
   /**
    * Execute a GraphQL query or mutation
+   * ✅ UPDATED: Better error detection and handling
    */
   async request<T = any>(query: string, variables?: Record<string, any>): Promise<T> {
     try {
@@ -50,11 +69,28 @@ export class ShopifyGraphQLClient {
       // Check for GraphQL errors
       if (result.errors && result.errors.length > 0) {
         const errorMessages = result.errors.map((e: any) => e.message).join(', ');
-        throw new Error(`GraphQL Error: ${errorMessages}`);
+
+        // ✅ NEW: Check for permission errors specifically
+        if (errorMessages.includes('not approved to access') ||
+            errorMessages.includes('protected customer data') ||
+            errorMessages.includes('access scope')) {
+          throw new ShopifyPermissionError(
+            `Shopify app requires additional permissions: ${errorMessages}\n\n` +
+            `Please ensure your app has been approved for protected customer data access. ` +
+            `Visit: https://shopify.dev/docs/apps/launch/protected-customer-data`
+          );
+        }
+
+        throw new ShopifyGraphQLError(`GraphQL Error: ${errorMessages}`);
       }
 
       return result.data;
     } catch (error) {
+      // ✅ NEW: Re-throw our custom errors without logging
+      if (error instanceof ShopifyPermissionError || error instanceof ShopifyGraphQLError) {
+        throw error;
+      }
+
       console.error('Shopify GraphQL request error:', error);
       throw error;
     }
@@ -62,6 +98,7 @@ export class ShopifyGraphQLClient {
 
   /**
    * Test connection by fetching shop info
+   * ✅ UPDATED: Propagate permission errors properly
    */
   async testConnection(): Promise<{
     success: boolean;
@@ -90,6 +127,10 @@ export class ShopifyGraphQLClient {
         shop: data.shop,
       };
     } catch (error) {
+      // ✅ NEW: Propagate permission errors
+      if (error instanceof ShopifyPermissionError) {
+        throw error;
+      }
       throw new Error(`Connection test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -147,6 +188,24 @@ export class ShopifyGraphQLClient {
               }
               displayFulfillmentStatus
               displayFinancialStatus
+              customer {
+                id
+                email
+                firstName
+                lastName
+              }
+              shippingAddress {
+                firstName
+                lastName
+                address1
+                address2
+                city
+                province
+                zip
+                country
+                countryCode
+                phone
+              }
               lineItems(first: 250) {
                 edges {
                   node {
@@ -223,6 +282,7 @@ export class ShopifyGraphQLClient {
 
   /**
    * Get products with pagination
+   * ✅ FIXED: Removed deprecated 'requiresShipping' field
    */
   async getProducts(options: {
     first?: number;
@@ -264,7 +324,6 @@ export class ShopifyGraphQLClient {
                     price
                     compareAtPrice
                     inventoryQuantity
-                    requiresShipping
                     position
                     selectedOptions {
                       name

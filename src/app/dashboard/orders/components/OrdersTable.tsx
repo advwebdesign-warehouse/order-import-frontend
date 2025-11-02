@@ -10,7 +10,7 @@ import {
   ChevronDownIcon,
   Bars3Icon,
   ListBulletIcon,
-  TruckIcon  // ✅ ADD THIS
+  TruckIcon
 } from '@heroicons/react/24/outline'
 import ReactCountryFlag from "react-country-flag"
 import {
@@ -353,6 +353,13 @@ export default function OrdersTable({
           </div>
         )
 
+      case 'storeName':
+        return (
+          <div className="text-sm text-gray-900">
+            {order.storeName || 'Unknown Store'}
+          </div>
+        )
+
       case 'requestedShipping':
         return (
           <div className="text-sm text-gray-900">
@@ -460,7 +467,7 @@ export default function OrdersTable({
                   <ListBulletIcon className="h-4 w-4" />
                 </button>
               )}
-              
+
               <button
                 onClick={() => onPrintPackingSlip(order)}
                 className="hover:opacity-75 transition-opacity"

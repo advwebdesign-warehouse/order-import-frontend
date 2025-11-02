@@ -14,7 +14,7 @@ export async function saveShopifyOrder(
 
   try {
     // Get existing orders
-    const ordersKey = `orders_${accountId}`;
+    const ordersKey = `orderSync_orders_${accountId}`;
     const existingOrders = JSON.parse(
       localStorage.getItem(ordersKey) || '[]'
     ) as Order[];
@@ -90,7 +90,7 @@ export async function updateOrderStatus(
   if (typeof window === 'undefined') return;
 
   try {
-    const ordersKey = `orders_${accountId}`;
+    const ordersKey = `orderSync_orders_${accountId}`;
     const orders = JSON.parse(
       localStorage.getItem(ordersKey) || '[]'
     ) as Order[];
@@ -125,7 +125,7 @@ export async function updateOrderFulfillment(
   if (typeof window === 'undefined') return;
 
   try {
-    const ordersKey = `orders_${accountId}`;
+    const ordersKey = `orderSync_orders_${accountId}`;
     const orders = JSON.parse(
       localStorage.getItem(ordersKey) || '[]'
     ) as Order[];
@@ -153,7 +153,7 @@ export function getShopifyOrders(accountId: string): Order[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const ordersKey = `orders_${accountId}`;
+    const ordersKey = `orderSync_orders_${accountId}`;
     const orders = JSON.parse(
       localStorage.getItem(ordersKey) || '[]'
     ) as Order[];
@@ -194,7 +194,7 @@ export async function deleteShopifyData(accountId: string): Promise<void> {
 
   try {
     // Get orders and remove Shopify orders
-    const ordersKey = `orders_${accountId}`;
+    const ordersKey = `orderSync_orders_${accountId}`;
     const orders = JSON.parse(
       localStorage.getItem(ordersKey) || '[]'
     ) as Order[];

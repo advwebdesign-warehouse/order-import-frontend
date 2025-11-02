@@ -10,7 +10,7 @@ import { getCurrentAccountId, getAccountIntegrations } from '@/lib/storage/integ
 interface UseOAuthCallbacksProps {
   settings: any
   selectedStoreId: string
-  stores: any[] // ✅ ADD: Pass stores from parent
+  stores: any[]
   updateIntegration: (id: string, data: any) => void
   addIntegration: (integration: Integration) => boolean
   setNotification: (notification: any) => void
@@ -164,7 +164,7 @@ export function useOAuthCallbacks({
     }
   }, [searchParams, settings, updateIntegration, addIntegration, setNotification, setTestResults])
 
-  // ✅ UPDATED: Shopify OAuth callback with automatic sync
+  // ✅ FIXED: Shopify OAuth callback - prevent state race condition
   useEffect(() => {
     // Skip if already processed
     if (shopifyCallbackProcessed.current) {
@@ -222,12 +222,8 @@ export function useOAuthCallbacks({
         return
       }
 
-      // Read fresh data from localStorage
-      const aid = getCurrentAccountId()
-      const freshSettings = getAccountIntegrations(aid) || settings
-
-      // Check if integration already exists
-      const existingIntegration = freshSettings.integrations.find(
+      // ✅ FIX: Read from current settings, not stale localStorage
+      const existingIntegration = settings.integrations.find(
         (i: Integration) => i.name === 'Shopify' && i.storeId === integrationStoreId
       )
 
@@ -273,11 +269,27 @@ export function useOAuthCallbacks({
           }
         }
 
-        addIntegration(newIntegration)
-        console.log('[Shopify OAuth] Created new integration:', integrationId)
+        const success = addIntegration(newIntegration)
+        console.log('[Shopify OAuth] Created new integration:', integrationId, 'Success:', success)
+
+        // ✅ FIX: If add failed, abort
+        if (!success) {
+          console.error('[Shopify OAuth] ❌ Failed to add integration')
+          setNotification({
+            show: true,
+            type: 'error',
+            title: 'Integration Failed',
+            message: 'Failed to save Shopify integration. Please try again.'
+          })
+          window.history.replaceState({}, '', '/dashboard/integrations')
+          setTimeout(() => {
+            shopifyCallbackProcessed.current = false
+          }, 1000)
+          return
+        }
       }
 
-      // ✅ NEW: Show initial success notification
+      // ✅ Show initial success notification
       setNotification({
         show: true,
         type: 'success',
@@ -285,30 +297,44 @@ export function useOAuthCallbacks({
         message: `Successfully connected to ${shop}. Starting automatic sync...`
       })
 
-      // ✅ NEW: Trigger automatic sync in background
+      // ✅ FIX: Trigger automatic sync with fresh data
       setTimeout(async () => {
         try {
+          // ✅ FIX: Read FRESH data from localStorage RIGHT BEFORE sync
+          const aid = getCurrentAccountId()
+          const freshSettings = getAccountIntegrations(aid)
+
+          if (!freshSettings) {
+            console.error('[Auto-Sync] ❌ No fresh settings found')
+            throw new Error('Failed to retrieve integration data')
+          }
+
+          // ✅ FIX: Find the integration in fresh data
+          const integration = freshSettings.integrations.find(
+            (i: Integration) => i.id === integrationId
+          )
+
+          if (!integration) {
+            console.error('[Auto-Sync] ❌ Integration not found in fresh data')
+            console.log('[Auto-Sync] Looking for ID:', integrationId)
+            console.log('[Auto-Sync] Available integrations:', freshSettings.integrations.map((i: any) => ({ id: i.id, name: i.name })))
+            throw new Error('Integration not found after saving')
+          }
+
+          console.log('[Auto-Sync] ✅ Found integration in fresh data:', integration.id)
+
           // Dynamically import the service (avoid SSR issues)
           const { ShopifyService } = await import('@/lib/shopify/shopifyService')
 
           // Get the store name
           const store = stores.find((s: any) => s.id === integrationStoreId)
-          const storeName = store?.name || store?.storeName || 'Unknown Store'
-          const warehouseId  = store?.warehouseConfig?.defaultWarehouseId
+          const warehouseId = store?.warehouseConfig?.defaultWarehouseId
 
-          // Get the integration
-          const integration = (freshSettings.integrations.find(
-            (i: Integration) => i.id === integrationId
-          ) || {
-            id: integrationId,
-            config: { storeUrl: shop, accessToken: accessToken },
-            storeId: integrationStoreId
-          }) as any
+          console.log('[Auto-Sync] Starting sync for storeid:', integrationStoreId)
 
           // Trigger auto-sync
           await ShopifyService.autoSyncOnConnection(
-            integration,
-            storeName,
+            integration as any,
             warehouseId,
             aid,
             (message) => {
@@ -321,6 +347,8 @@ export function useOAuthCallbacks({
             lastSyncAt: new Date().toISOString()
           })
 
+          console.log('[Auto-Sync] ✅ Sync completed successfully')
+
           // Show final success notification
           setNotification({
             show: true,
@@ -329,7 +357,7 @@ export function useOAuthCallbacks({
             message: '✅ Successfully synced orders and products from Shopify'
           })
         } catch (error: any) {
-          console.error('[Auto-Sync] Error:', error)
+          console.error('[Auto-Sync] ❌ Error:', error)
           setNotification({
             show: true,
             type: 'warning',
@@ -337,7 +365,7 @@ export function useOAuthCallbacks({
             message: 'Connected successfully, but automatic sync encountered issues. Please refresh to sync manually.'
           })
         }
-      }, 1000)
+      }, 1500) // ✅ Increased timeout slightly to ensure state is fully saved
 
       // Clean up URL
       window.history.replaceState({}, '', '/dashboard/integrations')
@@ -346,8 +374,7 @@ export function useOAuthCallbacks({
       // Reset processed flag after a delay
       setTimeout(() => {
         shopifyCallbackProcessed.current = false
-      }, 1000)
+      }, 2000) // ✅ Increased timeout to prevent premature reset
     }
   }, [searchParams, settings, selectedStoreId, stores, updateIntegration, addIntegration, setNotification, setTestResults])
-
 }

@@ -21,6 +21,7 @@ import { useOrderColumns } from './hooks/useOrderColumns'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
+import { useStores } from '../stores/hooks/useStores'
 
 // Shared components
 import WarehouseSelector from '../shared/components/WarehouseSelector'
@@ -33,6 +34,7 @@ import { transformToDetailedOrder } from './utils/orderUtils'
 import { exportToCSV, ExportableItem } from '../shared/utils/csvExporter'
 import { printMultiplePackingSlips } from './utils/packingSlipGenerator'
 import { orderNeedsPicking, orderNeedsShippingDynamic } from './utils/orderConstants'
+import { enrichOrdersWithNames } from './utils/warehouseUtils'
 
 // Types
 import { Order, OrderWithDetails } from './utils/orderTypes'
@@ -172,6 +174,8 @@ export default function OrdersPage() {
     }
     return new Set()
   })
+
+  const { stores, loading: storesLoading } = useStores()
 
   const [packedOrders, setPackedOrders] = useState<Set<string>>(() => {
     if (typeof window !== 'undefined') {
@@ -459,7 +463,12 @@ export default function OrdersPage() {
   const totalPages = Math.ceil(sortedOrders.length / (ordersPerPage || 20))
   const startIndex = (currentPage - 1) * (ordersPerPage || 20)
   const endIndex = startIndex + (ordersPerPage || 20)
-  const currentOrders = sortedOrders.slice(startIndex, endIndex)
+
+  // ✅ Enrich orders with current warehouse AND store names dynamically
+  const paginatedOrders = sortedOrders.slice(startIndex, endIndex)
+  const currentOrders = useMemo(() => {
+    return enrichOrdersWithNames(paginatedOrders, warehouses, stores)
+  }, [paginatedOrders, warehouses, stores])
 
   const handleItemPicked = (sku: string) => {
     setPickedItems(prev => {
@@ -662,7 +671,7 @@ export default function OrdersPage() {
     ? 'All Warehouses'
     : 'Unknown Warehouse'
 
-  if (loading || warehousesLoading || fulfillmentLoading) {
+  if (loading || warehousesLoading || fulfillmentLoading || storesLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">

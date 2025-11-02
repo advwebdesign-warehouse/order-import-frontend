@@ -226,15 +226,13 @@ export function useIntegrations() {
         })
       })
 
-      if (servicesResponse.ok) {
-        const servicesData = await servicesResponse.json()
-        console.log('[useIntegrations] Synced', servicesData.count, 'services from API')
-
-        // Apply smart merge to all warehouses
-        warehouses.forEach((warehouse: any) => {
-          smartMergeServices(warehouse.id, servicesData.services)
-        })
+      if (!servicesResponse.ok) {
+        console.error('[useIntegrations] Failed to sync services')
+        return
       }
+
+      const servicesData = await servicesResponse.json()
+      console.log('[useIntegrations] Services fetched:', servicesData.services?.length || 0)
 
       // Sync boxes
       console.log('[useIntegrations] Syncing boxes...')
@@ -253,11 +251,22 @@ export function useIntegrations() {
         })
       })
 
-      if (boxesResponse.ok) {
-        const boxesData = await boxesResponse.json()
-        console.log('[useIntegrations] Synced', boxesData.count, 'boxes from API')
+      if (!boxesResponse.ok) {
+        console.error('[useIntegrations] Failed to sync boxes')
+        return
+      }
 
-        // Apply smart merge to all warehouses
+      const boxesData = await boxesResponse.json()
+      console.log('[useIntegrations] Boxes fetched:', boxesData.boxes?.length || 0)
+
+      // Apply smart merge for each warehouse
+      if (servicesData.services && servicesData.services.length > 0) {
+        warehouses.forEach((warehouse: any) => {
+          smartMergeServices(warehouse.id, servicesData.services)
+        })
+      }
+
+      if (boxesData.boxes && boxesData.boxes.length > 0) {
         warehouses.forEach((warehouse: any) => {
           smartMergeBoxes(warehouse.id, boxesData.boxes)
         })
@@ -269,10 +278,27 @@ export function useIntegrations() {
     }
   }
 
+  // 🔥 CRITICAL FIX: Read fresh data from localStorage before updating
   const updateIntegration = (integrationId: string, updates: Partial<Integration>) => {
+    // ✅ FIX: Read fresh data from localStorage to avoid stale state
+    const aid = getCurrentAccountId()
+    const freshSettings = getAccountIntegrations(aid) || settings
+
+    console.log('[updateIntegration] Fresh integrations count:', freshSettings.integrations.length)
+    console.log('[updateIntegration] Updating integration:', integrationId, 'with:', Object.keys(updates))
+
+    // Find the integration to update
+    const integration = freshSettings.integrations.find(i => i.id === integrationId)
+
+    if (!integration) {
+      console.error('[updateIntegration] ❌ Integration not found:', integrationId)
+      console.log('[updateIntegration] Available IDs:', freshSettings.integrations.map(i => i.id))
+      return false
+    }
+
     const newSettings = {
-      ...settings,
-      integrations: settings.integrations.map(i =>
+      ...freshSettings,
+      integrations: freshSettings.integrations.map(i =>
         i.id === integrationId
           ? { ...i, ...updates } as Integration
           : i
@@ -280,8 +306,9 @@ export function useIntegrations() {
       lastUpdated: new Date().toISOString()
     }
 
+    console.log('[updateIntegration] Updated integrations count:', newSettings.integrations.length)
+
     // ✅ USPS auto-sync trigger
-    const integration = settings.integrations.find(i => i.id === integrationId)
     if (integration?.name === 'USPS' && updates.config) {
       // Check if this is a meaningful config update (has credentials)
       const newConfig = { ...integration.config, ...updates.config }
@@ -316,20 +343,34 @@ export function useIntegrations() {
       }
     }
 
-    return saveSettings(newSettings)
+    const success = saveSettings(newSettings)
+
+    if (success) {
+      console.log('[updateIntegration] ✅ Successfully updated integration')
+    } else {
+      console.error('[updateIntegration] ❌ Failed to save updates')
+    }
+
+    return success
   }
 
-  const getIntegration = (integrationId: string): Integration | undefined => {
+  const getIntegration = (integrationId: string, storeId?: string): Integration | undefined => {
+    if (storeId) {
+      return settings.integrations.find(i => i.id === integrationId && i.storeId === storeId)
+    }
     return settings.integrations.find(i => i.id === integrationId)
   }
 
-  const getIntegrationsByType = (type: Integration['type']): Integration[] => {
+  const getIntegrationsByType = (type: 'shipping' | 'ecommerce' | 'warehouse' | 'accounting' | 'other', storeId?: string): Integration[] => {
+    if (storeId) {
+      return settings.integrations.filter(i => i.type === type && i.storeId === storeId)
+    }
     return settings.integrations.filter(i => i.type === type)
   }
 
-  // ✅ FIXED - Return object with success and message
   const testIntegration = async (integrationId: string): Promise<{ success: boolean; message: string }> => {
-    const integration = getIntegration(integrationId)
+    const integration = settings.integrations.find(i => i.id === integrationId)
+
     if (!integration) {
       return { success: false, message: 'Integration not found' }
     }

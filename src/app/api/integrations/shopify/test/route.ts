@@ -1,5 +1,12 @@
 //file path: src/app/api/integrations/shopify/test/route.ts
 
+/**
+ * Shopify Connection Test API Route
+ *
+ * ✅ UPDATED: Enhanced error handling and more consistent responses
+ * Tests the connection using Shopify's REST API for shop.json endpoint
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -60,7 +67,8 @@ export async function POST(request: NextRequest) {
         details: {
           shopName: data.shop?.name,
           domain: data.shop?.domain,
-          email: data.shop?.email
+          email: data.shop?.email,
+          currencyCode: data.shop?.currency
         }
       })
     }
@@ -90,6 +98,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ✅ NEW: Check for permission errors in response
+    if (response.status === 403) {
+      console.log('[Shopify Test] ❌ Permission denied')
+      const errorText = await response.text()
+
+      // Check if it's a protected customer data error
+      if (errorText.includes('not approved to access') ||
+          errorText.includes('protected customer data')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Permission denied',
+            message: 'Your Shopify app needs approval for protected customer data access. Please visit your Shopify Partners dashboard to request access.',
+            helpUrl: 'https://shopify.dev/docs/apps/launch/protected-customer-data'
+          },
+          { status: 200 }
+        )
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Permission denied',
+          message: 'Access denied. Please check your app permissions.'
+        },
+        { status: 200 }
+      )
+    }
+
     // Generic error
     const errorText = await response.text()
     console.error('[Shopify Test] ❌ Test failed:', errorText)
@@ -98,20 +135,45 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: 'Connection test failed',
-        message: 'Unable to connect to Shopify. Please check your credentials and try again.'
+        message: 'Unable to connect to Shopify. Please check your credentials and try again.',
+        debug: process.env.NODE_ENV === 'development' ? errorText : undefined
       },
       { status: 200 }
     )
 
   } catch (error: any) {
     console.error('[Shopify Test] ❌ Error:', error)
+
+    // ✅ NEW: Better error messages for different error types
+    let errorMessage = 'An unexpected error occurred while testing the connection.'
+    let errorType = 'Test failed'
+
+    if (error.message?.includes('fetch')) {
+      errorType = 'Network error'
+      errorMessage = 'Unable to reach Shopify. Please check your internet connection and try again.'
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+
     return NextResponse.json(
       {
         success: false,
-        error: 'Test failed',
-        message: error.message || 'An unexpected error occurred while testing the connection.'
+        error: errorType,
+        message: errorMessage
       },
       { status: 500 }
     )
   }
+}
+
+// ✅ NEW: Allow OPTIONS for CORS if needed
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
 }

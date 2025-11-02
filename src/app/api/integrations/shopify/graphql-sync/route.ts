@@ -7,7 +7,7 @@ import { transformGraphQLOrder, transformGraphQLProduct } from '@/lib/shopify/sh
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { shop, accessToken, accountId, syncType, warehouseId } = body;
+    const { shop, accessToken, accountId, syncType, warehouseId, storeId: providedStoreId } = body;
 
     if (!shop || !accessToken || !accountId || !syncType) {
       return NextResponse.json(
@@ -22,9 +22,8 @@ export async function POST(request: NextRequest) {
       accessToken,
     });
 
-    // Use shop name as store name
-    const storeName = shop.replace('.myshopify.com', '');
-    const storeId = `shopify-${accountId}`;
+    // ✅ UPDATED: Use provided storeId or generate one (no storeName)
+    const storeId = providedStoreId || `shopify-${accountId}`;
 
     if (syncType === 'orders') {
       // Sync orders with GraphQL pagination
@@ -47,7 +46,6 @@ export async function POST(request: NextRequest) {
           const order = transformGraphQLOrder(
             graphqlOrder,
             storeId,
-            storeName,
             warehouseId
           );
           orders.push(order);
