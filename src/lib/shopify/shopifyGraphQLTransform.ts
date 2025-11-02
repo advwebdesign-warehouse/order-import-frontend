@@ -21,19 +21,9 @@ export function transformGraphQLOrder(
     const item = edge.node;
     const variantId = item.variant?.id?.split('/').pop() || '';
 
-    // Convert weight to ounces
+    // Weight: Set to 0 for now (ProductVariant weight fields not available in current API version)
+    // TODO: Fetch weight from inventoryItem or product data if needed
     let weightOz = 0;
-    if (item.weight) {
-      if (item.weight.unit === 'GRAMS') {
-        weightOz = item.weight.value / 28.3495;
-      } else if (item.weight.unit === 'KILOGRAMS') {
-        weightOz = item.weight.value * 35.274;
-      } else if (item.weight.unit === 'POUNDS') {
-        weightOz = item.weight.value * 16;
-      } else if (item.weight.unit === 'OUNCES') {
-        weightOz = item.weight.value;
-      }
-    }
 
     return {
       id: `shopify-line-${item.id.split('/').pop()}`,

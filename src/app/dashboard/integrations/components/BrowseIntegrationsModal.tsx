@@ -92,7 +92,7 @@ const AVAILABLE_INTEGRATIONS: AvailableIntegration[] = [
 interface BrowseIntegrationsModalProps {
   isOpen: boolean
   onClose: () => void
-  onAddIntegration: (integrationId: string) => void
+  onAddIntegration: (integrationId: string) => void // Parent should auto-open config modal after this
   existingIntegrationIds: string[]
   selectedStoreId?: string
 }
@@ -134,6 +134,8 @@ export default function BrowseIntegrationsModal({
       return
     }
 
+    // ✅ Call parent to handle integration addition
+    // The parent should automatically open the config modal for this integration
     onAddIntegration(integrationId)
     onClose()
   }

@@ -15,6 +15,25 @@ import {
 } from '@heroicons/react/24/outline'
 import { Integration } from '../types/integrationTypes'
 
+// Helper function to get store URL from different integration configs
+function getStoreUrl(integration: Integration): string | null {
+  if (integration.type !== 'ecommerce') return null
+
+  const config = integration.config as any
+
+  // Shopify uses storeUrl
+  if ('storeUrl' in config && config.storeUrl) {
+    return config.storeUrl
+  }
+
+  // WooCommerce uses storeUrl
+  if ('storeUrl' in config && config.storeUrl) {
+    return config.storeUrl
+  }
+
+  return null
+}
+
 interface IntegrationCardProps {
   integration: Integration
   onConfigure: () => void
@@ -23,7 +42,7 @@ interface IntegrationCardProps {
   onTest: () => Promise<boolean>
   onDelete: () => void
   isTesting?: boolean
-  storeName?: string // ✅ NEW: Store name prop
+  storeName?: string
 }
 
 export default function IntegrationCard({
@@ -34,7 +53,7 @@ export default function IntegrationCard({
   onTest,
   onDelete,
   isTesting = false,
-  storeName // ✅ NEW
+  storeName
 }: IntegrationCardProps) {
   const [isToggling, setIsToggling] = useState(false)
   const [testMessage, setTestMessage] = useState<string>('')
@@ -124,6 +143,30 @@ export default function IntegrationCard({
               <p className="text-sm text-gray-500 mt-1">
                 {integration.description}
               </p>
+
+              {/* Shop URL Display for E-commerce Integrations */}
+              {(() => {
+                const storeUrl = getStoreUrl(integration)
+                if (!storeUrl) return null
+
+                return (
+                  <div className="mt-2 flex items-center space-x-1 text-xs">
+                    <span className="font-medium text-gray-600">Shop:</span>
+                    <a
+                      href={`https://${storeUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 hover:underline flex items-center"
+                    >
+                      {storeUrl}
+                      <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  </div>
+                )
+              })()}
+
               {/* Store Name Display */}
               {storeName && (
                 <div className="flex items-center mt-2 px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-md w-fit">

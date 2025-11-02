@@ -118,7 +118,6 @@ export class ShopifyGraphQLClient {
             node {
               id
               name
-              email
               createdAt
               updatedAt
               currencyCode
@@ -148,26 +147,6 @@ export class ShopifyGraphQLClient {
               }
               displayFulfillmentStatus
               displayFinancialStatus
-              customer {
-                id
-                email
-                firstName
-                lastName
-                phone
-              }
-              shippingAddress {
-                firstName
-                lastName
-                address1
-                address2
-                city
-                province
-                provinceCode
-                country
-                countryCode
-                zip
-                phone
-              }
               lineItems(first: 250) {
                 edges {
                   node {
@@ -182,10 +161,6 @@ export class ShopifyGraphQLClient {
                         amount
                         currencyCode
                       }
-                    }
-                    weight {
-                      value
-                      unit
                     }
                     product {
                       id
@@ -289,8 +264,6 @@ export class ShopifyGraphQLClient {
                     price
                     compareAtPrice
                     inventoryQuantity
-                    weight
-                    weightUnit
                     requiresShipping
                     position
                     selectedOptions {

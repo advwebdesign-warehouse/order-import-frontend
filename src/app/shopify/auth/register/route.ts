@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         description: 'Sync orders, products, and inventory with your Shopify store',
         icon: '/logos/shopify-logo.svg',
         config: {
-          shopUrl: shop,
+          storeUrl: shop,
           accessToken: '', // Will be set after OAuth
         },
         features: {

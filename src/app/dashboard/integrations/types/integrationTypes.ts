@@ -1,8 +1,5 @@
 //file path: src/app/dashboard/integrations/types/integrationTypes.ts
 
-// ✅ Import WarehouseConfig from store types
-import { WarehouseConfig } from '../../stores/utils/storeTypes'
-
 export type IntegrationStatus = 'connected' | 'disconnected' | 'error'
 export type IntegrationType = 'shipping' | 'ecommerce'
 export type Environment = 'sandbox' | 'production'
@@ -64,12 +61,11 @@ export interface UPSIntegration extends BaseIntegration {
 export interface ShopifyIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'Shopify'
-  storeId: string  // ✅ Required - which store owns this integration
+  storeId: string
   config: {
-    shopUrl: string
+    storeUrl: string
     accessToken: string
   }
-  warehouseConfig?: WarehouseConfig  // ✅ NEW: Warehouse assignment
   features: {
     orderSync: boolean
     productSync: boolean
@@ -87,7 +83,6 @@ export interface WooCommerceIntegration extends BaseIntegration {
     consumerKey: string
     consumerSecret: string
   }
-  warehouseConfig?: WarehouseConfig  // ✅ NEW: Warehouse assignment
 }
 
 export interface EtsyIntegration extends BaseIntegration {
@@ -97,9 +92,8 @@ export interface EtsyIntegration extends BaseIntegration {
   config: {
     apiKey: string
     sharedSecret: string
-    shopId: string
+    storeId: string
   }
-  warehouseConfig?: WarehouseConfig
 }
 
 export interface EbayIntegration extends BaseIntegration {
@@ -112,7 +106,6 @@ export interface EbayIntegration extends BaseIntegration {
     devId: string
     token: string
   }
-  warehouseConfig?: WarehouseConfig
 }
 
 export type Integration =

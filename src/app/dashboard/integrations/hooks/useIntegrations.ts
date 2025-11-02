@@ -164,7 +164,7 @@ export function useIntegrations() {
 
       // CRITICAL: If user has a customized version of this box, DO NOT touch it
       if (userBoxCodes.has(key)) {
-        console.log(`[smartMergeBoxes] ⚠️  Skipping API box "${apiBox.name}" - user has customized version`)
+        console.log(`[smartMergeBoxes] ⚠️ Skipping API box "${apiBox.name}" - user has customized version`)
         return // Skip this API box entirely
       }
 
@@ -234,8 +234,6 @@ export function useIntegrations() {
         warehouses.forEach((warehouse: any) => {
           smartMergeServices(warehouse.id, servicesData.services)
         })
-      } else {
-        console.error('[useIntegrations] Services sync failed:', await servicesResponse.text())
       }
 
       // Sync boxes
@@ -246,9 +244,11 @@ export function useIntegrations() {
         body: JSON.stringify({
           carriers: ['USPS'],
           credentials: {
-            consumerKey: config.consumerKey,
-            consumerSecret: config.consumerSecret,
-            environment: config.environment
+            userId: config.consumerKey,
+            apiKey: config.consumerSecret,
+            apiUrl: config.environment === 'sandbox'
+              ? 'https://apis-tem.usps.com'
+              : 'https://apis.usps.com'
           }
         })
       })
@@ -261,82 +261,58 @@ export function useIntegrations() {
         warehouses.forEach((warehouse: any) => {
           smartMergeBoxes(warehouse.id, boxesData.boxes)
         })
-      } else {
-        console.error('[useIntegrations] Boxes sync failed:', await boxesResponse.text())
       }
 
-      console.log('[useIntegrations] Auto-sync complete!')
-
+      console.log('[useIntegrations] ✅ Auto-sync complete!')
     } catch (error) {
-      console.error('[useIntegrations] Auto-sync failed:', error)
+      console.error('[useIntegrations] Error during auto-sync:', error)
     }
   }
 
   const updateIntegration = (integrationId: string, updates: Partial<Integration>) => {
     const newSettings = {
       ...settings,
-      integrations: settings.integrations.map(integration => {
-        if (integration.id === integrationId) {
-          return { ...integration, ...updates } as Integration
-        }
-        return integration
-      })
+      integrations: settings.integrations.map(i =>
+        i.id === integrationId
+          ? { ...i, ...updates } as Integration
+          : i
+      ),
+      lastUpdated: new Date().toISOString()
     }
 
-    // Auto-sync boxes when USPS integration is saved with credentials
-    if (integrationId === 'usps' && updates.config) {
-      // Type guard: check if this is a USPS config
-      const config = updates.config
-      if ('consumerKey' in config && 'consumerSecret' in config) {
-        const uspsConfig = config as {
-          consumerKey: string
-          consumerSecret: string
-          environment: 'sandbox' | 'production'
-          apiUrl: string
-        }
+    // ✅ USPS auto-sync trigger
+    const integration = settings.integrations.find(i => i.id === integrationId)
+    if (integration?.name === 'USPS' && updates.config) {
+      // Check if this is a meaningful config update (has credentials)
+      const newConfig = { ...integration.config, ...updates.config }
+      if (newConfig.consumerKey && newConfig.consumerSecret) {
+        console.log('[updateIntegration] USPS credentials detected, triggering auto-sync...')
 
-        // Only sync if we have valid credentials
-        if (uspsConfig.consumerKey && uspsConfig.consumerSecret) {
-          console.log('[useIntegrations] USPS integration saved, triggering auto-sync...')
+        // Trigger sync in background (don't block the save)
+        setTimeout(() => {
+          try {
+            syncUSPSServicesAndBoxes(newConfig)
+          } catch (error) {
+            console.error('[updateIntegration] Error auto-syncing USPS:', error)
+          }
+        }, 500)
+      }
+    }
 
-          // Run sync asynchronously
-          setTimeout(async () => {
-            try {
-              const response = await fetch('/api/shipping/boxes/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  carriers: ['USPS'],
-                  credentials: {
-                    consumerKey: uspsConfig.consumerKey,
-                    consumerSecret: uspsConfig.consumerSecret,
-                    environment: uspsConfig.environment,
-                    apiUrl: uspsConfig.apiUrl
-                  }
-                })
-              })
+    // ✅ UPS auto-sync trigger (similar pattern)
+    if (integration?.name === 'UPS' && updates.config) {
+      const newConfig = { ...integration.config, ...updates.config }
+      if (newConfig.accessToken) {
+        console.log('[updateIntegration] UPS credentials detected, could trigger auto-sync here...')
 
-              if (response.ok) {
-                const data = await response.json()
-                console.log(`[useIntegrations] ✅ Auto-synced ${data.count} USPS boxes`)
-
-                if (data.boxes && data.boxes.length > 0) {
-                  const existingBoxes = localStorage.getItem('shipping_boxes')
-                  const parsed = existingBoxes ? JSON.parse(existingBoxes) : []
-                  const customBoxes = parsed.filter((box: any) => box.boxType === 'custom')
-                  const updated = [...customBoxes, ...data.boxes]
-
-                  localStorage.setItem('shipping_boxes', JSON.stringify(updated))
-                  console.log('[useIntegrations] ✅ Boxes stored in localStorage')
-                }
-              } else {
-                console.warn('[useIntegrations] Failed to auto-sync boxes:', await response.text())
-              }
-            } catch (error) {
-              console.error('[useIntegrations] Error auto-syncing boxes:', error)
-            }
-          }, 500)
-        }
+        // You can add UPS sync logic here if needed
+        setTimeout(() => {
+          try {
+            // syncUPSServicesAndBoxes(newConfig) if you implement it
+          } catch (error) {
+            console.error('[updateIntegration] Error auto-syncing boxes:', error)
+          }
+        }, 500)
       }
     }
 
@@ -351,9 +327,12 @@ export function useIntegrations() {
     return settings.integrations.filter(i => i.type === type)
   }
 
-  const testIntegration = async (integrationId: string): Promise<boolean> => {
+  // ✅ FIXED - Return object with success and message
+  const testIntegration = async (integrationId: string): Promise<{ success: boolean; message: string }> => {
     const integration = getIntegration(integrationId)
-    if (!integration) return false
+    if (!integration) {
+      return { success: false, message: 'Integration not found' }
+    }
 
     // Handle USPS integration test
     if (integration.name === 'USPS' && integration.type === 'shipping') {
@@ -366,10 +345,16 @@ export function useIntegrations() {
             accountId: accountId
           })
         })
-        return response.ok
+
+        if (response.ok) {
+          return { success: true, message: 'USPS connection successful!' }
+        } else {
+          const error = await response.json()
+          return { success: false, message: error.message || 'USPS connection failed' }
+        }
       } catch (error) {
         console.error('USPS integration test failed:', error)
-        return false
+        return { success: false, message: error instanceof Error ? error.message : 'USPS test failed' }
       }
     }
 
@@ -384,26 +369,31 @@ export function useIntegrations() {
             accountId: accountId
           })
         })
-        return response.ok
+
+        if (response.ok) {
+          return { success: true, message: 'UPS connection successful!' }
+        } else {
+          const error = await response.json()
+          return { success: false, message: error.message || 'UPS connection failed' }
+        }
       } catch (error) {
         console.error('UPS integration test failed:', error)
-        return false
+        return { success: false, message: error instanceof Error ? error.message : 'UPS test failed' }
       }
     }
 
-    // Handle Shopify integration test
+    // Handle Shopify integration test - using GraphQL
     if (integration.name === 'Shopify' && integration.type === 'ecommerce') {
       try {
         console.log('[testIntegration] Testing Shopify connection...')
 
-        // Type assertion: We know this is a Shopify integration
         const shopifyIntegration = integration as ShopifyIntegration
 
         const response = await fetch('/api/integrations/shopify/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            shopUrl: shopifyIntegration.config.shopUrl,
+            storeUrl: shopifyIntegration.config.storeUrl,
             accessToken: shopifyIntegration.config.accessToken
           })
         })
@@ -411,14 +401,18 @@ export function useIntegrations() {
         const data = await response.json()
         console.log('[testIntegration] Shopify test result:', data)
 
-        return data.success === true
+        if (data.success === true) {
+          return { success: true, message: data.message || 'Shopify connection successful!' }
+        } else {
+          return { success: false, message: data.message || 'Shopify connection failed' }
+        }
       } catch (error) {
         console.error('Shopify integration test failed:', error)
-        return false
+        return { success: false, message: error instanceof Error ? error.message : 'Shopify test failed' }
       }
     }
 
-    // Handle WooCommerce integration test (if you add it later)
+    // Handle WooCommerce integration test
     if (integration.name === 'WooCommerce' && integration.type === 'ecommerce') {
       try {
         console.log('[testIntegration] Testing WooCommerce connection...')
@@ -436,14 +430,18 @@ export function useIntegrations() {
         })
 
         const data = await response.json()
-        return data.success === true
+        if (data.success === true) {
+          return { success: true, message: data.message || 'WooCommerce connection successful!' }
+        } else {
+          return { success: false, message: data.message || 'WooCommerce connection failed' }
+        }
       } catch (error) {
         console.error('WooCommerce integration test failed:', error)
-        return false
+        return { success: false, message: error instanceof Error ? error.message : 'WooCommerce test failed' }
       }
     }
 
-    // Handle Etsy integration test (if you add it later)
+    // Handle Etsy integration test
     if (integration.name === 'Etsy' && integration.type === 'ecommerce') {
       try {
         console.log('[testIntegration] Testing Etsy connection...')
@@ -456,44 +454,86 @@ export function useIntegrations() {
           body: JSON.stringify({
             apiKey: etsyIntegration.config.apiKey,
             sharedSecret: etsyIntegration.config.sharedSecret,
-            shopId: etsyIntegration.config.shopId
+            storeId: etsyIntegration.config.storeId
           })
         })
 
         const data = await response.json()
-        return data.success === true
+        if (data.success === true) {
+          return { success: true, message: data.message || 'Etsy connection successful!' }
+        } else {
+          return { success: false, message: data.message || 'Etsy connection failed' }
+        }
       } catch (error) {
         console.error('Etsy integration test failed:', error)
-        return false
+        return { success: false, message: error instanceof Error ? error.message : 'Etsy test failed' }
       }
     }
 
     // Unsupported integration type
     console.warn(`Test not implemented for integration: ${integration.name}`)
-    return false
+    return { success: false, message: `Test not implemented for ${integration.name}` }
   }
 
+  // 🔥 CRITICAL FIX: Read fresh data from localStorage before adding
   const addIntegration = (integration: Integration) => {
+    // Read fresh data from localStorage to avoid data loss
+    const aid = getCurrentAccountId()
+    const freshSettings = getAccountIntegrations(aid) || settings
+
+    console.log('[addIntegration] Fresh integrations count:', freshSettings.integrations.length)
+    console.log('[addIntegration] Current state count:', settings.integrations.length)
+    console.log('[addIntegration] Adding integration:', integration.id, integration.name, 'for store:', integration.storeId)
+
+    // Check if integration already exists
+    const existingIndex = freshSettings.integrations.findIndex(
+      i => i.id === integration.id || (i.name === integration.name && i.storeId === integration.storeId)
+    )
+
+    let updatedIntegrations
+    if (existingIndex >= 0) {
+      console.log('[addIntegration] Integration already exists, updating instead')
+      // Update existing integration
+      updatedIntegrations = freshSettings.integrations.map((i, index) =>
+        index === existingIndex ? { ...i, ...integration } : i
+      )
+    } else {
+      // Add new integration
+      updatedIntegrations = [...freshSettings.integrations, integration]
+    }
+
     const newSettings = {
-      ...settings,
-      integrations: [...settings.integrations, integration],
+      ...freshSettings,
+      integrations: updatedIntegrations,
       lastUpdated: new Date().toISOString()
     }
+
+    console.log('[addIntegration] New integrations count:', newSettings.integrations.length)
+    console.log('[addIntegration] All integrations:', newSettings.integrations.map(i => ({ id: i.id, name: i.name, storeId: i.storeId })))
 
     const success = saveSettings(newSettings)
 
     if (success) {
       // ✅ Update local state immediately
       setSettings(newSettings)
+      console.log('[addIntegration] ✅ Successfully saved integration')
+    } else {
+      console.error('[addIntegration] ❌ Failed to save integration')
     }
 
     return success
   }
 
   const removeIntegration = (integrationId: string, storeId?: string) => {
+    // 🔥 CRITICAL FIX: Read fresh data from localStorage before removing
+    const aid = getCurrentAccountId()
+    const freshSettings = getAccountIntegrations(aid) || settings
+
+    console.log('[removeIntegration] Fresh integrations count:', freshSettings.integrations.length)
+
     const newSettings = {
-      ...settings,
-      integrations: settings.integrations.filter(i => {
+      ...freshSettings,
+      integrations: freshSettings.integrations.filter(i => {
         // ✅ If storeId provided, only remove integration for THAT store
         if (storeId) {
           return !(i.id === integrationId && i.storeId === storeId)
@@ -503,6 +543,9 @@ export function useIntegrations() {
       }),
       lastUpdated: new Date().toISOString()
     }
+
+    console.log('[removeIntegration] New integrations count:', newSettings.integrations.length)
+
     const success = saveSettings(newSettings)
 
     if (success) {
@@ -516,7 +559,7 @@ export function useIntegrations() {
   return {
     settings,
     loading,
-    accountId, // Changed from userId
+    accountId,
     updateIntegration,
     getIntegration,
     getIntegrationsByType,

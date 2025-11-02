@@ -4,37 +4,49 @@
 
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, CheckCircleIcon, InformationCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { ShopifyIntegration } from '../types/integrationTypes'
 
 interface ShopifyConfigModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (integration: Partial<ShopifyIntegration>) => void
+  onTest?: () => Promise<{ success: boolean; message: string }> // ✅ Test handler
   existingIntegration?: ShopifyIntegration
   selectedStoreId: string
+  isTesting?: boolean // ✅ Testing state from parent
 }
 
 export default function ShopifyConfigModal({
   isOpen,
   onClose,
   onSave,
+  onTest,
   existingIntegration,
-  selectedStoreId
+  selectedStoreId,
+  isTesting = false
 }: ShopifyConfigModalProps) {
+  // Check if already connected
+  const isConnected = existingIntegration?.status === 'connected' && existingIntegration?.config?.storeUrl
+
   // OAuth flow only
-  const [shopUrl, setShopUrl] = useState(existingIntegration?.config?.shopUrl || '')
+  const [storeUrl, setstoreUrl] = useState(existingIntegration?.config?.storeUrl || '')
   const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [showReconnect, setShowReconnect] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [showInstructions, setShowInstructions] = useState(false)
+
+  // ✅ Test result state
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const handleOAuthConnect = async () => {
-    if (!shopUrl.trim()) {
-      setErrors({ shopUrl: 'Shop URL is required to start OAuth' })
+    if (!storeUrl.trim()) {
+      setErrors({ storeUrl: 'Shop URL is required to start OAuth' })
       return
     }
 
     // Normalize and validate shop URL
-    let normalizedShop = shopUrl.trim().toLowerCase()
+    let normalizedShop = storeUrl.trim().toLowerCase()
     normalizedShop = normalizedShop.replace(/^https?:\/\//, '')
     normalizedShop = normalizedShop.replace(/\/$/, '')
     normalizedShop = normalizedShop.split('/')[0]
@@ -45,7 +57,7 @@ export default function ShopifyConfigModal({
 
     // Validate format
     if (!normalizedShop.match(/^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/)) {
-      setErrors({ shopUrl: 'Must be a valid Shopify URL (e.g., your-store.myshopify.com)' })
+      setErrors({ storeUrl: 'Must be a valid Shopify URL (e.g., your-store.myshopify.com)' })
       return
     }
 
@@ -58,12 +70,55 @@ export default function ShopifyConfigModal({
 
       console.log('[Shopify Modal] Redirecting to OAuth:', authUrl)
 
-      // Redirect to OAuth
+      // Redirect to OAuth - sync will happen automatically after connection
       window.location.href = authUrl
     } catch (error: any) {
       console.error('OAuth initiation error:', error)
       setErrors({ oauth: error.message || 'Failed to start OAuth flow' })
       setIsAuthenticating(false)
+    }
+  }
+
+  const handleDisconnect = () => {
+    onSave({ status: 'disconnected' })
+    onClose()
+  }
+
+  // ✅ Test connection implementation
+  const handleTestConnection = async () => {
+    if (!onTest) {
+      console.warn('[Shopify Modal] No onTest handler provided')
+      setTestResult({ success: false, message: 'Test function not available' })
+      return
+    }
+
+    if (!isConnected) {
+      setTestResult({ success: false, message: 'Please connect your Shopify store first' })
+      setTimeout(() => setTestResult(null), 3000)
+      return
+    }
+
+    setTestResult(null) // Clear previous results
+
+    try {
+      const result = await onTest()
+      setTestResult(result)
+
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        setTestResult(null)
+      }, 5000)
+    } catch (error: any) {
+      console.error('[Shopify Modal] Test failed:', error)
+      setTestResult({
+        success: false,
+        message: error.message || 'Connection test failed'
+      })
+
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        setTestResult(null)
+      }, 5000)
     }
   }
 
@@ -83,7 +138,7 @@ export default function ShopifyConfigModal({
         </Transition.Child>
 
         <div className="fixed inset-0 z-10 overflow-y-auto">
-          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+          <div className="flex min-h-full items-end justify-center p-4 sm:items-center sm:p-0">
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -93,104 +148,232 @@ export default function ShopifyConfigModal({
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:p-6">
-                <div className="absolute right-0 top-0 pr-4 pt-4">
-                  <button
-                    type="button"
-                    className="rounded-md bg-white text-gray-400 hover:text-gray-500"
-                    onClick={onClose}
-                    disabled={isAuthenticating}
-                  >
-                    <span className="sr-only">Close</span>
-                    <XMarkIcon className="h-6 w-6" aria-hidden="true" />
-                  </button>
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white shadow-xl transition-all sm:w-full sm:max-w-2xl flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                    <img
+                      src="/logos/shopify-logo.svg"
+                      alt="USPS"
+                      className="w-20 h-10"
+                    />
+                    <div className="text-left">
+                      <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                        Shopify Configuration
+                      </Dialog.Title>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {isConnected
+                          ? 'Manage your Shopify integration'
+                          : 'Connect your Shopify store to automatically sync orders and products'
+                        }
+                      </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={onClose}
+                      disabled={isAuthenticating}
+                      type="button"
+                      className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="sm:flex sm:items-start">
-                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                    <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
-                      {existingIntegration ? 'Reconnect' : 'Connect'} Shopify Store
-                    </Dialog.Title>
-                    <p className="mt-2 text-sm text-gray-500">
-                      Connect your Shopify store to automatically sync orders, products, and inventory
-                    </p>
+                {/* Body - Scrollable */}
+                <div className="px-6 py-6 overflow-y-auto flex-1">
+                  {isConnected ? (
+                    // Connected State
+                    <>
+                      {/* Connection Status */}
+                      <div className="space-y-4">
+                        <div className="bg-green-50 border border-green-200 rounded-md px-4 py-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <CheckCircleIcon className="h-5 w-5 text-green-400 mr-2 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-green-800">Connected</p>
+                                <p className="text-sm text-green-700">
+                                  Store: {existingIntegration.config?.storeUrl}
+                                </p>
+                                {existingIntegration.lastSyncAt && (
+                                  <p className="text-xs text-green-600 mt-1">
+                                    Last synced: {new Date(existingIntegration.lastSyncAt).toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleDisconnect}
+                              className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Disconnect
+                            </button>
+                          </div>
+                        </div>
 
-                    {/* Error display */}
-                    {errors.oauth && (
-                      <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-3">
-                        <p className="text-sm text-red-600">{errors.oauth}</p>
-                      </div>
-                    )}
+                        {/* Info Box about Auto-Sync */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                          <div className="flex">
+                            <InformationCircleIcon className="h-5 w-5 text-blue-400 mr-2 flex-shrink-0" />
+                            <div className="text-sm text-blue-700">
+                              <p className="font-medium mb-1">Automatic Synchronization</p>
+                              <p>Orders and products sync automatically when you connect your store. Data refreshes periodically to keep everything up to date.</p>
+                            </div>
+                          </div>
+                        </div>
 
-                    {/* OAuth Flow */}
-                    <div className="mt-6 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Shop URL *
-                        </label>
-                        <input
-                          type="text"
-                          value={shopUrl}
-                          onChange={(e) => {
-                            setShopUrl(e.target.value)
-                            setErrors({})
-                          }}
-                          placeholder="your-store.myshopify.com"
-                          disabled={isAuthenticating}
-                          className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                            errors.shopUrl ? 'border-red-300' : 'border-gray-300'
-                          } focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed`}
-                        />
-                        {errors.shopUrl && (
-                          <p className="mt-1 text-sm text-red-600">{errors.shopUrl}</p>
+                        {/* ✅ Test Result Display */}
+                        {testResult && (
+                          <div
+                            className={`rounded-md p-4 ${
+                              testResult.success
+                                ? 'bg-green-50 border border-green-200'
+                                : 'bg-red-50 border border-red-200'
+                            }`}
+                          >
+                            <p
+                              className={`text-sm font-medium ${
+                                testResult.success ? 'text-green-800' : 'text-red-800'
+                              }`}
+                            >
+                            {testResult.success ? '✓ ' : '✗ '}
+                            {testResult.message}
+                            </p>
+                          </div>
                         )}
-                        <p className="mt-1 text-xs text-gray-500">
-                          Enter your Shopify store URL (e.g., my-store.myshopify.com)
-                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    // OAuth Connection Flow
+                    <>
+                      {/* Instructions */}
+                      <div className="rounded-md bg-blue-50 border border-blue-200">
+                        <button
+                          onClick={() => setShowInstructions(!showInstructions)}
+                          className="w-full p-4 flex items-center justify-between hover:bg-blue-100 transition-colors rounded-md"
+                        >
+                          <div className="flex items-center">
+                            <InformationCircleIcon className="h-5 w-5 text-blue-400 mr-2" />
+                            <h3 className="text-sm font-medium text-blue-800">
+                              How to connect Shopify
+                            </h3>
+                          </div>
+                          <ChevronDownIcon
+                            className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${
+                              showInstructions ? 'transform rotate-0' : 'transform -rotate-90'
+                            }`}
+                          />
+                        </button>
+                        <div
+                          className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                            showInstructions ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
+                          }`}
+                        >
+                          <div className="px-4 pb-4">
+                            <div className="text-sm text-blue-700 space-y-3">
+                              <div>
+                                <p className="font-medium mb-1">Steps:</p>
+                                <ol className="list-decimal list-inside space-y-1 ml-2">
+                                  <li>Enter your Shopify store URL below</li>
+                                  <li>Click "Connect to Shopify"</li>
+                                  <li>Accept the permissions in Shopify</li>
+                                  <li>You'll be redirected back and data will sync automatically</li>
+                                </ol>
+                              </div>
+                              <div className="bg-blue-100 rounded p-2">
+                                <p className="text-xs font-medium">✨ Automatic Sync</p>
+                                <p className="text-xs">Orders and products will sync automatically when you connect. No manual sync needed!</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* OAuth Info Box */}
-                      <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                        <h4 className="text-sm font-medium text-blue-900 mb-2">
-                          🔐 Secure OAuth Connection
-                        </h4>
-                        <ul className="text-sm text-blue-800 space-y-1">
-                          <li>• You'll be redirected to Shopify to authorize access</li>
-                          <li>• We never store your Shopify password</li>
-                          <li>• You can revoke access anytime from your Shopify admin</li>
-                        </ul>
-                      </div>
+                      {/* Error display */}
+                      {errors.oauth && (
+                        <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-3">
+                          <p className="text-sm text-red-600">{errors.oauth}</p>
+                        </div>
+                      )}
 
-                      {/* Connect Button */}
+                      {/* OAuth Flow - Shop URL Input Only */}
+                      <div className="mt-6 space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Shop URL <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={storeUrl}
+                            onChange={(e) => {
+                              setstoreUrl(e.target.value)
+                              setErrors({})
+                            }}
+                            placeholder="your-store.myshopify.com"
+                            disabled={isAuthenticating}
+                            className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                              errors.storeUrl ? 'border-red-300' : 'border-gray-300'
+                            } focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed`}
+                          />
+                          {errors.storeUrl && (
+                            <p className="mt-1 text-sm text-red-600">{errors.storeUrl}</p>
+                          )}
+                          <p className="mt-1 text-xs text-gray-500">
+                            {showReconnect
+                              ? 'Confirm your shop URL to reconnect (or enter a different shop)'
+                              : 'Enter your Shopify store URL (e.g., your-store.myshopify.com)'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Footer - Simple version without Sync button */}
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-between items-center flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={isAuthenticating || !isConnected || isTesting}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isTesting ? 'Testing Connection...' : 'Test Connection'}
+                  </button>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      disabled={isAuthenticating}
+                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isConnected ? 'Close' : 'Cancel'}
+                    </button>
+
+                    {!isConnected && (
                       <button
                         type="button"
                         onClick={handleOAuthConnect}
-                        disabled={isAuthenticating || !shopUrl.trim()}
-                        className="w-full inline-flex justify-center items-center rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={isAuthenticating || !storeUrl.trim()}
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isAuthenticating ? (
                           <>
-                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                             Connecting...
                           </>
                         ) : (
-                          '🔗 Connect with Shopify'
+                          'Connect to Shopify'
                         )}
                       </button>
-
-                      {/* Cancel Button */}
-                      <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={isAuthenticating}
-                        className="w-full inline-flex justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    )}
                   </div>
                 </div>
               </Dialog.Panel>

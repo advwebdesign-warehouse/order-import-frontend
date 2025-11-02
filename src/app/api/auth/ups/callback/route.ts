@@ -61,11 +61,13 @@ export async function GET(request: NextRequest) {
     const storedState = cookieStore.get('ups_oauth_state')?.value
     const accountNumber = cookieStore.get('ups_account_number')?.value
     const environment = cookieStore.get('ups_environment')?.value as 'sandbox' | 'production'
+    const storeId = cookieStore.get('ups_store_id')?.value // ✅ FIX: Read storeId from cookie
 
     console.log('[UPS Callback] Stored state:', storedState)
     console.log('[UPS Callback] Received state:', state)
     console.log('[UPS Callback] Account number:', accountNumber)
     console.log('[UPS Callback] Environment:', environment)
+    console.log('[UPS Callback] Store ID:', storeId) // ✅ FIX: Log storeId
 
     // Validate state (CSRF protection)
     if (state !== storedState) {
@@ -77,6 +79,11 @@ export async function GET(request: NextRequest) {
 
     if (!accountNumber) {
       throw new Error('Account number not found in cookies')
+    }
+
+    // ✅ FIX: Validate storeId
+    if (!storeId) {
+      throw new Error('Store ID not found in cookies')
     }
 
     console.log('[UPS Callback] ✅ State validated')
@@ -149,6 +156,7 @@ export async function GET(request: NextRequest) {
     redirectUrl.searchParams.set('ups_access_token', tokens.access_token)
     redirectUrl.searchParams.set('ups_refresh_token', tokens.refresh_token || '')
     redirectUrl.searchParams.set('ups_expires_in', tokens.expires_in?.toString() || '3600')
+    redirectUrl.searchParams.set('ups_store_id', storeId) // ✅ FIX: Pass storeId in redirect URL
 
     console.log('[UPS Callback] ✅ Redirecting to:', redirectUrl.toString())
 
@@ -158,6 +166,7 @@ export async function GET(request: NextRequest) {
     redirectResponse.cookies.delete('ups_oauth_state')
     redirectResponse.cookies.delete('ups_account_number')
     redirectResponse.cookies.delete('ups_environment')
+    redirectResponse.cookies.delete('ups_store_id') // ✅ FIX: Clear storeId cookie
 
     return redirectResponse
 
@@ -172,6 +181,7 @@ export async function GET(request: NextRequest) {
     errorResponse.cookies.delete('ups_oauth_state')
     errorResponse.cookies.delete('ups_account_number')
     errorResponse.cookies.delete('ups_environment')
+    errorResponse.cookies.delete('ups_store_id') // ✅ FIX: Clear storeId cookie on error
 
     return errorResponse
   }

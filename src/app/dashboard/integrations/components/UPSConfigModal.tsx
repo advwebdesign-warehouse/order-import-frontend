@@ -13,6 +13,8 @@ interface UPSConfigModalProps {
   onClose: () => void
   integration: UPSIntegration
   onSave: (integrationId: string, config: any) => void
+  onTest?: () => Promise<{ success: boolean; message: string }>
+  isTesting?: boolean
 }
 
 // Progress stages for visual feedback
@@ -22,7 +24,9 @@ export default function UPSConfigModal({
   isOpen,
   onClose,
   integration,
-  onSave
+  onSave,
+  onTest,
+  isTesting = false
 }: UPSConfigModalProps) {
   const [accountNumber, setAccountNumber] = useState(integration.config?.accountNumber || '')
   const [environment, setEnvironment] = useState<Environment>(integration.config?.environment || 'sandbox')
@@ -30,11 +34,10 @@ export default function UPSConfigModal({
   const [connecting, setConnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
-  const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [environmentChanged, setEnvironmentChanged] = useState(false)
 
-  const isConnected = integration.status === 'connected' && integration.config.accessToken
+  const isConnected = integration.status === 'connected' && integration.config?.accessToken
 
   const handleEnvironmentChange = (env: Environment) => {
     setEnvironment(env)
@@ -48,48 +51,40 @@ export default function UPSConfigModal({
   }
 
   const handleTest = async () => {
+    if (!onTest) {
+      console.warn('[UPS Modal] No onTest handler provided')
+      setTestResult({ success: false, message: 'Test function not available' })
+      return
+    }
+
     if (!integration.config?.accessToken) {
       setTestResult({
         success: false,
         message: 'No access token found. Please reconnect to UPS.'
       })
+      setTimeout(() => setTestResult(null), 3000)
       return
     }
 
-    setTesting(true)
     setTestResult(null)
 
     try {
-      const response = await fetch('/api/integrations/ups/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accessToken: integration.config.accessToken,
-          tokenExpiry: integration.config.tokenExpiry,
-          environment: integration.config.environment
-        })
-      })
+      const result = await onTest()
+      setTestResult(result)
 
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        setTestResult({
-          success: true,
-          message: data.message || 'Connection successful! Your UPS credentials are valid.'
-        })
-      } else {
-        setTestResult({
-          success: false,
-          message: data.error || 'Connection failed. Please check your credentials.'
-        })
-      }
-    } catch (error) {
+      setTimeout(() => {
+        setTestResult(null)
+      }, 5000)
+    } catch (error: any) {
+      console.error('[UPS Modal] Test failed:', error)
       setTestResult({
         success: false,
-        message: 'Network error. Please try again.'
+        message: error.message || 'Connection test failed'
       })
-    } finally {
-      setTesting(false)
+
+      setTimeout(() => {
+        setTestResult(null)
+      }, 5000)
     }
   }
 
@@ -121,9 +116,11 @@ export default function UPSConfigModal({
 
       const state = `ups_${Date.now()}_${environment}`
 
+      // ✅ FIX: Add storeId to cookies
       document.cookie = `ups_oauth_state=${state}; path=/; max-age=600; SameSite=Lax`
       document.cookie = `ups_account_number=${accountNumber}; path=/; max-age=600; SameSite=Lax`
       document.cookie = `ups_environment=${environment}; path=/; max-age=600; SameSite=Lax`
+      document.cookie = `ups_store_id=${integration.storeId}; path=/; max-age=600; SameSite=Lax`
 
       const params = new URLSearchParams({
         client_id: clientId,
@@ -137,6 +134,7 @@ export default function UPSConfigModal({
       const authUrl = `https://www.ups.com/lasso/signin?${params.toString()}`
 
       console.log('[UPS OAuth] Redirecting to UPS authorization...')
+      console.log('[UPS OAuth] Store ID saved in cookie:', integration.storeId)
       window.location.href = authUrl
     } catch (error: any) {
       console.error('❌ Connection error:', error)
@@ -187,20 +185,28 @@ export default function UPSConfigModal({
         console.log('[UPS Config] ✅ Disconnected for account:', accountId)
       }
 
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setSyncStage('success')
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      window.location.reload()
-    } catch (error) {
-      console.error('[UPS Config] Disconnect error:', error)
+      setTimeout(() => {
+        setSyncStage('success')
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
+      }, 1000)
+
+    } catch (error: any) {
+      console.error('❌ Disconnect error:', error)
+      alert(error.message || 'Failed to disconnect UPS')
       setSyncing(false)
       setSyncStage('idle')
     }
   }
 
   const handleSave = async () => {
-    if (!isConnected) {
-      await handleConnect()
+    if (environmentChanged) {
+      if (!confirm('Changing the environment will require reconnecting to UPS. Continue?')) {
+        return
+      }
+      // Disconnect first, then user can reconnect with new environment
+      handleDisconnect()
       return
     }
 
@@ -208,126 +214,100 @@ export default function UPSConfigModal({
     setSyncStage('saving-config')
 
     try {
-      onSave(integration.id, {
-        ...integration.config,
-        environment,
-        apiUrl: environment === 'production'
-          ? 'https://onlinetools.ups.com'
-          : 'https://wwwcie.ups.com'
-      })
-
-      await new Promise(resolve => setTimeout(resolve, 800))
-
-      setSyncStage('updating-boxes')
-      const boxesResponse = await fetch('/api/shipping/boxes/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          carriers: ['UPS'],
-          credentials: {
-            accessToken: integration.config.accessToken,
-            environment: environment
-          }
-        })
-      })
-
-      if (boxesResponse.ok) {
-        const boxesData = await boxesResponse.json()
-        if (boxesData.boxes && boxesData.boxes.length > 0) {
-          const warehousesStr = localStorage.getItem('warehouses')
-          const warehouses = warehousesStr ? JSON.parse(warehousesStr) : []
-
-          warehouses.forEach((warehouse: any) => {
-            const storageKey = `shipping_boxes_${warehouse.id}`
-            const existingBoxes = localStorage.getItem(storageKey)
-            const parsed = existingBoxes ? JSON.parse(existingBoxes) : []
-            const customBoxes = parsed.filter((box: any) => box.boxType === 'custom')
-            const updated = [...customBoxes, ...boxesData.boxes]
-
-            localStorage.setItem(storageKey, JSON.stringify(updated))
-            localStorage.setItem(`boxes_last_sync_${warehouse.id}`, Date.now().toString())
-          })
-        }
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 800))
-
+      // Fetch UPS services
       setSyncStage('updating-services')
-      const servicesResponse = await fetch('/api/shipping/services/sync', {
+      const servicesResponse = await fetch('/api/integrations/ups/services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          carriers: ['UPS'],
-          credentials: {
-            accessToken: integration.config.accessToken,
-            environment: environment
-          }
+          accessToken: integration.config?.accessToken,
+          environment: integration.config?.environment
         })
       })
 
-      if (servicesResponse.ok) {
-        const servicesData = await servicesResponse.json()
-        if (servicesData.services && servicesData.services.length > 0) {
-          const warehousesStr = localStorage.getItem('warehouses')
-          const warehouses = warehousesStr ? JSON.parse(warehousesStr) : []
+      const servicesData = await servicesResponse.json()
 
-          warehouses.forEach((warehouse: any) => {
-            const storageKey = `shipping_services_${warehouse.id}`
-            const existingServices = localStorage.getItem(storageKey)
-            const parsed = existingServices ? JSON.parse(existingServices) : []
-
-            const merged = servicesData.services.map((apiService: any) => {
-              const existing = parsed.find((s: any) =>
-                s.carrier === apiService.carrier && s.serviceCode === apiService.serviceCode
-              )
-              return existing
-                ? { ...apiService, isActive: existing.isActive, id: existing.id, createdAt: existing.createdAt }
-                : apiService
-            })
-
-            localStorage.setItem(storageKey, JSON.stringify(merged))
-            localStorage.setItem(`services_last_sync_${warehouse.id}`, Date.now().toString())
-          })
-        }
+      if (!servicesResponse.ok || !servicesData.success) {
+        throw new Error(servicesData.error || 'Failed to fetch UPS services')
       }
 
-      await new Promise(resolve => setTimeout(resolve, 800))
+      console.log('[UPS Config] ✅ Fetched services:', servicesData.services?.length || 0)
+
+      // Fetch UPS packaging
+      setSyncStage('updating-boxes')
+      const packagingResponse = await fetch('/api/integrations/ups/packaging', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessToken: integration.config?.accessToken,
+          environment: integration.config?.environment
+        })
+      })
+
+      const packagingData = await packagingResponse.json()
+
+      if (!packagingResponse.ok || !packagingData.success) {
+        throw new Error(packagingData.error || 'Failed to fetch UPS packaging')
+      }
+
+      console.log('[UPS Config] ✅ Fetched packaging:', packagingData.packaging?.length || 0)
+
+      // Save to localStorage
+      const accountId = getCurrentAccountId()
+      const storageKey = `orderSync_integrations_${accountId}`
+      const stored = localStorage.getItem(storageKey)
+      const currentSettings = stored ? JSON.parse(stored) : null
+
+      if (currentSettings) {
+        // Update integrations
+        const updatedIntegrations = currentSettings.integrations.map((int: any) => {
+          if (int.id === integration.id) {
+            return {
+              ...int,
+              services: servicesData.services || [],
+              packaging: packagingData.packaging || []
+            }
+          }
+          return int
+        })
+
+        localStorage.setItem(storageKey, JSON.stringify({
+          ...currentSettings,
+          integrations: updatedIntegrations,
+          lastUpdated: new Date().toISOString()
+        }))
+
+        console.log('[UPS Config] ✅ Saved to localStorage')
+      }
+
       setSyncStage('success')
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      onClose()
-      window.location.reload()
-    } catch (error) {
-      console.error('[UPS Config] Error during save:', error)
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
+
+    } catch (error: any) {
+      console.error('❌ Save error:', error)
+      alert(error.message || 'Failed to sync UPS data')
       setSyncing(false)
       setSyncStage('idle')
-      setTestResult({
-        success: false,
-        message: 'Configuration saved, but sync failed.'
-      })
     }
   }
 
-  const isConfigValid = accountNumber?.length === 6
+  const isConfigValid = accountNumber.length === 6
 
-  const getStageInfo = (stage: SyncStage) => {
-    switch (stage) {
-      case 'saving-config':
-        return { text: 'Saving Configuration...', icon: '💾', color: 'text-blue-600' }
-      case 'updating-boxes':
-        return { text: 'Updating Boxes...', icon: '📦', color: 'text-blue-600' }
-      case 'updating-services':
-        return { text: 'Updating Services...', icon: '🚚', color: 'text-blue-600' }
-      case 'success':
-        return { text: 'Sync Successful!', icon: '✅', color: 'text-green-600' }
-      default:
-        return null
-    }
+  // Stage display mapping
+  const stageInfo: Record<SyncStage, { icon: string; text: string }> = {
+    idle: { icon: '', text: '' },
+    'saving-config': { icon: '💾', text: 'Saving configuration...' },
+    'updating-boxes': { icon: '📦', text: 'Syncing UPS packaging options...' },
+    'updating-services': { icon: '🚚', text: 'Syncing UPS services...' },
+    success: { icon: '✅', text: 'Sync complete!' }
   }
 
-  const currentStageInfo = getStageInfo(syncStage)
+  const currentStageInfo = stageInfo[syncStage]
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
+    <Transition show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={syncing ? () => {} : onClose}>
         <Transition.Child
           as={Fragment}
@@ -338,7 +318,7 @@ export default function UPSConfigModal({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black bg-opacity-25" />
+          <div className="fixed inset-0 bg-black/30" />
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-y-auto">
@@ -357,94 +337,91 @@ export default function UPSConfigModal({
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <img src="/logos/ups-logo.svg" alt="UPS" className="w-10 h-10" />
-                      <Dialog.Title className="text-lg font-semibold text-gray-900">
-                        Configure UPS Integration
-                      </Dialog.Title>
+                      <img
+                        src="/logos/ups-logo.svg"
+                        alt="UPS"
+                        className="w-10 h-10"
+                      />
+                      <div className="text-left">
+                        <Dialog.Title className="text-lg font-semibold text-gray-900">
+                          UPS Configuration
+                        </Dialog.Title>
+                        <p className="text-sm text-gray-900 mt-0.5">
+                          {isConnected ? 'Manage your UPS integration' : 'Connect your UPS account'}
+                        </p>
+                      </div>
                     </div>
                     <button
                       onClick={onClose}
                       disabled={syncing}
                       className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <XMarkIcon className="h-6 w-6" />
+                      <XMarkIcon className="h-6 w-6" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
 
-                {/* Content */}
-                <div className="px-6 py-6 space-y-6 overflow-y-auto flex-1">
+                {/* Content - Scrollable */}
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
                   {/* Connection Status */}
                   {isConnected && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
+                    <div className="rounded-lg bg-green-50 border border-green-200 p-4">
+                      <div className="flex items-center">
+                        <CheckCircleIcon className="h-5 w-5 text-green-600 mr-2" />
                         <div>
-                          <p className="font-medium text-green-900 flex items-center gap-2">
-                            <CheckCircleIcon className="h-5 w-5" />
-                            Connected
-                          </p>
-                          <p className="text-sm text-green-700 mt-1">
-                            Account: {integration.config.accountNumber}
-                          </p>
-                          <p className="text-xs text-green-600 mt-0.5">
-                            Connected {new Date(integration.connectedAt || '').toLocaleDateString()}
+                          <p className="text-sm font-medium text-green-900">Connected to UPS</p>
+                          <p className="text-xs text-green-700 mt-0.5">
+                            Account: {integration.config?.accountNumber} • {integration.config?.environment === 'production' ? '🚀 Production' : '🧪 Sandbox'}
                           </p>
                         </div>
-                        <button
-                          onClick={handleDisconnect}
-                          disabled={syncing}
-                          className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Disconnect
-                        </button>
                       </div>
                     </div>
                   )}
 
                   {/* Instructions */}
-                  <div className="rounded-md bg-blue-50 border border-blue-200">
+                  <div>
                     <button
                       onClick={() => setShowInstructions(!showInstructions)}
-                      className="w-full p-4 flex items-center justify-between hover:bg-blue-100 transition-colors rounded-md"
+                      className="flex items-center justify-between w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-left transition-colors hover:bg-blue-100"
                     >
                       <div className="flex items-center">
-                        <InformationCircleIcon className="h-5 w-5 text-blue-400 mr-3" />
-                        <h3 className="text-sm font-medium text-blue-800">
-                          Getting Started with UPS Developer Portal
-                        </h3>
+                        <InformationCircleIcon className="h-5 w-5 text-blue-600 mr-2" />
+                        <span className="text-sm font-medium text-blue-900">
+                          {isConnected ? 'Need help?' : 'How to connect UPS'}
+                        </span>
                       </div>
                       <ChevronDownIcon
-                        className={`h-5 w-5 text-blue-600 transition-transform duration-200 ${
-                          showInstructions ? 'rotate-0' : '-rotate-90'
+                        className={`h-5 w-5 text-blue-600 transition-transform ${
+                          showInstructions ? 'rotate-180' : ''
                         }`}
                       />
                     </button>
 
-                    <div className={`overflow-hidden transition-all duration-300 ${
-                      showInstructions ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
-                    }`}>
-                      <div className="px-4 pb-4">
-                        <div className="text-sm text-blue-700 space-y-3">
-                          <div>
-                            <p className="font-medium mb-2">🔐 OAuth 2.0 Integration</p>
-                            <p className="mb-2">
-                              This integration uses secure OAuth 2.0 authorization.
-                            </p>
-                          </div>
-                          <div>
-                            <p className="font-medium mb-1">Steps:</p>
-                            <ol className="list-decimal list-inside space-y-1 ml-2">
-                              <li>Enter your <strong>6-character UPS Account Number</strong></li>
-                              <li>Select <strong>Sandbox</strong> or <strong>Production</strong></li>
-                              <li>Click <strong>Connect to UPS</strong></li>
-                              <li>Sign in with your UPS credentials</li>
-                              <li>Authorize our app</li>
-                              <li>You'll be redirected back! 🎉</li>
-                            </ol>
+                    {showInstructions && (
+                      <div className="mt-2 rounded-lg border border-blue-200 bg-white overflow-hidden">
+                        <div className="px-4 pb-4">
+                          <div className="text-sm text-blue-700 space-y-3">
+                            <div>
+                              <p className="font-medium mb-2">🔐 OAuth 2.0 Integration</p>
+                              <p className="mb-2">
+                                This integration uses secure OAuth 2.0 authorization.
+                              </p>
+                            </div>
+                            <div>
+                              <p className="font-medium mb-1">Steps:</p>
+                              <ol className="list-decimal list-inside space-y-1 ml-2">
+                                <li>Enter your <strong>6-character UPS Account Number</strong></li>
+                                <li>Select <strong>Sandbox</strong> or <strong>Production</strong></li>
+                                <li>Click <strong>Connect to UPS</strong></li>
+                                <li>Sign in with your UPS credentials</li>
+                                <li>Authorize our app</li>
+                                <li>You'll be redirected back! 🎉</li>
+                              </ol>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Environment Selection */}
@@ -512,9 +489,16 @@ export default function UPSConfigModal({
                   )}
 
                   {/* Test Result */}
-                  {testResult && !testResult.success && !syncing && (
-                    <div className="rounded-md p-4 bg-red-50 border border-red-200">
-                      <p className="text-sm font-medium text-red-800">✗ {testResult.message}</p>
+                  {testResult && !syncing && (
+                    <div className={`rounded-md p-4 ${
+                      testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+                    }`}>
+                      <p className={`text-sm font-medium ${
+                        testResult.success ? 'text-green-800' : 'text-red-800'
+                      }`}>
+                        {testResult.success ? '✓ ' : '✗ '}
+                        {testResult.message}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -525,10 +509,10 @@ export default function UPSConfigModal({
                     {isConnected ? (
                       <button
                         onClick={handleTest}
-                        disabled={testing || syncing}
+                        disabled={isTesting || syncing}
                         className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {testing ? 'Testing Connection...' : 'Test Connection'}
+                        {isTesting ? 'Testing Connection...' : 'Test Connection'}
                       </button>
                     ) : (
                       <div></div>

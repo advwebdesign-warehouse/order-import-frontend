@@ -8,12 +8,14 @@ import { XMarkIcon, InformationCircleIcon, ChevronDownIcon, CheckCircleIcon } fr
 import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { USPSIntegration, Environment } from '../types/integrationTypes'
 
-
 interface USPSConfigModalProps {
   isOpen: boolean
   onClose: () => void
   integration: USPSIntegration
   onSave: (integrationId: string, config: any) => void
+  selectedStoreId?: string
+  onTest?: () => Promise<{ success: boolean; message: string }>
+  isTesting?: boolean
 }
 
 // Progress stages for visual feedback
@@ -23,7 +25,10 @@ export default function USPSConfigModal({
   isOpen,
   onClose,
   integration,
-  onSave
+  onSave,
+  selectedStoreId,
+  onTest,
+  isTesting = false
 }: USPSConfigModalProps) {
   const [config, setConfig] = useState({
     consumerKey: integration.config?.consumerKey || '',
@@ -32,7 +37,6 @@ export default function USPSConfigModal({
     apiUrl: integration.config?.apiUrl || 'https://api-cat.usps.com'
   })
 
-  const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [showSecret, setShowSecret] = useState(false)
   const [showInstructions, setShowInstructions] = useState(false)
@@ -58,36 +62,37 @@ export default function USPSConfigModal({
   }
 
   const handleTest = async () => {
-    setTesting(true)
+    if (!onTest) {
+      console.warn('[USPS Modal] No onTest handler provided')
+      setTestResult({ success: false, message: 'Test function not available' })
+      return
+    }
+
+    if (integration.status !== 'connected' && (!config.consumerKey || !config.consumerSecret)) {
+      setTestResult({ success: false, message: 'Please enter your credentials first' })
+      setTimeout(() => setTestResult(null), 3000)
+      return
+    }
+
     setTestResult(null)
 
     try {
-      const response = await fetch('/api/integrations/usps/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
-      })
+      const result = await onTest()
+      setTestResult(result)
 
-      const data = await response.json()
-
-      if (response.ok) {
-        setTestResult({
-          success: true,
-          message: 'Connection successful! Your USPS credentials are valid.'
-        })
-      } else {
-        setTestResult({
-          success: false,
-          message: data.error || 'Connection failed. Please check your credentials.'
-        })
-      }
-    } catch (error) {
+      setTimeout(() => {
+        setTestResult(null)
+      }, 5000)
+    } catch (error: any) {
+      console.error('[USPS Modal] Test failed:', error)
       setTestResult({
         success: false,
-        message: 'Network error. Please try again.'
+        message: error.message || 'Connection test failed'
       })
-    } finally {
-      setTesting(false)
+
+      setTimeout(() => {
+        setTestResult(null)
+      }, 5000)
     }
   }
 
@@ -249,13 +254,18 @@ export default function USPSConfigModal({
       // Small delay to let parent update
       await new Promise(resolve => setTimeout(resolve, 100))
 
-      // Reload the page to refresh all components with new data
+      // ✅ FIX: Reload with store parameter to preserve selection
       console.log('[USPS Config] 🔄 Reloading page to refresh data...')
 
       // Close modal (config already saved earlier)
       onClose()
 
-      window.location.reload()
+      // Reload with store parameter to keep the selected store
+      if (selectedStoreId) {
+        window.location.href = `/dashboard/integrations?store=${selectedStoreId}`
+      } else {
+        window.location.reload()
+      }
     } catch (error) {
       console.error('[USPS Config] Error during sync:', error)
       setSyncing(false)
@@ -266,7 +276,6 @@ export default function USPSConfigModal({
       })
     }
   }
-
 
   const isConfigValid =
     (config.consumerKey?.trim().length ?? 0) > 0 &&
@@ -321,22 +330,26 @@ export default function USPSConfigModal({
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    {/* ✅ Replace emoji with USPS logo */}
                     <img
                       src="/logos/usps-logo.svg"
                       alt="USPS"
                       className="w-10 h-10"
                     />
-                    <Dialog.Title className="text-lg font-semibold text-gray-900">
-                      Configure USPS Integration
-                    </Dialog.Title>
+                    <div className="text-left">
+                      <Dialog.Title className="text-lg font-semibold text-gray-900">
+                        USPS Integration
+                      </Dialog.Title>
+                      <p className="text-sm text-gray-900 mt-0.5">
+                        {integration.status === 'connected' ? 'Manage your USPS integration' : 'Connect your USPS account'}
+                      </p>
+                    </div>
                   </div>
                   <button
                     onClick={onClose}
                     disabled={syncing}
                     className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <XMarkIcon className="h-6 w-6" />
+                    <XMarkIcon className="h-6 w-6" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -353,7 +366,7 @@ export default function USPSConfigModal({
                           Connected
                         </p>
                         <p className="text-sm text-green-700 mt-1">
-                          Consumer Key: {config.consumerKey.substring(0, 20)}...
+                          Consumer Key: {config.consumerKey?.substring(0, 20) || 'N/A'}...
                         </p>
                         <p className="text-xs text-green-600 mt-0.5">
                           Connected {new Date(integration.connectedAt || '').toLocaleDateString()}
@@ -640,12 +653,12 @@ export default function USPSConfigModal({
                       onClick={handleTest}
                       disabled={
                         integration.status === 'connected'
-                          ? testing || syncing  // ✅ When connected, only disable during testing/syncing
-                          : !isConfigValid || testing || syncing  // When not connected, check validation
+                          ? isTesting || syncing  // ✅ When connected, only disable during testing/syncing
+                          : !isConfigValid || isTesting || syncing  // When not connected, check validation
                       }
                       className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {testing ? 'Testing Connection...' : 'Test Connection'}
+                      {isTesting ? 'Testing Connection...' : 'Test Connection'}
                     </button>
 
                     <div className="flex space-x-3">
