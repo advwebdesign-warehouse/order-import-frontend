@@ -1,8 +1,22 @@
+//file path: app/dashboard/products/components/ProductsFilters.tsx
+
 'use client'
 
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
 import { Product, ProductFilterState } from '../utils/productTypes'
 import { useSettings } from '../../shared/hooks/useSettings'
+
+interface FilterOptions {
+  categories: string[]
+  vendors: string[]
+  brands: string[]
+  tags: string[]
+  warehouses: Array<{ id: string; name: string }>
+  statuses: string[]
+  visibilities: string[]
+  types: string[]
+  stockStatuses: string[]
+}
 
 interface ProductsFiltersProps {
   searchTerm: string
@@ -12,7 +26,7 @@ interface ProductsFiltersProps {
   filters: ProductFilterState
   onFiltersChange: (filters: ProductFilterState) => void
   onClearAllFilters: () => void
-  products: Product[]
+  filterOptions: FilterOptions
 }
 
 export default function ProductsFilters({
@@ -23,7 +37,7 @@ export default function ProductsFilters({
   filters,
   onFiltersChange,
   onClearAllFilters,
-  products
+  filterOptions
 }: ProductsFiltersProps) {
   const { settings } = useSettings()
   const isStockManagementEnabled = settings.inventory.manageStock
@@ -42,11 +56,6 @@ export default function ProductsFilters({
     filters.parentOnly ||
     !filters.includeVariants ||
     filters.tags.length > 0
-
-  // Get unique values for dropdowns - Fixed for Vercel compatibility
-  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)))
-  const vendors = Array.from(new Set(products.map(p => p.vendor).filter(Boolean)))
-  const brands = Array.from(new Set(products.map(p => p.brand).filter(Boolean)))
 
   return (
     <div className="mt-8">
@@ -291,7 +300,7 @@ export default function ProductsFilters({
                 className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               >
                 <option value="">All Categories</option>
-                {categories.map(category => (
+                {filterOptions.categories.map(category => (
                   <option key={category} value={category}>{category}</option>
                 ))}
               </select>
@@ -305,7 +314,7 @@ export default function ProductsFilters({
                 className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               >
                 <option value="">All Vendors</option>
-                {vendors.map(vendor => (
+                {filterOptions.vendors.map(vendor => (
                   <option key={vendor} value={vendor}>{vendor}</option>
                 ))}
               </select>
@@ -319,7 +328,7 @@ export default function ProductsFilters({
                 className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               >
                 <option value="">All Brands</option>
-                {brands.map(brand => (
+                {filterOptions.brands.map(brand => (
                   <option key={brand} value={brand}>{brand}</option>
                 ))}
               </select>

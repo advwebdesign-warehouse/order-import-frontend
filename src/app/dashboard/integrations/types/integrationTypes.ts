@@ -14,6 +14,7 @@ export interface BaseIntegration {
   icon?: string
   connectedAt?: string
   lastSyncAt?: string
+  lastUpdated?: string
   accountId?: string
   storeId?: string
 }

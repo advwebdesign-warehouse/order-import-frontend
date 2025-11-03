@@ -2,7 +2,7 @@
 
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   EyeIcon,
   DocumentTextIcon,
@@ -41,6 +41,9 @@ import {
 import EditableStatusCell from './EditableStatusCell'
 import { ORDER_STATUS_OPTIONS, FULFILLMENT_STATUS_OPTIONS } from '../constants/statusOptions'
 import { convertTailwindToHex } from '../../shared/utils/colorUtils'
+import { getStoresFromStorage } from '../../stores/utils/storeStorage'
+import { getStoreName, getWarehouseName } from '../utils/warehouseUtils'
+import { useWarehouses } from '../../warehouses/context/WarehouseContext'
 
 // Date extraction utility functions
 const extractDateParts = (dateString: string) => {
@@ -141,6 +144,17 @@ export default function OrdersTable({
   onUpdateFulfillmentStatus,
   fulfillmentStatusOptions
 }: OrdersTableProps) {
+  // Load stores from storage for store name resolution
+  const [stores, setStores] = useState<any[]>([])
+
+  // Get warehouses from context for warehouse name resolution
+  const { warehouses } = useWarehouses()
+
+  useEffect(() => {
+    const loadedStores = getStoresFromStorage()
+    setStores(loadedStores)
+  }, [])
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -356,7 +370,7 @@ export default function OrdersTable({
       case 'storeName':
         return (
           <div className="text-sm text-gray-900">
-            {order.storeName || 'Unknown Store'}
+            {getStoreName(order.storeId, stores)}
           </div>
         )
 
@@ -430,7 +444,7 @@ export default function OrdersTable({
       case 'warehouseName':
         return (
           <div className="text-sm text-gray-900">
-            {order.warehouseName}
+            {getWarehouseName(order.warehouseId, warehouses)}
           </div>
         )
 

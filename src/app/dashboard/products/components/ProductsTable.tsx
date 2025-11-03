@@ -1,3 +1,5 @@
+//file path: app/dashboard/products/components/ProductsTable.tsx
+
 'use client'
 
 import React from 'react'

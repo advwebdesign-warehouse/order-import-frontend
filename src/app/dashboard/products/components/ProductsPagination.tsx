@@ -1,3 +1,5 @@
+//file path: app/dashboard/products/components/ProductsPagination.tsx
+
 'use client'
 
 interface ProductsPaginationProps {

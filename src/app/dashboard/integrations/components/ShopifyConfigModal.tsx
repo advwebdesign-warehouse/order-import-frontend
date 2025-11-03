@@ -7,14 +7,19 @@ import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, CheckCircleIcon, InformationCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { ShopifyIntegration } from '../types/integrationTypes'
 
+// Progress stages for visual feedback
+type SyncStage = 'idle' | 'starting-sync' | 'syncing-products' | 'syncing-orders' | 'success'
+
 interface ShopifyConfigModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (integration: Partial<ShopifyIntegration>) => void
   onTest?: () => Promise<{ success: boolean; message: string }> // ✅ Test handler
+  onSync?: (progressCallback?: (stage: 'starting' | 'products' | 'orders' | 'complete') => void) => Promise<void>
   existingIntegration?: ShopifyIntegration
   selectedStoreId: string
   isTesting?: boolean // ✅ Testing state from parent
+  isSyncing?: boolean // ✅ NEW: Syncing state from parent
 }
 
 export default function ShopifyConfigModal({
@@ -22,9 +27,11 @@ export default function ShopifyConfigModal({
   onClose,
   onSave,
   onTest,
+  onSync,
   existingIntegration,
   selectedStoreId,
-  isTesting = false
+  isTesting = false,
+  isSyncing = false
 }: ShopifyConfigModalProps) {
   // Check if already connected
   const isConnected = existingIntegration?.status === 'connected' && existingIntegration?.config?.storeUrl
@@ -35,9 +42,28 @@ export default function ShopifyConfigModal({
   const [showReconnect, setShowReconnect] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showInstructions, setShowInstructions] = useState(false)
+  const [syncStage, setSyncStage] = useState<SyncStage>('idle')
 
   // ✅ Test result state
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // Get stage display information
+  const getStageInfo = (stage: SyncStage) => {
+    switch (stage) {
+      case 'starting-sync':
+        return { text: 'Starting Sync...', icon: '🚀', color: 'text-blue-600' }
+      case 'syncing-products':
+        return { text: 'Syncing Products...', icon: '📦', color: 'text-blue-600' }
+      case 'syncing-orders':
+        return { text: 'Syncing Orders...', icon: '🛒', color: 'text-blue-600' }
+      case 'success':
+        return { text: 'Synchronization completed successfully!', icon: '✅', color: 'text-green-600' }
+      default:
+        return null
+    }
+  }
+
+  const currentStageInfo = getStageInfo(syncStage)
 
   const handleOAuthConnect = async () => {
     if (!storeUrl.trim()) {
@@ -113,6 +139,61 @@ export default function ShopifyConfigModal({
       setTestResult({
         success: false,
         message: error.message || 'Connection test failed'
+      })
+
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        setTestResult(null)
+      }, 5000)
+    }
+  }
+
+  // ✅ NEW: Sync handler implementation
+  const handleSync = async () => {
+    if (!onSync) {
+      console.warn('[Shopify Modal] No onSync handler provided')
+      setTestResult({ success: false, message: 'Sync function not available' })
+      return
+    }
+
+    if (!isConnected) {
+      setTestResult({ success: false, message: 'Please connect your Shopify store first' })
+      setTimeout(() => setTestResult(null), 3000)
+      return
+    }
+
+    setTestResult(null) // Clear previous results
+    setSyncStage('starting-sync')
+
+    try {
+      // Call onSync with a callback to update stages
+      await onSync((stage: 'starting' | 'products' | 'orders' | 'complete') => {
+        if (stage === 'starting') {
+          setSyncStage('starting-sync')
+        } else if (stage === 'products') {
+          setSyncStage('syncing-products')
+        } else if (stage === 'orders') {
+          setSyncStage('syncing-orders')
+        } else if (stage === 'complete') {
+          setSyncStage('success')
+        }
+      })
+
+      // If no callback was used, just show success
+      if (syncStage !== 'success') {
+        setSyncStage('success')
+      }
+
+      // Keep success message visible for 2 seconds
+      setTimeout(() => {
+        setSyncStage('idle')
+      }, 2000)
+    } catch (error: any) {
+      console.error('[Shopify Modal] Sync failed:', error)
+      setSyncStage('idle')
+      setTestResult({
+        success: false,
+        message: error.message || 'Synchronization failed'
       })
 
       // Auto-dismiss after 5 seconds
@@ -334,11 +415,12 @@ export default function ShopifyConfigModal({
                 </div>
 
                 {/* Footer - Simple version without Sync button */}
-                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-between items-center flex-shrink-0">
+                <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex-shrink-0">
+                  <div className="flex items-center justify-between">
                   <button
                     type="button"
                     onClick={handleTestConnection}
-                    disabled={isAuthenticating || !isConnected || isTesting}
+                    disabled={isAuthenticating || !isConnected || isTesting || isSyncing}
                     className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isTesting ? 'Testing Connection...' : 'Test Connection'}
@@ -348,11 +430,33 @@ export default function ShopifyConfigModal({
                     <button
                       type="button"
                       onClick={onClose}
-                      disabled={isAuthenticating}
-                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isAuthenticating || isSyncing}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isConnected ? 'Close' : 'Cancel'}
+                    {isConnected ? 'Close' : 'Cancel'}
+                  </button>
+
+                  {/* ✅ NEW: Sync Button - Only show when connected */}
+                  {isConnected && (
+                    <button
+                      type="button"
+                      onClick={handleSync}
+                      disabled={isAuthenticating || isTesting || isSyncing}
+                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSyncing ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Syncing...
+                        </>
+                      ) : (
+                        'Sync Shopify'
+                      )}
                     </button>
+                  )}
 
                     {!isConnected && (
                       <button
@@ -375,6 +479,37 @@ export default function ShopifyConfigModal({
                       </button>
                     )}
                   </div>
+                </div>
+
+                  {/* Progress Notification - Appears below buttons */}
+                  {(isSyncing || syncStage !== 'idle') && currentStageInfo && (
+                    <div className="mt-4 rounded-md bg-blue-50 border border-blue-200 p-3">
+                      <div className="flex items-center">
+                        <span className="text-xl mr-3">{currentStageInfo.icon}</span>
+                        <div className="flex-1">
+                          <p className={`text-sm font-medium ${
+                            syncStage === 'success' ? 'text-green-700' : 'text-blue-700'
+                          }`}>
+                            {currentStageInfo.text}
+                          </p>
+                          {syncStage !== 'success' && syncStage !== 'idle' && (
+                            <div className="mt-2 w-full bg-blue-200 rounded-full h-2 overflow-hidden relative">
+                              <div
+                                className="absolute inset-0 bg-gradient-to-r from-blue-400 via-blue-600 to-blue-400 rounded-full"
+                                style={{
+                                  width: '200%',
+                                  animation: 'slideProgress 1.5s linear infinite'
+                                }}
+                              ></div>
+                            </div>
+                          )}
+                        </div>
+                        {syncStage === 'success' && (
+                          <CheckCircleIcon className="h-6 w-6 text-green-600 ml-2" />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Dialog.Panel>
             </Transition.Child>

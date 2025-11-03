@@ -1,3 +1,5 @@
+//file path: app/dashboard/products/hooks/useProductSelection.tsx
+
 import { useSelection } from '../../shared/hooks/useSelection'
 import { Product } from '../utils/productTypes'
 

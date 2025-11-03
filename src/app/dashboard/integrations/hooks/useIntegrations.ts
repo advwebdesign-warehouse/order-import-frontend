@@ -286,6 +286,9 @@ export function useIntegrations() {
 
     console.log('[updateIntegration] Fresh integrations count:', freshSettings.integrations.length)
     console.log('[updateIntegration] Updating integration:', integrationId, 'with:', Object.keys(updates))
+    if (updates.config) {
+      console.log('[updateIntegration] Config update detected, will deep-merge with existing config')
+    }
 
     // Find the integration to update
     const integration = freshSettings.integrations.find(i => i.id === integrationId)
@@ -296,17 +299,30 @@ export function useIntegrations() {
       return false
     }
 
+    // ✅ FIX: Deep merge the config to prevent losing fields like storeUrl
     const newSettings = {
       ...freshSettings,
-      integrations: freshSettings.integrations.map(i =>
-        i.id === integrationId
-          ? { ...i, ...updates } as Integration
-          : i
-      ),
+      integrations: freshSettings.integrations.map(i => {
+        if (i.id === integrationId) {
+          // Deep merge config if it exists in updates
+          const mergedIntegration = { ...i, ...updates } as Integration
+          if (updates.config && i.config) {
+            mergedIntegration.config = { ...i.config, ...updates.config } as any
+          }
+          return mergedIntegration
+        }
+        return i
+      }),
       lastUpdated: new Date().toISOString()
     }
 
     console.log('[updateIntegration] Updated integrations count:', newSettings.integrations.length)
+
+    // ✅ Verify the updated integration has the config fields
+    const updatedIntegration = newSettings.integrations.find(i => i.id === integrationId)
+    if (updatedIntegration && 'config' in updatedIntegration) {
+      console.log('[updateIntegration] Updated integration config keys:', Object.keys((updatedIntegration as any).config || {}))
+    }
 
     // ✅ USPS auto-sync trigger
     if (integration?.name === 'USPS' && updates.config) {
@@ -430,12 +446,38 @@ export function useIntegrations() {
 
         const shopifyIntegration = integration as ShopifyIntegration
 
+        // ✅ FIX: Get fresh integration data from storage to ensure we have the latest storeUrl
+        const aid = getCurrentAccountId()
+        const freshSettings = getAccountIntegrations(aid)
+        const freshIntegration = freshSettings?.integrations.find(
+          i => i.id === shopifyIntegration.id && i.storeId === shopifyIntegration.storeId
+        ) as ShopifyIntegration | undefined
+
+        const storeUrl = freshIntegration?.config?.storeUrl || shopifyIntegration.config?.storeUrl
+        const accessToken = freshIntegration?.config?.accessToken || shopifyIntegration.config?.accessToken
+
+        console.log('[testIntegration] Shopify test data:', {
+          integrationId: shopifyIntegration.id,
+          storeId: shopifyIntegration.storeId,
+          hasStoreUrl: !!storeUrl,
+          hasAccessToken: !!accessToken,
+          storeUrl: storeUrl ? storeUrl.substring(0, 20) + '...' : 'undefined'
+        })
+
+        if (!storeUrl || !accessToken) {
+          console.error('[testIntegration] Missing credentials:', { hasStoreUrl: !!storeUrl, hasAccessToken: !!accessToken })
+          return {
+            success: false,
+            message: 'Missing Shopify credentials. Please reconnect your store.'
+          }
+        }
+
         const response = await fetch('/api/integrations/shopify/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            storeUrl: shopifyIntegration.config.storeUrl,
-            accessToken: shopifyIntegration.config.accessToken
+            shopUrl: storeUrl,  // ✅ Changed from storeUrl to shopUrl to match API expectation
+            accessToken: accessToken
           })
         })
 
@@ -445,7 +487,7 @@ export function useIntegrations() {
         if (data.success === true) {
           return { success: true, message: data.message || 'Shopify connection successful!' }
         } else {
-          return { success: false, message: data.message || 'Shopify connection failed' }
+          return { success: false, message: data.message || data.error || 'Shopify connection failed' }
         }
       } catch (error) {
         console.error('Shopify integration test failed:', error)

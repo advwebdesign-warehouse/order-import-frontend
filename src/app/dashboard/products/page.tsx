@@ -1,4 +1,4 @@
-// File: app/dashboard/products/page.tsx (lines 1-30 and 215-221)
+// File: app/dashboard/products/page.tsx
 
 'use client'
 
@@ -18,20 +18,26 @@ import { useProductColumns } from './hooks/useProductColumns'
 import { ColumnConfig } from '../shared/components/ColumnSettings'
 import { usePagination } from '../shared/hooks/usePagination'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
-import { useSettings } from '../shared/hooks/useSettings'  // ADDED: Import useSettings
+import { useSettings } from '../shared/hooks/useSettings'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
 
 // Utils
 import { exportToCSV, ExportableItem } from '../shared/utils/csvExporter'
+import { getWarehouseName } from './utils/productUtils'
 
 // Types
 import { Product } from './utils/productTypes'
 import { PRODUCTS_PER_PAGE } from './constants/productConstants'
 
 // Helper function to export products as CSV
-const exportProductsToCSV = (products: Product[], columns: ColumnConfig[], isStockManagementEnabled: boolean) => {
+const exportProductsToCSV = (
+  products: Product[],
+  columns: ColumnConfig[],
+  isStockManagementEnabled: boolean,
+  warehouses: any[]
+) => {
   // Convert ColumnConfig to ExportColumn format expected by your CSV exporter
   const exportColumns = columns.map(column => ({
     ...column,
@@ -78,7 +84,8 @@ const exportProductsToCSV = (products: Product[], columns: ColumnConfig[], isSto
         case 'parentId':
           return product.parentId || ''
         case 'warehouseName':
-          return product.warehouseName || ''
+          // Dynamically resolve warehouse name from warehouseId
+          return getWarehouseName(product.warehouseId, warehouses)
         case 'createdAt':
           return product.createdAt ? new Date(product.createdAt).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -122,8 +129,8 @@ export default function ProductsPage() {
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
 
   // Get settings for stock management
-  const { settings } = useSettings()  // ADDED: Get settings
-  const isStockManagementEnabled = settings?.inventory?.manageStock || false  // ADDED: Extract stock management setting
+  const { settings } = useSettings()
+  const isStockManagementEnabled = settings?.inventory?.manageStock || false
 
   // Get URL parameters for warehouse filtering
   useEffect(() => {
@@ -147,7 +154,8 @@ export default function ProductsPage() {
     setShowFilters,
     filters,
     setFilters,
-    filteredProducts
+    filteredProducts,
+    filterOptions
   } = useProductFilters(products)
 
   const {
@@ -223,7 +231,7 @@ export default function ProductsPage() {
       ? sortedProducts.filter(product => selectedProducts.has(product.id))
       : sortedProducts
 
-    exportProductsToCSV(productsToExport, columns.filter(col => col.visible), isStockManagementEnabled)  // FIXED: Added third parameter
+    exportProductsToCSV(productsToExport, columns.filter(col => col.visible), isStockManagementEnabled, warehouses)  // FIXED: Added third parameter
   }
 
   const handleResetLayout = () => {
@@ -339,7 +347,7 @@ export default function ProductsPage() {
         filters={filters}
         onFiltersChange={setFilters}
         onClearAllFilters={handleClearAllFilters}
-        products={products}
+        filterOptions={filterOptions}
       />
 
       <ProductsTable

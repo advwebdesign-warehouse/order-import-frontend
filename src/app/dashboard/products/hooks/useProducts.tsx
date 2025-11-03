@@ -1,3 +1,5 @@
+//file path: app/dashboard/products/hooks/useProducts.tsx
+
 import { useState, useEffect } from 'react'
 import { Product } from '../utils/productTypes'
 
@@ -75,11 +77,9 @@ const mockProducts: Product[] = [
     barcode: '1234567890123',
     // Warehouse data
     warehouseId: '1',
-    warehouseName: 'Warehouse 1',
     warehouseStock: [
       {
         warehouseId: '1',
-        warehouseName: 'Warehouse 1',
         stockQuantity: 150,
         reservedQuantity: 10,
         availableQuantity: 140,
@@ -130,11 +130,9 @@ const mockProducts: Product[] = [
     barcode: '1234567890124',
     // Warehouse data
     warehouseId: '1',
-    warehouseName: 'Warehouse 1',
     warehouseStock: [
       {
         warehouseId: '1',
-        warehouseName: 'Warehouse 1',
         stockQuantity: 25,
         reservedQuantity: 2,
         availableQuantity: 23,
@@ -184,11 +182,9 @@ const mockProducts: Product[] = [
     barcode: '1234567890125',
     // Warehouse data
     warehouseId: '1',
-    warehouseName: 'Warehouse 1',
     warehouseStock: [
       {
         warehouseId: '1',
-        warehouseName: 'Warehouse 1',
         stockQuantity: 30,
         reservedQuantity: 3,
         availableQuantity: 27,
@@ -242,11 +238,9 @@ const mockProducts: Product[] = [
     upc: '023456789012',
     // Warehouse data
     warehouseId: '2',
-    warehouseName: 'East Coast Warehouse',
     warehouseStock: [
       {
         warehouseId: '2',
-        warehouseName: 'East Coast Warehouse',
         stockQuantity: 75,
         reservedQuantity: 5,
         availableQuantity: 70,
@@ -293,11 +287,9 @@ const mockProducts: Product[] = [
     barcode: '3456789012345',
     // Warehouse data
     warehouseId: '3',
-    warehouseName: 'European Hub',
     warehouseStock: [
       {
         warehouseId: '3',
-        warehouseName: 'European Hub',
         stockQuantity: 8,
         reservedQuantity: 1,
         availableQuantity: 7,
@@ -341,11 +333,9 @@ const mockProducts: Product[] = [
     brand: 'PenMaster',
     // Warehouse data
     warehouseId: '1',
-    warehouseName: 'Warehouse 1',
     warehouseStock: [
       {
         warehouseId: '1',
-        warehouseName: 'Warehouse 1',
         stockQuantity: 0,
         reservedQuantity: 0,
         availableQuantity: 0,

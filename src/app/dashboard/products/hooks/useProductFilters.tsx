@@ -1,9 +1,13 @@
+//file path: app/dashboard/products/hooks/useProductFilters.tsx
+
 import { useState, useEffect, useMemo } from 'react'
 import { Product, ProductFilterState } from '../utils/productTypes'
 import { DEFAULT_PRODUCT_FILTERS } from '../constants/productConstants'
 import { useSettings } from '../../shared/hooks/useSettings'
+import { Warehouse } from '../../warehouses/utils/warehouseTypes'
+import { getUniqueWarehousesFromProducts } from '../utils/productUtils'
 
-export function useProductFilters(products: Product[]) {
+export function useProductFilters(products: Product[], warehouses: Warehouse[] = []) {
   const { settings } = useSettings()
   const [searchTerm, setSearchTerm] = useState('')
   const [showFilters, setShowFilters] = useState(false)
@@ -110,18 +114,18 @@ export function useProductFilters(products: Product[]) {
   // Get unique values for filter dropdowns - Fixed with Array.from() for Vercel compatibility
   const filterOptions = useMemo(() => {
     return {
-      categories: Array.from(new Set(products.map(p => p.category).filter(Boolean))),
-      vendors: Array.from(new Set(products.map(p => p.vendor).filter(Boolean))),
-      brands: Array.from(new Set(products.map(p => p.brand).filter(Boolean))),
+      categories: Array.from(new Set(products.map(p => p.category).filter((v): v is string => Boolean(v)))),
+      vendors: Array.from(new Set(products.map(p => p.vendor).filter((v): v is string => Boolean(v)))),
+      brands: Array.from(new Set(products.map(p => p.brand).filter((v): v is string => Boolean(v)))),
       tags: Array.from(new Set(products.flatMap(p => p.tags))),
-      warehouses: Array.from(new Set(products.map(p => ({ id: p.warehouseId, name: p.warehouseName })).filter(w => w.id && w.name))),
+      warehouses: getUniqueWarehousesFromProducts(products, warehouses),
       statuses: ['active', 'inactive', 'draft', 'archived'],
       visibilities: ['visible', 'hidden', 'catalog', 'search'],
       types: ['simple', 'variant', 'bundle', 'configurable'],
       // Only include stock statuses if stock management is enabled
       stockStatuses: isStockManagementEnabled ? ['in_stock', 'out_of_stock', 'low_stock', 'backorder'] : []
     }
-  }, [products, isStockManagementEnabled])
+  }, [products, warehouses, isStockManagementEnabled])
 
   // Helper function to reset filters to defaults
   const resetFilters = () => {

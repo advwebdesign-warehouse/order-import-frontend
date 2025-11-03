@@ -2,7 +2,6 @@
 
 export interface WarehouseStock {
   warehouseId: string
-  warehouseName: string
   stockQuantity: number
   reservedQuantity?: number
   availableQuantity?: number
@@ -58,8 +57,9 @@ export interface Product {
   seoSlug?: string
   // Warehouse support
   warehouseId?: string
-  warehouseName?: string
   warehouseStock?: WarehouseStock[]
+  // Store support
+  storeId?: string
 }
 
 export interface ProductImage {

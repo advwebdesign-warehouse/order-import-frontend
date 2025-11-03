@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Order, ColumnConfig, SortState } from '../utils/orderTypes'
 import { DEFAULT_COLUMNS, WAREHOUSE_ORDER_COLUMNS, DEFAULT_SORT } from '../constants/orderConstants'
 import { getCurrentUserId } from '@/lib/storage/userStorage'
+import { getStoresFromStorage } from '@/app/dashboard/stores/utils/storeStorage'
+import { getStoreName, getWarehouseName } from '../utils/warehouseUtils'
+import { useWarehouses } from '@/app/dashboard/warehouses/context/WarehouseContext'
 
 export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
   // Use warehouse columns for warehouse-specific pages
@@ -13,11 +16,23 @@ export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
   const [sortConfig, setSortConfig] = useState<SortState>(DEFAULT_SORT)
   const [initialized, setInitialized] = useState(false)
 
+  // Load stores and warehouses for name resolution during sorting
+  const [stores, setStores] = useState<any[]>([])
+  const { warehouses } = useWarehouses()
+
   const userId = getCurrentUserId()
   const storageKeys = {
     columns: `orderColumns_${userId}${useWarehouseColumns ? '_warehouse' : ''}`,
     sortConfig: `orderSort_${userId}${useWarehouseColumns ? '_warehouse' : ''}`
   }
+
+  // Load stores from storage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const loadedStores = getStoresFromStorage()
+      setStores(loadedStores)
+    }
+  }, [])
 
   // Load saved settings on mount
   useEffect(() => {
@@ -135,8 +150,8 @@ export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
           bValue = b.itemCount || 0
           break
         case 'storeName':
-          aValue = a.storeName || ''
-          bValue = b.storeName || ''
+          aValue = getStoreName(a.storeId, stores)
+          bValue = getStoreName(b.storeId, stores)
           break
         case 'platform':
           aValue = a.platform || ''
@@ -147,8 +162,8 @@ export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
           bValue = b.requestedShipping || ''
           break
         case 'warehouseName':
-          aValue = a.warehouseName || ''
-          bValue = b.warehouseName || ''
+          aValue = getWarehouseName(a.warehouseId, warehouses)
+          bValue = getWarehouseName(b.warehouseId, warehouses)
           break
         case 'country':
           aValue = a.country || ''

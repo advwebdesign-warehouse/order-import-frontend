@@ -4,6 +4,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Order, FilterState } from '../utils/orderTypes'
 import { DEFAULT_FILTERS } from '../constants/orderConstants'
 import { getUserId, generateStorageKeys } from '../utils/orderUtils'
+import { getStoresFromStorage } from '@/app/dashboard/stores/utils/storeStorage'
+import { getStoreName, getWarehouseName } from '../utils/warehouseUtils'
+import { useWarehouses } from '@/app/dashboard/warehouses/context/WarehouseContext'
 
 // Default filters with Processing, Shipped, and Delivered pre-selected
 const DEFAULT_FILTERS_WITH_PRESETS: FilterState = {
@@ -37,8 +40,20 @@ export function useOrderFilters(orders: Order[]) {
   const [filters, setFiltersInternal] = useState<FilterState>(() => validateFilterState(DEFAULT_FILTERS_WITH_PRESETS))
   const [initialized, setInitialized] = useState(false)
 
+  // Load stores and warehouses for name resolution in search
+  const [stores, setStores] = useState<any[]>([])
+  const { warehouses } = useWarehouses()
+
   const userId = getUserId()
   const storageKeys = generateStorageKeys(userId)
+
+  // Load stores from storage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const loadedStores = getStoresFromStorage()
+      setStores(loadedStores)
+    }
+  }, [])
 
   // Safe setter that validates filter state
   const setFilters = (newFilters: FilterState | ((prev: FilterState) => FilterState)) => {
@@ -122,7 +137,8 @@ export function useOrderFilters(orders: Order[]) {
           order.customerName,
           order.customerEmail,
           order.platform,
-          order.warehouseName,
+          getStoreName(order.storeId, stores),
+          getWarehouseName(order.warehouseId, warehouses),
           order.country,
           order.status,
           order.fulfillmentStatus

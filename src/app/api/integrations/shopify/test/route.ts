@@ -1,25 +1,32 @@
 //file path: src/app/api/integrations/shopify/test/route.ts
 
-/**
- * Shopify Connection Test API Route
- *
- * ✅ UPDATED: Enhanced error handling and more consistent responses
- * Tests the connection using Shopify's REST API for shop.json endpoint
- */
-
 import { NextRequest, NextResponse } from 'next/server'
+import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient'
 
 export async function POST(request: NextRequest) {
   try {
-    const { shopUrl, accessToken } = await request.json()
+    const body = await request.json()
+    // ✅ Support both shopUrl and storeUrl for backwards compatibility
+    const { shopUrl, storeUrl, accessToken } = body
+    const shop = shopUrl || storeUrl
 
     console.log('[Shopify Test] ========================================')
     console.log('[Shopify Test] Testing connection')
-    console.log('[Shopify Test] Shop:', shopUrl)
+    console.log('[Shopify Test] Request body keys:', Object.keys(body))
+    console.log('[Shopify Test] Shop:', shop)
+    console.log('[Shopify Test] Shop type:', typeof shop)
     console.log('[Shopify Test] Token present:', !!accessToken)
     console.log('[Shopify Test] ========================================')
 
-    if (!shopUrl || !accessToken) {
+    if (!shop || !accessToken) {
+      console.error('[Shopify Test] ❌ Missing credentials:', {
+        hasShop: !!shop,
+        hasShopUrl: !!shopUrl,
+        hasStoreUrl: !!storeUrl,
+        hasAccessToken: !!accessToken,
+        shop: shop,
+        bodyKeys: Object.keys(body)
+      })
       return NextResponse.json(
         {
           success: false,
@@ -31,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Normalize shop URL
-    let normalizedShop = shopUrl.trim().toLowerCase()
+    let normalizedShop = shop.trim().toLowerCase()
     normalizedShop = normalizedShop.replace(/^https?:\/\//, '')
     normalizedShop = normalizedShop.replace(/\/$/, '')
 
@@ -40,133 +47,93 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[Shopify Test] Normalized shop:', normalizedShop)
+    console.log('[Shopify Test] Using GraphQL API 2025-10')
 
-    // Test the connection by making a simple API call to get shop info
-    const testUrl = `https://${normalizedShop}/admin/api/2024-10/shop.json`
+    // Create GraphQL client
+    const client = new ShopifyGraphQLClient({
+      shop: normalizedShop,
+      accessToken: accessToken,
+      apiVersion: '2025-10'
+    })
 
-    console.log('[Shopify Test] Testing URL:', testUrl)
+    // Test connection using GraphQL
+    console.log('[Shopify Test] Calling GraphQL testConnection()...')
+    const result = await client.testConnection()
 
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json'
+    console.log('[Shopify Test] ✅ Connection successful!')
+    console.log('[Shopify Test] Shop name:', result.shop.name)
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully connected to ${result.shop.name}`,
+      details: {
+        shopId: result.shop.id,
+        shopName: result.shop.name,
+        email: result.shop.email,
+        currencyCode: result.shop.currencyCode
       }
     })
 
-    console.log('[Shopify Test] Response status:', response.status)
-
-    if (response.ok) {
-      const data = await response.json()
-      console.log('[Shopify Test] ✅ Connection successful!')
-      console.log('[Shopify Test] Shop name:', data.shop?.name)
-
-      return NextResponse.json({
-        success: true,
-        message: `Successfully connected to ${data.shop?.name || normalizedShop}`,
-        details: {
-          shopName: data.shop?.name,
-          domain: data.shop?.domain,
-          email: data.shop?.email,
-          currencyCode: data.shop?.currency
-        }
-      })
-    }
-
-    // Handle error responses
-    if (response.status === 401) {
-      console.log('[Shopify Test] ❌ Unauthorized - invalid token')
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid credentials',
-          message: 'Access token is invalid or expired. Please reconnect your Shopify store.'
-        },
-        { status: 200 } // Return 200 so the UI can display the error nicely
-      )
-    }
-
-    if (response.status === 404) {
-      console.log('[Shopify Test] ❌ Shop not found')
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Shop not found',
-          message: `Shop "${normalizedShop}" not found. Please verify the shop URL is correct.`
-        },
-        { status: 200 }
-      )
-    }
-
-    // ✅ NEW: Check for permission errors in response
-    if (response.status === 403) {
-      console.log('[Shopify Test] ❌ Permission denied')
-      const errorText = await response.text()
-
-      // Check if it's a protected customer data error
-      if (errorText.includes('not approved to access') ||
-          errorText.includes('protected customer data')) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Permission denied',
-            message: 'Your Shopify app needs approval for protected customer data access. Please visit your Shopify Partners dashboard to request access.',
-            helpUrl: 'https://shopify.dev/docs/apps/launch/protected-customer-data'
-          },
-          { status: 200 }
-        )
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Permission denied',
-          message: 'Access denied. Please check your app permissions.'
-        },
-        { status: 200 }
-      )
-    }
-
-    // Generic error
-    const errorText = await response.text()
-    console.error('[Shopify Test] ❌ Test failed:', errorText)
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Connection test failed',
-        message: 'Unable to connect to Shopify. Please check your credentials and try again.',
-        debug: process.env.NODE_ENV === 'development' ? errorText : undefined
-      },
-      { status: 200 }
-    )
-
   } catch (error: any) {
     console.error('[Shopify Test] ❌ Error:', error)
+    console.log('[Shopify Test] Error type:', error.constructor.name)
+    console.log('[Shopify Test] Error message:', error.message)
 
-    // ✅ NEW: Better error messages for different error types
+    // Parse different error types
     let errorMessage = 'An unexpected error occurred while testing the connection.'
     let errorType = 'Test failed'
+    let statusCode = 200 // Return 200 so UI can display error nicely
 
-    if (error.message?.includes('fetch')) {
+    // Check for network errors
+    if (error.message?.includes('fetch') || error.message?.includes('network')) {
       errorType = 'Network error'
       errorMessage = 'Unable to reach Shopify. Please check your internet connection and try again.'
-    } else if (error.message) {
+    }
+    // Check for authentication errors (401)
+    else if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
+      errorType = 'Invalid credentials'
+      errorMessage = 'Access token is invalid or expired. Please reconnect your Shopify store.'
+    }
+    // Check for permission errors (403)
+    else if (error.message?.includes('403') || error.message?.includes('Forbidden')) {
+      errorType = 'Permission denied'
+      errorMessage = 'Access denied. Your app may need additional permissions. Please reinstall the app with proper permissions.'
+    }
+    // Check for not found errors (404)
+    else if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+      errorType = 'Shop not found'
+      errorMessage = 'Shop not found. Please verify the shop URL is correct.'
+    }
+    // Check for GraphQL errors
+    else if (error.message?.includes('GraphQL Error')) {
+      errorType = 'GraphQL error'
+      errorMessage = error.message.replace('GraphQL Error: ', '')
+    }
+    // Check for HTTP errors
+    else if (error.message?.includes('HTTP Error')) {
+      errorType = 'HTTP error'
       errorMessage = error.message
     }
+    // Generic error with message
+    else if (error.message) {
+      errorMessage = error.message
+    }
+
+    console.log('[Shopify Test] Returning error:', { errorType, errorMessage })
 
     return NextResponse.json(
       {
         success: false,
         error: errorType,
-        message: errorMessage
+        message: errorMessage,
+        debug: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
-      { status: 500 }
+      { status: statusCode }
     )
   }
 }
 
-// ✅ NEW: Allow OPTIONS for CORS if needed
+// ✅ Allow OPTIONS for CORS if needed
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 200,

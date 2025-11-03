@@ -44,8 +44,9 @@ export interface Order {
   fulfillmentStatus: string
   platform: string
   storeId: string
-  storeName?: string
   orderDate: string
+  updatedAt?: string
+  externalId?: string
   itemCount: number
   shippingFirstName: string
   shippingLastName: string
@@ -54,7 +55,6 @@ export interface Order {
   requestedShipping: string
   // Add warehouse support
   warehouseId?: string
-  warehouseName?: string
   // ADD THESE SHIPPING ADDRESS FIELDS:
   shippingAddress1?: string
   shippingAddress2?: string

@@ -23,7 +23,7 @@ function IntegrationsContent() {
   const searchParams = useSearchParams()
 
   // Core integration state
-  const { settings, loading, updateIntegration, testIntegration, addIntegration, removeIntegration } = useIntegrations()
+  const { settings, loading, updateIntegration, testIntegration, addIntegration, removeIntegration, accountId } = useIntegrations()
 
   // Store state
   const [stores, setStores] = useState<any[]>([])
@@ -44,6 +44,9 @@ function IntegrationsContent() {
   // Test results state
   const [testResults, setTestResults] = useState<{ [key: string]: { success: boolean; message: string } | null }>({})
   const [testingId, setTestingId] = useState<string | null>(null)
+
+  // ✅ NEW: Syncing state
+  const [syncingId, setSyncingId] = useState<string | null>(null)
 
   // Modal management hook
   const {
@@ -220,7 +223,6 @@ function IntegrationsContent() {
         [integration.id]: { success: false, message: 'Test failed' }
       }))
 
-      // Auto-dismiss after 5 seconds
       setTimeout(() => {
         setTestResults(prev => ({
           ...prev,
@@ -234,6 +236,95 @@ function IntegrationsContent() {
     }
   }
 
+  // ✅ Simplified - no need for fresh reads
+  const handleShopifySync = async (onProgress?: (stage: 'starting' | 'products' | 'orders' | 'complete') => void) => {
+    const shopifyIntegration = settings.integrations.find(
+      (i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId
+    )
+
+    if (!shopifyIntegration) {
+      throw new Error('Shopify integration not found')
+    }
+
+    setSyncingId(shopifyIntegration.id)
+
+    try {
+      console.log('[handleShopifySync] Starting Shopify sync...')
+
+      // Stage 1: Starting
+      onProgress?.('starting')
+
+      // Get the store warehouse
+      const store = stores.find((s: any) => s.id === selectedStoreId)
+      const warehouseId = store?.warehouseConfig?.defaultWarehouseId
+
+      if (!warehouseId) {
+        throw new Error('No warehouse configured for this store')
+      }
+
+      // Dynamically import ShopifyService
+      const { ShopifyService } = await import('@/lib/shopify/shopifyService')
+
+      console.log('[handleShopifySync] Starting sync for store:', selectedStoreId, 'warehouse:', warehouseId)
+
+      // Show initial notification
+      setNotification({
+        show: true,
+        type: 'info',
+        title: 'Sync Started',
+        message: 'Synchronizing orders and products from Shopify...'
+      })
+
+      // Stage 2: Syncing products
+      onProgress?.('products')
+
+      // Small delay to show the progress
+      await new Promise(resolve => setTimeout(resolve, 800))
+
+      // Stage 3: Syncing orders
+      onProgress?.('orders')
+
+      // Trigger sync with the integration we already have
+      await ShopifyService.autoSyncOnConnection(
+        shopifyIntegration as any,
+        warehouseId,
+        accountId,
+        (message) => {
+          console.log('[Shopify Sync]', message)
+        }
+      )
+
+      // Update integration
+      updateIntegration(shopifyIntegration.id, {
+        lastSyncAt: new Date().toISOString()
+      })
+
+      console.log('[handleShopifySync] ✅ Sync completed successfully')
+
+      // Stage 4: Complete
+      onProgress?.('complete')
+
+      setNotification({
+        show: true,
+        type: 'success',
+        title: 'Sync Complete',
+        message: '✅ Successfully synced orders and products from Shopify'
+      })
+    } catch (error: any) {
+      console.error('[handleShopifySync] Error:', error)
+
+      setNotification({
+        show: true,
+        type: 'error',
+        title: 'Sync Failed',
+        message: error.message || 'Failed to sync Shopify data. Please try again.'
+      })
+      throw error
+    } finally {
+      setSyncingId(null)
+    }
+  }
+
   const createModalTestHandler = (integration: Integration) => {
     return async (): Promise<{ success: boolean; message: string }> => {
       try {
@@ -241,8 +332,8 @@ function IntegrationsContent() {
         return {
           success: result.success,
           message: result.success
-            ? `✅ ${integration.name} connection test successful!`
-            : `❌ ${integration.name} connection test failed. Please check your credentials.`
+            ? ` ${integration.name} connection test successful!`
+            : ` ${integration.name} connection test failed. Please check your credentials.`
         }
       } catch (error) {
         console.error('Test connection error:', error)
@@ -577,8 +668,10 @@ function IntegrationsContent() {
         selectedStoreId={selectedStoreId}
         onTest={() => createModalTestHandler(
           settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)!
-        )()} // ✅ ADD THIS
-        isTesting={testingId === settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)?.id} // ✅ ADD THIS
+        )()}
+        isTesting={testingId === settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)?.id}
+        onSync={handleShopifySync}
+        isSyncing={syncingId === settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)?.id}
       />
 
       {/* Notification */}

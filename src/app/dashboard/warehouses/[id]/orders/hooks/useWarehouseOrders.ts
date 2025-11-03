@@ -24,8 +24,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '3',
@@ -45,8 +44,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Priority Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '5',
@@ -66,8 +64,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '7',
@@ -87,8 +84,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Ground Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '9',
@@ -108,8 +104,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Priority Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '11',
@@ -129,8 +124,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Ground Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '13',
@@ -150,8 +144,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Overnight Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '15',
@@ -171,8 +164,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Priority Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '17',
@@ -192,8 +184,7 @@ const mockOrdersData: Order[] = [
     country: 'United Kingdom',
     countryCode: 'GB',
     requestedShipping: 'Standard International',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
 
   // Additional orders for warehouse 1 (New York Warehouse)
@@ -215,8 +206,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '20',
@@ -236,8 +226,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '21',
@@ -257,8 +246,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Priority Shipping',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
   {
     id: '22',
@@ -278,8 +266,7 @@ const mockOrdersData: Order[] = [
     country: 'Canada',
     countryCode: 'CA',
     requestedShipping: 'International Express',
-    warehouseId: '1',
-    warehouseName: 'New York Warehouse'
+    warehouseId: '1'
   },
 
   // Existing orders for Warehouse San Diego
@@ -301,8 +288,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '4',
@@ -322,8 +308,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Overnight Shipping',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '6',
@@ -343,8 +328,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '8',
@@ -364,8 +348,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '10',
@@ -385,8 +368,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '12',
@@ -406,8 +388,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '14',
@@ -427,8 +408,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '16',
@@ -448,8 +428,7 @@ const mockOrdersData: Order[] = [
     country: 'Canada',
     countryCode: 'CA',
     requestedShipping: 'International Express',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
   {
     id: '18',
@@ -469,8 +448,7 @@ const mockOrdersData: Order[] = [
     country: 'Australia',
     countryCode: 'AU',
     requestedShipping: 'International Priority',
-    warehouseId: 'bfp9mha4k',
-    warehouseName: 'Warehouse San Diego'
+    warehouseId: 'bfp9mha4k'
   },
 
   // New orders for warehouse 2 (Chicago Warehouse)
@@ -492,8 +470,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: '2',
-    warehouseName: 'Chicago Warehouse'
+    warehouseId: '2'
   },
   {
     id: '24',
@@ -513,8 +490,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: '2',
-    warehouseName: 'Chicago Warehouse'
+    warehouseId: '2'
   },
   {
     id: '25',
@@ -534,8 +510,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Priority Shipping',
-    warehouseId: '2',
-    warehouseName: 'Chicago Warehouse'
+    warehouseId: '2'
   },
   {
     id: '26',
@@ -555,8 +530,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Ground Shipping',
-    warehouseId: '2',
-    warehouseName: 'Chicago Warehouse'
+    warehouseId: '2'
   },
   {
     id: '27',
@@ -576,8 +550,7 @@ const mockOrdersData: Order[] = [
     country: 'Canada',
     countryCode: 'CA',
     requestedShipping: 'International Express',
-    warehouseId: '2',
-    warehouseName: 'Chicago Warehouse'
+    warehouseId: '2'
   },
   {
     id: '28',
@@ -597,8 +570,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: '2',
-    warehouseName: 'Chicago Warehouse'
+    warehouseId: '2'
   },
   {
     id: '29',
@@ -618,8 +590,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Overnight Shipping',
-    warehouseId: '2',
-    warehouseName: 'Chicago Warehouse'
+    warehouseId: '2'
   },
 
   // New orders for warehouse 3 (Miami Warehouse)
@@ -641,8 +612,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   },
   {
     id: '31',
@@ -662,8 +632,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Priority Shipping',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   },
   {
     id: '32',
@@ -683,8 +652,7 @@ const mockOrdersData: Order[] = [
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Ground Shipping',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   },
   {
     id: '33',
@@ -704,8 +672,7 @@ orderDate: '2025-09-20T15:10:00Z',
     country: 'Mexico',
     countryCode: 'MX',
     requestedShipping: 'International Express',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   },
   {
     id: '34',
@@ -725,8 +692,7 @@ orderDate: '2025-09-20T09:55:00Z',
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Express Shipping',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   },
   {
     id: '35',
@@ -746,8 +712,7 @@ orderDate: '2025-09-20T17:30:00Z',
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Standard Shipping',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   },
   {
     id: '36',
@@ -767,8 +732,7 @@ orderDate: '2025-09-20T12:15:00Z',
     country: 'Brazil',
     countryCode: 'BR',
     requestedShipping: 'International Priority',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   },
   {
     id: '37',
@@ -788,8 +752,7 @@ orderDate: '2025-09-19T16:25:00Z',
     country: 'United States',
     countryCode: 'US',
     requestedShipping: 'Overnight Shipping',
-    warehouseId: '3',
-    warehouseName: 'Miami Warehouse'
+    warehouseId: '3'
   }
 ]
 

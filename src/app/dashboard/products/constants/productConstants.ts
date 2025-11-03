@@ -1,4 +1,5 @@
-// productConstants.ts
+//file path: app/dashboard/products/components/productConstants.tsx
+
 import { ProductColumnConfig, ProductFilterState, ProductSortState } from '../utils/productTypes'
 
 export const PRODUCT_STATUS_COLORS = {

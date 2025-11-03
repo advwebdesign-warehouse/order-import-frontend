@@ -2,12 +2,14 @@
 
 'use client'
 
-import { Fragment, useMemo } from 'react'
+import { Fragment, useMemo, useState, useEffect } from 'react'
 import { Listbox, Transition } from '@headlessui/react'
 import { ChevronUpDownIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, FunnelIcon, ArrowDownTrayIcon } from '@heroicons/react/20/solid'
 import { FilterState, Order } from '../utils/orderTypes'
 import { FILTER_OPTIONS } from '../constants/orderConstants'
 import { useWarehouses } from '../../warehouses/context/WarehouseContext'
+import { getStoresFromStorage } from '../../stores/utils/storeStorage'
+import { getStoreName } from '../utils/warehouseUtils'
 import ScreenOptions from '../../shared/components/ScreenOptions'
 import { ColumnConfig } from '../../shared/components/ColumnSettings'
 
@@ -56,6 +58,14 @@ export default function OrdersFilters({
 }: OrdersFiltersProps) {
   const { warehouses } = useWarehouses()
 
+  // Load stores from storage
+  const [stores, setStores] = useState<any[]>([])
+
+  useEffect(() => {
+    const loadedStores = getStoresFromStorage()
+    setStores(loadedStores)
+  }, [])
+
   // NEW: Dynamically generate store options from orders
   const storeOptions = useMemo(() => {
     const storeMap = new Map<string, string>()
@@ -63,7 +73,7 @@ export default function OrdersFilters({
     orders.forEach(order => {
       // Use storeId (required) and storeName (optional)
       const storeId = order.storeId
-      const storeName = order.storeName || order.storeId // Use storeName if available, fallback to storeId
+      const storeName = getStoreName(storeId, stores)
 
       if (storeId && typeof storeId === 'string' && storeId.trim() !== '') {
         storeMap.set(storeId, storeName || storeId)
@@ -82,7 +92,7 @@ export default function OrdersFilters({
         const labelB = b.label || ''
         return labelA.localeCompare(labelB)
       })
-  }, [orders])
+  }, [orders, stores])
 
   // Helper function to safely render filter values
   const renderFilterValue = (value: any): string => {

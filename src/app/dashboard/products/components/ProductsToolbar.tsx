@@ -1,3 +1,5 @@
+//file path: app/dashboard/products/components/ProductsToolbar.tsx
+
 'use client'
 
 import {

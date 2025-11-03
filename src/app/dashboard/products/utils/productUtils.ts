@@ -2,6 +2,8 @@
 
 import { Product } from './productTypes'
 import { getCurrentUserId } from '@/lib/storage/userStorage'
+import { Warehouse } from '../../warehouses/utils/warehouseTypes'
+import { Store } from '../../stores/utils/storeTypes'
 
 export function generateSKU(baseName: string, variant?: { [key: string]: string }): string {
   // Remove special characters and spaces, convert to uppercase
@@ -191,4 +193,76 @@ export function formatDate(dateString: string): string {
     month: 'short',
     day: 'numeric'
   })
+}
+
+// ============================================================================
+// WAREHOUSE & STORE NAME RESOLUTION (Pure functions - no data modification)
+// ============================================================================
+
+/**
+ * Get warehouse name from warehouse ID
+ * Returns current warehouse name, or fallback if not found
+ */
+export function getWarehouseName(
+  warehouseId: string | undefined,
+  warehouses: Warehouse[]
+): string {
+  if (!warehouseId) return '-'
+
+  const warehouse = warehouses.find(w => w.id === warehouseId)
+  return warehouse?.name || 'Unknown Warehouse'
+}
+
+/**
+ * Get store name from store ID
+ * Returns current store name, or fallback if not found
+ */
+export function getStoreName(
+  storeId: string | undefined,
+  stores: Store[]
+): string {
+  if (!storeId) return 'Unknown Store'
+
+  const store = stores.find(s => s.id === storeId)
+  return store?.storeName || 'Unknown Store'
+}
+
+/**
+ * Get unique warehouses from products list
+ * Returns array of {id, name} objects for warehouse filters
+ */
+export function getUniqueWarehousesFromProducts(
+  products: Product[],
+  warehouses: Warehouse[]
+): Array<{ id: string; name: string }> {
+  const warehouseMap = new Map<string, string>()
+
+  products.forEach(product => {
+    if (product.warehouseId) {
+      const name = getWarehouseName(product.warehouseId, warehouses)
+      warehouseMap.set(product.warehouseId, name)
+    }
+  })
+
+  return Array.from(warehouseMap.entries()).map(([id, name]) => ({ id, name }))
+}
+
+/**
+ * Get unique stores from products list
+ * Returns array of {id, name} objects for store filters
+ */
+export function getUniqueStoresFromProducts(
+  products: Product[],
+  stores: Store[]
+): Array<{ id: string; name: string }> {
+  const storeMap = new Map<string, string>()
+
+  products.forEach(product => {
+    if (product.storeId) {
+      const name = getStoreName(product.storeId, stores)
+      storeMap.set(product.storeId, name)
+    }
+  })
+
+  return Array.from(storeMap.entries()).map(([id, name]) => ({ id, name }))
 }

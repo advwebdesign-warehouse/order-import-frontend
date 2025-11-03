@@ -3,14 +3,35 @@
 import { Warehouse, WarehouseAddress } from '../utils/warehouseTypes'
 import { replaceAddressVariables, AddressVariables } from '../utils/addressVariables'
 import { Order } from '../../orders/utils/orderTypes' // ✅ Import instead of duplicate
+import { Store } from '../../stores/utils/storeTypes'
+import { getStoreName, getWarehouseName } from '../../orders/utils/warehouseUtils'
 
 /**
  * Get the return address for a warehouse, with variables replaced
  */
 export function getReturnAddressForOrder(
-  warehouse: Warehouse,
-  order?: Order
+  warehouse: Warehouse | undefined,
+  order?: Order,
+  stores: Store[] = [],
+  warehouses: Warehouse[] = []
 ): WarehouseAddress & { displayName: string } {
+  // If no warehouse, return a default/empty address
+  if (!warehouse) {
+    return {
+      name: 'Unknown Warehouse',
+      address1: '',
+      address2: '',
+      city: '',
+      state: '',
+      zip: '',
+      country: '',
+      countryCode: '',
+      displayName: 'Unknown Warehouse'
+    }
+  }
+
+
+
   // Determine which address to use
   const baseAddress = warehouse.useDifferentReturnAddress && warehouse.returnAddress
     ? warehouse.returnAddress
@@ -24,10 +45,15 @@ export function getReturnAddressForOrder(
     }
   }
 
-  // ✅ UPDATED: Replace variables with order data (removed shopName)
+  // ✅ UPDATED: Use storeId and warehouseId to look up names dynamically
+  const storeName = getStoreName(order.storeId, stores)
+  const warehouseName = order.warehouseId
+    ? getWarehouseName(order.warehouseId, warehouses)
+    : warehouse.name
+
   const variables: AddressVariables = {
-    shop: order.storeName || 'Unknown Store',
-    warehouse: warehouse.name,
+    shop: storeName,
+    warehouse: warehouseName,
     code: warehouse.code,
     platform: order.platform
   }
@@ -36,7 +62,7 @@ export function getReturnAddressForOrder(
 
   return {
     ...baseAddress,
-    name: displayName, // Updated with replaced variables
+    name: displayName,
     displayName
   }
 }
@@ -44,6 +70,11 @@ export function getReturnAddressForOrder(
 /**
  * Hook to get return address for an order
  */
-export function useReturnAddress(warehouse: Warehouse, order?: Order) {
-  return getReturnAddressForOrder(warehouse, order)
+export function useReturnAddress(
+  warehouse: Warehouse | undefined,
+  order?: Order,
+  stores: Store[] = [],
+  warehouses: Warehouse[] = []
+) {
+  return getReturnAddressForOrder(warehouse, order, stores, warehouses)
 }
