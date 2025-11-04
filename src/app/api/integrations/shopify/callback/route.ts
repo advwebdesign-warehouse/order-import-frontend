@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { globalStateStore } from '@/lib/shopify/stateStore'
+import { getOAuthState, deleteOAuthState } from '@/lib/utils/shopifyAuth'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -57,8 +57,8 @@ export async function GET(request: NextRequest) {
       throw new Error('Missing required OAuth parameters')
     }
 
-    // Get state from global store
-    const storedState = globalStateStore.get(state)
+    // ✅ FIXED: Get state from shopifyAuth utility (not old stateStore)
+    const storedState = getOAuthState(state)
 
     if (!storedState) {
       console.error('[Shopify Callback] ❌ State not found or expired')
@@ -73,8 +73,8 @@ export async function GET(request: NextRequest) {
       throw new Error('Shop mismatch in OAuth flow')
     }
 
-    // Delete state after validation
-    globalStateStore.delete(state)
+    // ✅ FIXED: Delete state using shopifyAuth utility
+    deleteOAuthState(state)
 
     // Verify HMAC signature
     const clientSecret = process.env.SHOPIFY_CLIENT_SECRET

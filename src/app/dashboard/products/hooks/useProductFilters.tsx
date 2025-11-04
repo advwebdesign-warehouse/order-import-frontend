@@ -60,8 +60,10 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
       // Brand filtering
       const matchesBrand = filters.brand === '' || product.brand === filters.brand
 
-      // Warehouse filtering
-      const matchesWarehouse = filters.warehouseId === '' || product.warehouseId === filters.warehouseId
+      // Warehouse filtering - check warehouseStock array
+      const matchesWarehouse = filters.warehouseId === '' ||
+        product.warehouseStock?.some(stock => stock.warehouseId === filters.warehouseId) ||
+        false
 
       // Price range filtering
       let matchesPriceRange = true

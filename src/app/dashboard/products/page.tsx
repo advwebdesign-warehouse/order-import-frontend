@@ -13,6 +13,7 @@ import { useProducts } from './hooks/useProducts'
 import { useProductFilters } from './hooks/useProductFilters'
 import { useProductSelection } from './hooks/useProductSelection'
 import { useProductColumns } from './hooks/useProductColumns'
+import { useProductSync } from './hooks/useProductSync'
 
 // Shared components
 import { ColumnConfig } from '../shared/components/ColumnSettings'
@@ -24,8 +25,9 @@ import { useSettings } from '../shared/hooks/useSettings'
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
 
 // Utils
+import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { exportToCSV, ExportableItem } from '../shared/utils/csvExporter'
-import { getWarehouseName } from './utils/productUtils'
+import { getProductWarehouseNames } from './utils/productUtils'
 
 // Types
 import { Product } from './utils/productTypes'
@@ -38,11 +40,9 @@ const exportProductsToCSV = (
   isStockManagementEnabled: boolean,
   warehouses: any[]
 ) => {
-  // Convert ColumnConfig to ExportColumn format expected by your CSV exporter
   const exportColumns = columns.map(column => ({
     ...column,
     formatter: (value: any, item: ExportableItem): string => {
-      // Cast item to Product type since we know it's an product
       const product = item as Product
 
       switch (column.field) {
@@ -84,8 +84,7 @@ const exportProductsToCSV = (
         case 'parentId':
           return product.parentId || ''
         case 'warehouseName':
-          // Dynamically resolve warehouse name from warehouseId
-          return getWarehouseName(product.warehouseId, warehouses)
+          return getProductWarehouseNames(product, warehouses)
         case 'createdAt':
           return product.createdAt ? new Date(product.createdAt).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -108,29 +107,44 @@ const exportProductsToCSV = (
     }
   }))
 
-  // Filter out stock-related columns if stock management is disabled
   const filteredColumns = isStockManagementEnabled
     ? exportColumns
     : exportColumns.filter(col => col.field !== 'stockStatus' && col.field !== 'stockQuantity')
 
-  // Generate filename with current date
   const now = new Date()
   const dateStr = now.toISOString().split('T')[0] // YYYY-MM-DD format
   const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-') // HH-MM-SS format
   const filename = `products-export-${dateStr}-${timeStr}.csv`
 
-  // Use your existing CSV exporter
   exportToCSV(products, filteredColumns, filename)
 }
 
 export default function ProductsPage() {
-  // Modal states
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
+
+  // Get account ID
+  const accountId = getCurrentAccountId()
 
   // Get settings for stock management
   const { settings } = useSettings()
   const isStockManagementEnabled = settings?.inventory?.manageStock || false
+
+  // General product sync hook (works with ALL integrations)
+  const {
+    syncProducts,
+    syncSingleIntegration,
+    syncing,
+    progress,
+    error: syncError,
+    ecommerceIntegrations,
+    hasIntegrations,
+    integrationCount,
+    getSyncStats
+  } = useProductSync(accountId)
+
+  // Get sync stats
+  const [syncStats, setSyncStats] = useState(() => getSyncStats())
 
   // Get URL parameters for warehouse filtering
   useEffect(() => {
@@ -145,7 +159,7 @@ export default function ProductsPage() {
   const { warehouses } = useWarehouses()
 
   // Custom hooks for state management
-  const { products, loading } = useProducts(selectedWarehouseId)
+  const { products, loading, refetchProducts } = useProducts(selectedWarehouseId)
 
   const {
     searchTerm,
@@ -182,6 +196,30 @@ export default function ProductsPage() {
   const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE
   const endIndex = startIndex + PRODUCTS_PER_PAGE
   const currentProducts = sortedProducts.slice(startIndex, endIndex)
+
+  // Handle product sync
+  const handleSyncProducts = async () => {
+    const result = await syncProducts()
+    if (result.success) {
+      setSyncStats(getSyncStats())
+      await refetchProducts()
+      alert(`Successfully synced ${result.totalCount} products!`)
+    } else {
+      alert(`Sync completed with errors: ${syncError || 'Unknown error'}`)
+    }
+  }
+
+  // Handle single integration sync
+  const handleSyncSingleIntegration = async (integrationId: string) => {
+    const result = await syncSingleIntegration(integrationId)
+    if (result.success) {
+      setSyncStats(getSyncStats())
+      await refetchProducts()
+      alert(`Successfully synced ${result.count} products!`)
+    } else {
+      alert(`Sync failed: ${result.error || 'Unknown error'}`)
+    }
+  }
 
   // Event handlers
   const handleViewProduct = (product: Product) => {
@@ -297,80 +335,232 @@ export default function ProductsPage() {
     )
   }
 
+  // Determine UI mode based on integrations
+  const showIntegrationSpecificUI = hasIntegrations && integrationCount === 1
+  const singleIntegration = showIntegrationSpecificUI ? ecommerceIntegrations[0] : null
+
   return (
     <div className="px-4 sm:px-6 lg:px-8">
-      {/* Warehouse Selector */}
-      <div className="mb-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-medium text-gray-900">Warehouse</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {selectedWarehouseId ? `Showing products from ${warehouseDisplayName}` : 'Showing products from all warehouses'}
-              </p>
+      {/* Empty State - No Integrations */}
+      {!hasIntegrations && syncStats.totalProducts === 0 && (
+        <div className="mb-6 rounded-lg bg-yellow-50 border border-yellow-200 p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
             </div>
-            <div className="w-64">
-              <WarehouseSelector
-                warehouses={warehouses.map(w => ({
-                  id: w.id,
-                  name: w.name,
-                  code: w.code,
-                  isDefault: w.isDefault,
-                  status: w.status,
-                  productCount: w.productCount
-                }))}
-                selectedWarehouseId={selectedWarehouseId}
-                onWarehouseChange={handleWarehouseChange}
-                showProductCount={true}
-              />
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-yellow-800">No Products Found</h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>No ecommerce integrations are connected. Connect to a store platform (Shopify, WooCommerce, etc.) to sync your products.</p>
+              </div>
+              <div className="mt-4">
+                <a
+                  href="/dashboard/integrations"
+                  className="inline-flex items-center gap-x-2 rounded-md bg-yellow-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-yellow-500"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Connect Integration
+                </a>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <ProductsToolbar
-        selectedProductsCount={selectedProducts.size}
-        onBulkAction={handleBulkAction}
-        onExport={handleExport}
-        onResetLayout={handleResetLayout}
-        columns={columns}
-        onColumnVisibilityChange={handleColumnVisibilityChange}
-        totalProducts={products.length}
-        filteredProducts={filteredProducts.length}
-      />
+      {/* Sync Status - Single Integration */}
+      {showIntegrationSpecificUI && syncStats.totalProducts > 0 && singleIntegration && (
+        <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-sm font-medium text-blue-900">
+                  {syncStats.totalProducts} products from {singleIntegration.name}
+                </p>
+                <p className="text-xs text-blue-700">
+                  Last sync: {syncStats.lastSyncDate
+                    ? new Date(syncStats.lastSyncDate).toLocaleString()
+                    : 'Never'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleSyncSingleIntegration(singleIntegration.id)}
+              disabled={syncing}
+              className="inline-flex items-center gap-x-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {syncing ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Sync Products
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
-      <ProductsFilters
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        showFilters={showFilters}
-        onToggleFilters={() => setShowFilters(!showFilters)}
-        filters={filters}
-        onFiltersChange={setFilters}
-        onClearAllFilters={handleClearAllFilters}
-        filterOptions={filterOptions}
-      />
+      {/* Sync Status - Multiple Integrations */}
+      {hasIntegrations && integrationCount > 1 && syncStats.totalProducts > 0 && (
+        <div className="mb-6 rounded-lg bg-indigo-50 border border-indigo-200 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-indigo-900">
+                {syncStats.totalProducts} products from {integrationCount} integrations
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {Object.entries(syncStats.byPlatform).map(([platform, count]) => (
+                  <span key={platform} className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-800 capitalize">
+                    {platform}: {count}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-indigo-700 mt-1">
+                Last sync: {syncStats.lastSyncDate
+                  ? new Date(syncStats.lastSyncDate).toLocaleString()
+                  : 'Never'}
+              </p>
+            </div>
+            <button
+              onClick={handleSyncProducts}
+              disabled={syncing}
+              className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {syncing ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  Syncing All...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Sync All
+                </>
+              )}
+            </button>
+          </div>
 
-      <ProductsTable
-        products={currentProducts}
-        columns={columns}
-        sortConfig={sortConfig}
-        selectedProducts={selectedProducts}
-        onSort={handleSort}
-        onSelectProduct={handleSelectProduct}
-        onSelectAll={() => handleSelectAll(currentProducts)}
-        onViewProduct={handleViewProduct}
-        onEditProduct={handleEditProduct}
-        onDuplicateProduct={handleDuplicateProduct}
-        onColumnReorder={handleColumnReorder}
-      />
+          {/* Show individual integration progress when syncing */}
+          {syncing && Object.keys(progress).length > 0 && (
+            <div className="mt-4 space-y-2">
+              {Object.entries(progress).map(([id, prog]) => (
+                <div key={id} className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-indigo-900 w-24">
+                    {prog.integration}
+                  </span>
+                  <div className="flex-1 bg-indigo-200 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        prog.status === 'success' ? 'bg-green-500' :
+                        prog.status === 'error' ? 'bg-red-500' :
+                        'bg-indigo-600'
+                      }`}
+                      style={{ width: `${prog.progress}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-indigo-700 w-20">
+                    {prog.status === 'success' ? `${prog.count} products` :
+                     prog.status === 'error' ? 'Failed' :
+                     prog.status === 'syncing' ? 'Syncing...' :
+                     'Pending'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      <ProductsPagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={sortedProducts.length}
-        itemsPerPage={PRODUCTS_PER_PAGE}
-        onPageChange={setCurrentPage}
-      />
+      {/* Warehouse Selector */}
+      {products.length > 0 && (
+        <div className="mb-6">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-gray-900">Warehouse</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {selectedWarehouseId ? `Showing products from ${warehouseDisplayName}` : 'Showing products from all warehouses'}
+                </p>
+              </div>
+              <div className="w-64">
+                <WarehouseSelector
+                  warehouses={warehouses.map(w => ({
+                    id: w.id,
+                    name: w.name,
+                    code: w.code,
+                    isDefault: w.isDefault,
+                    status: w.status,
+                    productCount: w.productCount
+                  }))}
+                  selectedWarehouseId={selectedWarehouseId}
+                  onWarehouseChange={handleWarehouseChange}
+                  showProductCount={true}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {products.length > 0 && (
+        <>
+          <ProductsToolbar
+            selectedProductsCount={selectedProducts.size}
+            onBulkAction={handleBulkAction}
+            onExport={handleExport}
+            onResetLayout={handleResetLayout}
+            columns={columns}
+            onColumnVisibilityChange={handleColumnVisibilityChange}
+            totalProducts={products.length}
+            filteredProducts={filteredProducts.length}
+          />
+
+          <ProductsFilters
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            showFilters={showFilters}
+            onToggleFilters={() => setShowFilters(!showFilters)}
+            filters={filters}
+            onFiltersChange={setFilters}
+            onClearAllFilters={handleClearAllFilters}
+            filterOptions={filterOptions}
+          />
+
+          <ProductsTable
+            products={currentProducts}
+            columns={columns}
+            sortConfig={sortConfig}
+            selectedProducts={selectedProducts}
+            onSort={handleSort}
+            onSelectProduct={handleSelectProduct}
+            onSelectAll={() => handleSelectAll(currentProducts)}
+            onViewProduct={handleViewProduct}
+            onEditProduct={handleEditProduct}
+            onDuplicateProduct={handleDuplicateProduct}
+            onColumnReorder={handleColumnReorder}
+          />
+
+          <ProductsPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={sortedProducts.length}
+            itemsPerPage={PRODUCTS_PER_PAGE}
+            onPageChange={setCurrentPage}
+          />
+          </>
+        )}
     </div>
   )
 }

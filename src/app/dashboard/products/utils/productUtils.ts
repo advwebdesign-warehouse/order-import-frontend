@@ -59,6 +59,7 @@ export function generateStorageKeys(userId: string) {
     showFilters: `products_show_filters_${userId}`,
   }
 }
+
 /**
  * Get the main image URL for a product
  */
@@ -214,6 +215,38 @@ export function getWarehouseName(
 }
 
 /**
+ * Get all warehouse names for a product (multi-warehouse support)
+ * Returns comma-separated list of warehouse names
+ */
+export function getProductWarehouseNames(
+  product: Product,
+  warehouses: Warehouse[]
+): string {
+  if (!product.warehouseStock || product.warehouseStock.length === 0) {
+    return '-'
+  }
+
+  const warehouseNames = product.warehouseStock
+    .map(stock => getWarehouseName(stock.warehouseId, warehouses))
+    .filter(name => name !== 'Unknown Warehouse')
+    .join(', ')
+
+  return warehouseNames || '-'
+}
+
+/**
+ * Get warehouse IDs for a product
+ * Returns array of warehouse IDs where product exists
+ */
+export function getProductWarehouseIds(product: Product): string[] {
+  if (!product.warehouseStock || product.warehouseStock.length === 0) {
+    return []
+  }
+
+  return product.warehouseStock.map(stock => stock.warehouseId)
+}
+
+/**
  * Get store name from store ID
  * Returns current store name, or fallback if not found
  */
@@ -238,9 +271,12 @@ export function getUniqueWarehousesFromProducts(
   const warehouseMap = new Map<string, string>()
 
   products.forEach(product => {
-    if (product.warehouseId) {
-      const name = getWarehouseName(product.warehouseId, warehouses)
-      warehouseMap.set(product.warehouseId, name)
+    // Handle multi-warehouse: get all warehouses from warehouseStock array
+    if (product.warehouseStock && product.warehouseStock.length > 0) {
+      product.warehouseStock.forEach(stock => {
+        const name = getWarehouseName(stock.warehouseId, warehouses)
+        warehouseMap.set(stock.warehouseId, name)
+      })
     }
   })
 

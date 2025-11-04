@@ -6,6 +6,7 @@ import { LineItemWithWeight } from './shopifyTypes'
 
 /**
  * Transform GraphQL order to app Order format
+ * ✅ UPDATED: Now properly maps updatedAt field for incremental sync
  */
 export function transformGraphQLOrder(
   graphqlOrder: any,
@@ -74,6 +75,8 @@ export function transformGraphQLOrder(
     platform: 'Shopify',
     storeId: storeId,
     orderDate: graphqlOrder.createdAt,
+    updatedAt: graphqlOrder.updatedAt, // ✅ NEW: Map updatedAt for incremental sync
+    externalId: orderId, // ✅ NEW: Store the Shopify order ID for reference
     itemCount: lineItems.reduce((sum: number, item: OrderItem) => sum + item.quantity, 0),
     shippingFirstName: graphqlOrder.shippingAddress?.firstName || '',
     shippingLastName: graphqlOrder.shippingAddress?.lastName || '',
@@ -229,6 +232,12 @@ export function transformGraphQLProduct(
     createdAt: graphqlProduct.createdAt,
     updatedAt: graphqlProduct.updatedAt,
     publishedAt: graphqlProduct.publishedAt,
+
+    // Integration and store info
+    integrationId: `shopify-${storeId}`,
+    platform: 'Shopify',
+    storeId: storeId,
+    externalId: productId, // Store the Shopify product ID
   };
 }
 

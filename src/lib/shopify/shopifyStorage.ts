@@ -167,6 +167,49 @@ export function getShopifyOrders(accountId: string): Order[] {
 }
 
 /**
+ * ✅ NEW: Get the most recent updatedAt timestamp from Shopify orders
+ * This is used for incremental sync to only fetch orders modified after this date
+ */
+export function getLastShopifyOrderUpdateDate(accountId: string, storeId: string): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const ordersKey = `orderSync_orders_${accountId}`;
+    const orders = JSON.parse(
+      localStorage.getItem(ordersKey) || '[]'
+    ) as Order[];
+
+    // Filter Shopify orders for this specific store
+    const shopifyOrders = orders.filter(
+      order => order.platform === 'Shopify' && order.storeId === storeId
+    );
+
+    if (shopifyOrders.length === 0) {
+      return null;
+    }
+
+    // Find the most recent updatedAt date
+    const dates = shopifyOrders
+      .map(order => order.updatedAt)
+      .filter(Boolean) as string[];
+
+    if (dates.length === 0) {
+      return null;
+    }
+
+    // Return the most recent date
+    const mostRecentDate = dates.reduce((latest, current) => {
+      return new Date(current) > new Date(latest) ? current : latest;
+    });
+
+    return mostRecentDate;
+  } catch (error) {
+    console.error('Error getting last Shopify order update date:', error);
+    return null;
+  }
+}
+
+/**
  * Get all Shopify products for an account
  */
 export function getShopifyProducts(accountId: string): Product[] {

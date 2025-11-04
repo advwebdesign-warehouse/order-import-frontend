@@ -2,7 +2,7 @@
 
 import { ShopifyGraphQLClient, ShopifyPermissionError } from './shopifyGraphQLClient'
 import { transformGraphQLOrder, transformGraphQLProduct } from './shopifyGraphQLTransform'
-import { saveShopifyOrder, saveShopifyProduct } from './shopifyStorage'
+import { saveShopifyOrder, saveShopifyProduct, getLastShopifyOrderUpdateDate } from './shopifyStorage'
 import { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 
 export interface ShopifyServiceConfig {
@@ -27,11 +27,29 @@ export class ShopifyService {
 
   /**
    * Sync orders from Shopify using GraphQL
+   * ✅ NEW: Now supports incremental sync - only fetches orders modified since last sync
    * Automatically called on connection and can be triggered periodically
    */
-  async syncOrders(): Promise<{ success: boolean; count: number; error?: string }> {
+  async syncOrders(forceFullSync: boolean = false): Promise<{ success: boolean; count: number; error?: string; isIncremental?: boolean }> {
     try {
       console.log('[Shopify Service] 🔥 Starting order sync with GraphQL...')
+
+      // ✅ NEW: Get last sync date for incremental sync
+      let updatedAtMin: string | null = null;
+      let isIncremental = false;
+
+      if (!forceFullSync) {
+        updatedAtMin = getLastShopifyOrderUpdateDate(this.config.accountId, this.config.storeId);
+
+        if (updatedAtMin) {
+          isIncremental = true;
+          console.log(`[Shopify Service] 📅 Incremental sync: Fetching orders updated after ${updatedAtMin}`);
+        } else {
+          console.log('[Shopify Service] 📦 Full sync: No previous sync date found');
+        }
+      } else {
+        console.log('[Shopify Service] 📦 Full sync: Force full sync requested');
+      }
 
       let allOrders: any[] = []
       let hasNextPage = true
@@ -42,6 +60,7 @@ export class ShopifyService {
         const response = await this.client.getOrders({
           first: 50,
           after: endCursor || undefined,
+          updatedAtMin: updatedAtMin || undefined, // ✅ NEW: Pass date filter for incremental sync
         })
 
         if (response.orders.length === 0) {
@@ -67,9 +86,14 @@ export class ShopifyService {
         endCursor = response.pageInfo.endCursor
       }
 
-      console.log(`[Shopify Service] ✅ Synced ${allOrders.length} orders`)
+      const syncType = isIncremental ? 'Incremental sync' : 'Full sync';
+      console.log(`[Shopify Service] ✅ ${syncType} complete: ${allOrders.length} orders ${isIncremental ? 'updated' : 'synced'}`)
 
-      return { success: true, count: allOrders.length }
+      return {
+        success: true,
+        count: allOrders.length,
+        isIncremental
+      }
     } catch (error: any) {
       console.error('[Shopify Service] ❌ Order sync failed:', error)
       return { success: false, count: 0, error: error.message }
@@ -129,19 +153,21 @@ export class ShopifyService {
   /**
    * Sync both orders and products
    * This is called automatically on first connection
+   * ✅ NEW: Added forceFullSync parameter
    */
-  async syncAll(): Promise<{
+  async syncAll(forceFullSync: boolean = false): Promise<{
     success: boolean
     ordersCount: number
     productsCount: number
     errors: string[]
+   isIncremental?: boolean
   }> {
     console.log('[Shopify Service] 🔄 Starting full sync with GraphQL...')
 
     const errors: string[] = []
 
     // Sync orders
-    const ordersResult = await this.syncOrders()
+    const ordersResult = await this.syncOrders(forceFullSync)
     if (!ordersResult.success && ordersResult.error) {
       errors.push(`Orders: ${ordersResult.error}`)
     }
@@ -157,6 +183,7 @@ export class ShopifyService {
     console.log('[Shopify Service] ✅ Full sync complete', {
       orders: ordersResult.count,
       products: productsResult.count,
+      isIncremental: ordersResult.isIncremental,
       errors: errors.length
     })
 
@@ -164,6 +191,7 @@ export class ShopifyService {
       success,
       ordersCount: ordersResult.count,
       productsCount: productsResult.count,
+      isIncremental: ordersResult.isIncremental,
       errors
     }
   }
@@ -262,6 +290,7 @@ export class ShopifyService {
    * This method can be safely called from the client (browser)
    * Uses your existing API route at /api/integrations/shopify/sync
    * Returns the data for the client to save
+   * ✅ NEW: Added forceFullSync parameter
    */
   static async syncViaAPI(
     shop: string,
@@ -269,7 +298,8 @@ export class ShopifyService {
     accountId: string,
     storeId: string,
     warehouseId: string | undefined,
-    syncType: 'orders' | 'products' | 'all'
+    syncType: 'orders' | 'products' | 'all',
+    forceFullSync: boolean = false
   ): Promise<any> {
     try {
       console.log(`[Shopify Service] 🌐 Calling API route for syncType: ${syncType}`)
@@ -286,6 +316,7 @@ export class ShopifyService {
           storeId,
           warehouseId,
           syncType, // Using 'syncType' to match your API
+          forceFullSync, // ✅ NEW: Pass forceFullSync flag to API
         }),
       })
 
@@ -409,7 +440,8 @@ export class ShopifyService {
         accountId,
         integration.storeId,
         warehouseId,
-        'all' // Sync both orders and products
+        'all', // Sync both orders and products
+        true // ✅ NEW: Force full sync on first connection
       )
 
       if (!result.success) {
@@ -439,6 +471,7 @@ export class ShopifyService {
         // Update last sync time
         ShopifyService.updateLastSyncTime(integration.id)
 
+        const syncType = result.isIncremental ? 'Updated' : 'Synced';
         const message = `✅ Synced ${result.orderCount || result.data.orders?.length || 0} orders and ${result.productCount || result.data.products?.length || 0} products`
 
         if (onProgress) onProgress(message)

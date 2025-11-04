@@ -6,6 +6,7 @@
  *
  * ✅ UPDATED: Added custom error classes and better permission error detection
  * ✅ FIXED: Removed deprecated 'requiresShipping' field from ProductVariant query
+ * ✅ NEW: Added incremental sync support with updatedAtMin parameter
  */
 
 export interface ShopifyGraphQLConfig {
@@ -137,11 +138,13 @@ export class ShopifyGraphQLClient {
 
   /**
    * Get orders with pagination
+   * ✅ NEW: Added updatedAtMin parameter for incremental sync
    */
   async getOrders(options: {
     first?: number;
     after?: string;
     query?: string;
+    updatedAtMin?: string; // ✅ NEW: ISO 8601 date string for incremental sync
   } = {}): Promise<{
     orders: any[];
     pageInfo: {
@@ -149,7 +152,14 @@ export class ShopifyGraphQLClient {
       endCursor: string | null;
     };
   }> {
-    const { first = 50, after, query: searchQuery } = options;
+    const { first = 50, after, query: searchQuery, updatedAtMin } = options;
+
+    // ✅ NEW: Build query string with date filter if provided
+    let finalQuery = searchQuery || '';
+    if (updatedAtMin) {
+      const dateFilter = `updated_at:>='${updatedAtMin}'`;
+      finalQuery = finalQuery ? `${finalQuery} AND ${dateFilter}` : dateFilter;
+    }
 
     const queryStr = `
       query getOrders($first: Int!, $after: String, $query: String) {
@@ -269,7 +279,7 @@ export class ShopifyGraphQLClient {
     const variables = {
       first,
       after: after || null,
-      query: searchQuery || null,
+      query: finalQuery || null,  // Use finalQuery which has the date filter
     };
 
     const data = await this.request<{ orders: any }>(queryStr, variables);

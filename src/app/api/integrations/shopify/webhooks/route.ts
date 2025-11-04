@@ -12,9 +12,9 @@ import {
   getProductByExternalId,
   saveProduct,
   updateProduct,
-  deleteProduct,
-  Product
+  deleteProduct
 } from '@/lib/storage/productStorage';
+import { Product } from '@/app/dashboard/products/utils/productTypes';
 import { Order } from '@/app/dashboard/orders/utils/orderTypes';
 
 /**
@@ -78,10 +78,12 @@ export async function POST(request: NextRequest) {
 
     // Ensure storeId is always a string
     const storeId = integration.storeId || integration.id || 'unknown';
+    const integrationId = integration.id;
     const config = integration.config;
     const warehouseId = (config as any)?.defaultWarehouseId;
 
     console.log('[Shopify Webhook] Integration found:', {
+      integrationId,
       storeId,
       warehouseId,
     });
@@ -107,12 +109,12 @@ export async function POST(request: NextRequest) {
       case 'products/create':
       case 'products/update':
         console.log('[Shopify Webhook] 🏷️  Processing product webhook:', data.id);
-        await processProductWebhook(data, storeId);
+        await processProductWebhook(data, integrationId);
         break;
 
       case 'products/delete':
         console.log('[Shopify Webhook] 🗑️  Processing product deletion:', data.id);
-        await processProductDeletion(data, storeId);
+        await processProductDeletion(data, integrationId);
         break;
 
       default:
@@ -205,13 +207,13 @@ async function processOrderFulfillment(data: any, storeId: string): Promise<void
 /**
  * Process product creation/update webhook
  */
-async function processProductWebhook(data: any, storeId: string): Promise<void> {
+async function processProductWebhook(data: any, integrationId: string): Promise<void> {
   try {
     // Transform webhook data to simple Product format
-    const product = transformWebhookProductData(data, storeId);
+    const product = transformWebhookProductData(data, integrationId);
 
     // Check if product exists
-    const existingProduct = getProductByExternalId(data.id.toString(), storeId);
+    const existingProduct = getProductByExternalId(data.id.toString(), integrationId);
 
     if (existingProduct) {
       console.log('[Webhook] Updating existing product:', product.id);
@@ -229,9 +231,9 @@ async function processProductWebhook(data: any, storeId: string): Promise<void> 
 /**
  * Process product deletion
  */
-async function processProductDeletion(data: any, storeId: string): Promise<void> {
+async function processProductDeletion(data: any, integrationId: string): Promise<void> {
   try {
-    const existingProduct = getProductByExternalId(data.id.toString(), storeId);
+    const existingProduct = getProductByExternalId(data.id.toString(), integrationId);
 
     if (existingProduct) {
       console.log('[Webhook] Deleting product:', existingProduct.id);
@@ -275,32 +277,70 @@ function transformWebhookOrderData(data: any, storeId: string, warehouseId?: str
 /**
  * Transform webhook product data to simple Product format (matches productStorage.ts)
  */
-function transformWebhookProductData(data: any, storeId: string): Product {
+function transformWebhookProductData(data: any, integrationId: string): Product {
   const firstVariant = data.variants?.[0];
+  const allVariants = data.variants || [];
+
+  // Calculate total inventory across all variants
+  const totalInventory = allVariants.reduce((sum: number, variant: any) => {
+    return sum + (variant.inventory_quantity || 0);
+  }, 0);
 
   return {
-    id: `product-${data.id}`,
-    externalId: data.id.toString(),
-    storeId,
-    platform: 'Shopify',
-    name: data.title || 'Unknown Product',
+    // Required fields
+    id: data.id.toString(),
     sku: firstVariant?.sku || data.id.toString(),
-    barcode: firstVariant?.barcode || undefined,
+    name: data.title || 'Unknown Product',
     price: parseFloat(firstVariant?.price || '0'),
-    quantity: firstVariant?.inventory_quantity || 0,
-    vendor: data.vendor || undefined,
-    productType: data.product_type || undefined,
-    tags: Array.isArray(data.tags) ? data.tags : (data.tags?.split(',').map((t: string) => t.trim()) || []),
-    variants: (data.variants || []).map((variant: any) => ({
-      id: variant.id.toString(),
-      title: variant.title || '',
-      sku: variant.sku || '',
-      barcode: variant.barcode || '',
-      price: parseFloat(variant.price || '0'),
-      quantity: variant.inventory_quantity || 0,
+    currency: 'USD', // Default, should be configurable
+    stockQuantity: totalInventory,
+    stockStatus: totalInventory > 0 ? 'in_stock' : 'out_of_stock',
+    trackQuantity: true,
+    type: 'simple',
+    status: data.status === 'active' ? 'active' : 'inactive',
+    visibility: 'visible',
+    tags: Array.isArray(data.tags)
+      ? data.tags
+      : (data.tags?.split(',').map((t: string) => t.trim()) || []),
+    images: (data.images || []).map((img: any, index: number) => ({
+      id: img.id?.toString() || `img-${index}`,
+      url: img.src || img.url || '',
+      altText: img.alt || data.title,
+      position: img.position || index,
+      isMain: index === 0,
     })),
     createdAt: data.created_at || new Date().toISOString(),
     updatedAt: data.updated_at || new Date().toISOString(),
+
+    // Integration relationship - links to Shopify integration
+    integrationId,
+
+    // Optional fields
+    description: data.body_html || data.description || undefined,
+    vendor: data.vendor || undefined,
+    barcode: firstVariant?.barcode || undefined,
+    category: data.product_type || undefined,
+
+    // Variants if product has multiple options
+    variants: allVariants.length > 1 ? allVariants.map((variant: any) => ({
+      id: variant.id.toString(),
+      sku: variant.sku || variant.id.toString(),
+      name: variant.title || '',
+      price: parseFloat(variant.price || '0'),
+      comparePrice: variant.compare_at_price ? parseFloat(variant.compare_at_price) : undefined,
+      stockQuantity: variant.inventory_quantity || 0,
+      stockStatus: (variant.inventory_quantity || 0) > 0 ? 'in_stock' : 'out_of_stock',
+      barcode: variant.barcode || undefined,
+      weight: variant.weight || undefined,
+      attributes: (variant.option1 || variant.option2 || variant.option3) ? [
+        variant.option1 ? { name: 'Option 1', value: variant.option1 } : null,
+        variant.option2 ? { name: 'Option 2', value: variant.option2 } : null,
+        variant.option3 ? { name: 'Option 3', value: variant.option3 } : null,
+      ].filter(Boolean) as any : [],
+    })) : undefined,
+
+    // Multi-warehouse stock - will be populated later
+    warehouseStock: [],
   };
 }
 

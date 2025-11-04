@@ -3,7 +3,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient';
 import { transformGraphQLOrder, transformGraphQLProduct } from '@/lib/shopify/shopifyGraphQLTransform';
+import { getLastShopifyOrderUpdateDate } from '@/lib/shopify/shopifyStorage';
 
+/**
+ * Shopify Sync API Route
+ * ✅ UPDATED: Now supports incremental order sync using updatedAtMin parameter
+ */
 export async function POST(request: NextRequest) {
   console.log('=================================');
   console.log('🚀 SHOPIFY SYNC API ROUTE CALLED');
@@ -11,11 +16,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { shop, accessToken, accountId, syncType, warehouseId, storeId: providedStoreId } = body;
+    const {
+      shop,
+      accessToken,
+      accountId,
+      syncType,
+      warehouseId,
+      storeId: providedStoreId,
+      forceFullSync = false // ✅ NEW: Optional parameter to force full sync
+    } = body;
 
     console.log('[Shopify Sync] Sync Type:', syncType);
     console.log('[Shopify Sync] Shop:', shop);
     console.log('[Shopify Sync] Account ID:', accountId);
+    console.log('[Shopify Sync] Force Full Sync:', forceFullSync);
 
     if (!shop || !accessToken || !accountId || !syncType) {
       return NextResponse.json(
@@ -33,8 +47,28 @@ export async function POST(request: NextRequest) {
     // Use provided store info
     const storeId = providedStoreId || `shopify-${accountId}`;
 
+    // ============================================================================
+    // SYNC TYPE: ORDERS ONLY
+    // ============================================================================
     if (syncType === 'orders') {
       console.log('[Shopify Sync] 🔥 Starting order sync...');
+
+      // ✅ NEW: Get last sync date for incremental sync (unless force full sync)
+      let updatedAtMin: string | null = null;
+      let isIncremental = false;
+
+      if (!forceFullSync) {
+        updatedAtMin = getLastShopifyOrderUpdateDate(accountId, storeId);
+
+        if (updatedAtMin) {
+          isIncremental = true;
+          console.log(`[Shopify Sync] 📅 Incremental sync: Fetching orders updated after ${updatedAtMin}`);
+        } else {
+          console.log('[Shopify Sync] 📦 Full sync: No previous sync date found');
+        }
+      } else {
+        console.log('[Shopify Sync] 📦 Full sync: Force full sync requested');
+      }
 
       // Sync orders with GraphQL pagination
       const orders = [];
@@ -45,6 +79,7 @@ export async function POST(request: NextRequest) {
         const response = await client.getOrders({
           first: 50,
           after: endCursor || undefined,
+          updatedAtMin: updatedAtMin || undefined, // ✅ NEW: Pass date filter for incremental sync
         });
 
         if (response.orders.length === 0) {
@@ -66,20 +101,26 @@ export async function POST(request: NextRequest) {
         endCursor = response.pageInfo.endCursor;
       }
 
-      console.log(`[Shopify Sync] ✅ Fetched ${orders.length} orders`);
+      const syncTypeMsg = isIncremental ? 'Incremental sync' : 'Full sync';
+      console.log(`[Shopify Sync] ✅ ${syncTypeMsg} complete: ${orders.length} orders ${isIncremental ? 'updated' : 'synced'}`);
 
       return NextResponse.json({
         success: true,
-        type: 'orders',
-        count: orders.length,
-        data: orders,
-        message: `Successfully fetched ${orders.length} orders`,
+        orderCount: orders.length,
+        isIncremental,
+        data: {
+          orders: orders,
+        },
       });
+    }
 
-    } else if (syncType === 'products') {
+    // ============================================================================
+    // SYNC TYPE: PRODUCTS ONLY
+    // ============================================================================
+    else if (syncType === 'products') {
       console.log('[Shopify Sync] 🔥 Starting product sync...');
 
-      // Sync products with GraphQL pagination
+      // ✅ FIXED: Sync products, not orders!
       const products = [];
       let hasNextPage = true;
       let endCursor: string | null = null;
@@ -109,16 +150,36 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        type: 'products',
-        count: products.length,
-        data: products,
-        message: `Successfully fetched ${products.length} products`,
+        productCount: products.length,
+        data: {
+          products: products,
+        },
       });
+    }
 
-    } else if (syncType === 'all') {
+    // ============================================================================
+    // SYNC TYPE: ALL (ORDERS + PRODUCTS)
+    // ============================================================================
+    else if (syncType === 'all') {
       console.log('[Shopify Sync] 🔥 Starting full sync (orders + products)...');
 
-      // Sync orders
+      // ✅ STEP 1: Sync orders with incremental support
+      let updatedAtMin: string | null = null;
+      let isIncremental = false;
+
+      if (!forceFullSync) {
+        updatedAtMin = getLastShopifyOrderUpdateDate(accountId, storeId);
+
+        if (updatedAtMin) {
+          isIncremental = true;
+          console.log(`[Shopify Sync] 📅 Incremental sync: Fetching orders updated after ${updatedAtMin}`);
+        } else {
+          console.log('[Shopify Sync] 📦 Full sync: No previous sync date found');
+        }
+      } else {
+        console.log('[Shopify Sync] 📦 Full sync: Force full sync requested');
+      }
+
       const orders = [];
       let hasNextPage = true;
       let endCursor: string | null = null;
@@ -127,6 +188,7 @@ export async function POST(request: NextRequest) {
         const response = await client.getOrders({
           first: 50,
           after: endCursor || undefined,
+          updatedAtMin: updatedAtMin || undefined,
         });
 
         if (response.orders.length === 0) {
@@ -146,9 +208,12 @@ export async function POST(request: NextRequest) {
         endCursor = response.pageInfo.endCursor;
       }
 
-      console.log(`[Shopify Sync] ✅ Fetched ${orders.length} orders`);
+      const syncTypeMsg = isIncremental ? 'Incremental sync' : 'Full sync';
+      console.log(`[Shopify Sync] ✅ ${syncTypeMsg} complete: ${orders.length} orders`);
 
-      // Sync products
+      // ✅ STEP 2: Sync products
+      console.log('[Shopify Sync] 🔥 Starting product sync...');
+
       const products = [];
       hasNextPage = true;
       endCursor = null;
@@ -172,38 +237,33 @@ export async function POST(request: NextRequest) {
         endCursor = response.pageInfo.endCursor;
       }
 
-      console.log(`[Shopify Sync] ✅ Fetched ${products.length} products`);
+      console.log(`[Shopify Sync] ✅ Synced ${products.length} products`);
 
       return NextResponse.json({
         success: true,
-        type: 'all',
         orderCount: orders.length,
         productCount: products.length,
+        isIncremental, // ✅ NEW: Indicate if order sync was incremental
         data: {
-          orders,
-          products,
+          orders: orders,
+          products: products,
         },
-        message: `Successfully fetched ${orders.length} orders and ${products.length} products`,
       });
-
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid sync type. Must be "orders", "products", or "all"' },
-        { status: 400 }
-      );
-    }
-  } catch (error) {
-    console.error('[Shopify Sync] ❌ Error:', error);
-    console.error('[Shopify Sync] Error message:', error instanceof Error ? error.message : 'Unknown error');
-    if (error instanceof Error) {
-      console.error('[Shopify Sync] Error stack:', error.stack);
     }
 
+    // Invalid syncType
+    return NextResponse.json(
+      { error: 'Invalid syncType. Must be "orders", "products", or "all"' },
+      { status: 400 }
+    );
+
+  } catch (error: any) {
+    console.error('[Shopify Sync] ❌ Sync error:', error);
     return NextResponse.json(
       {
         success: false,
-        error: 'Sync failed',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: error.message || 'Sync failed',
+        message: 'Failed to sync data from Shopify'
       },
       { status: 500 }
     );

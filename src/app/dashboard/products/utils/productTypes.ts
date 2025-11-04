@@ -55,11 +55,16 @@ export interface Product {
   metaTitle?: string
   metaDescription?: string
   seoSlug?: string
-  // Warehouse support
-  warehouseId?: string
+
+  // Integration relationship - links to the integration (platform + store)
+  integrationId: string  // e.g., 'shopify-store1', 'woocommerce-store2'
+  platform?: string      // e.g., 'Shopify', 'WooCommerce', 'Etsy'
+  storeId?: string       // Store identifier
+  externalId?: string    // External ID from the integration platform (e.g., Shopify product ID)
+  
+  // Multi-warehouse support - product can exist in multiple warehouses
   warehouseStock?: WarehouseStock[]
-  // Store support
-  storeId?: string
+
 }
 
 export interface ProductImage {
@@ -106,6 +111,9 @@ export interface ProductFilterState {
   parentOnly: boolean
   includeVariants: boolean
   warehouseId?: string
+  integrationId?: string
+  storeId?: string
+  platform?: string
 }
 
 export interface ProductSortState {

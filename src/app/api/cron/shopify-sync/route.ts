@@ -8,7 +8,8 @@ import {
   updateIntegrationConfig
 } from '@/lib/storage/shopifyIntegrationHelpers';
 import { saveOrder } from '@/lib/storage/orderStorageHelpers';
-import { saveProduct, Product } from '@/lib/storage/productStorage';
+import { saveProduct } from '@/lib/storage/productStorage';
+import { Product } from '@/app/dashboard/products/utils/productTypes';
 
 /**
  * Cron Job for Shopify Sync
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest) {
 
       // Ensure storeId exists
       const storeId = integration.storeId || integration.id || 'unknown';
+      const integrationId = integration.id;
 
       const storeResult = {
         storeId,
@@ -148,7 +150,7 @@ export async function GET(request: NextRequest) {
           // Transform and save products
           for (const graphqlProduct of response.products) {
             // Convert GraphQL product to simple Product format
-            const product = transformToSimpleProduct(graphqlProduct, storeId);
+            const product = transformToSimpleProduct(graphqlProduct, integrationId);
             saveProduct(product);
             productsCount++;
           }
@@ -204,32 +206,67 @@ export async function GET(request: NextRequest) {
 /**
  * Transform GraphQL product to simple Product format (matches productStorage.ts)
  */
-function transformToSimpleProduct(graphqlProduct: any, storeId: string): Product {
+function transformToSimpleProduct(graphqlProduct: any, integrationId: string): Product {
   const firstVariant = graphqlProduct.variants?.edges?.[0]?.node;
+  const allVariants = graphqlProduct.variants?.edges || [];
+
+  // Calculate total inventory across all variants
+  const totalInventory = allVariants.reduce((sum: number, edge: any) => {
+    return sum + (edge.node.inventoryQuantity || 0);
+  }, 0);
 
   return {
-    id: `product-${graphqlProduct.id}`,
-    externalId: graphqlProduct.id.toString(),
-    storeId,
-    platform: 'Shopify',
-    name: graphqlProduct.title || 'Unknown Product',
+    // Required fields
+    id: graphqlProduct.id.toString(),
     sku: firstVariant?.sku || graphqlProduct.id.toString(),
-    barcode: firstVariant?.barcode || undefined,
+    name: graphqlProduct.title || 'Unknown Product',
     price: parseFloat(firstVariant?.price || '0'),
-    quantity: firstVariant?.inventoryQuantity || 0,
-    vendor: graphqlProduct.vendor || undefined,
-    productType: graphqlProduct.productType || undefined,
+    currency: 'USD', // Default to USD, should be configurable per store
+    stockQuantity: totalInventory,
+    stockStatus: totalInventory > 0 ? 'in_stock' : 'out_of_stock',
+    trackQuantity: true,
+    type: 'simple',
+    status: graphqlProduct.status === 'ACTIVE' ? 'active' : 'inactive',
+    visibility: 'visible',
     tags: graphqlProduct.tags || [],
-    variants: (graphqlProduct.variants?.edges || []).map((edge: any) => ({
+    images: (graphqlProduct.images?.edges || []).map((edge: any, index: number) => ({
       id: edge.node.id.toString(),
-      title: edge.node.title || '',
-      sku: edge.node.sku || '',
-      barcode: edge.node.barcode || '',
-      price: parseFloat(edge.node.price || '0'),
-      quantity: edge.node.inventoryQuantity || 0,
+      url: edge.node.url || edge.node.src,
+      altText: edge.node.altText || graphqlProduct.title,
+      position: index,
+      isMain: index === 0,
     })),
     createdAt: graphqlProduct.createdAt || new Date().toISOString(),
     updatedAt: graphqlProduct.updatedAt || new Date().toISOString(),
+
+    // Integration relationship - links to Shopify integration
+    integrationId,
+
+    // Optional fields
+    description: graphqlProduct.descriptionHtml || graphqlProduct.description || undefined,
+    vendor: graphqlProduct.vendor || undefined,
+    barcode: firstVariant?.barcode || undefined,
+    category: graphqlProduct.productType || undefined,
+
+    // Variants if product has multiple options
+    variants: allVariants.length > 1 ? allVariants.map((edge: any) => ({
+      id: edge.node.id.toString(),
+      sku: edge.node.sku || edge.node.id.toString(),
+      name: edge.node.title || edge.node.displayName || '',
+      price: parseFloat(edge.node.price || '0'),
+      comparePrice: edge.node.compareAtPrice ? parseFloat(edge.node.compareAtPrice) : undefined,
+      stockQuantity: edge.node.inventoryQuantity || 0,
+      stockStatus: (edge.node.inventoryQuantity || 0) > 0 ? 'in_stock' : 'out_of_stock',
+      barcode: edge.node.barcode || undefined,
+      weight: edge.node.weight || undefined,
+      attributes: (edge.node.selectedOptions || []).map((opt: any) => ({
+        name: opt.name,
+        value: opt.value,
+      })),
+    })) : undefined,
+
+    // Multi-warehouse stock - will be populated later when warehouse assignment happens
+    warehouseStock: [],
   };
 }
 

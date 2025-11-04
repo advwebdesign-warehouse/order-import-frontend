@@ -91,33 +91,137 @@ export function getOAuthRedirectUri(): string {
 }
 
 /**
- * Store OAuth state in session/database
- * This is a simple in-memory store - replace with Redis/Database in production
+ * ✅ FIXED: OAuth State Store with Global Persistence
+ *
+ * This ensures the state persists across Next.js serverless function invocations.
+ * In production with multiple servers, consider using Redis or a database.
+ *
+ * Note: "shop" parameter is kept for Shopify OAuth compatibility (Shopify's term),
+ * but we refer to it as "store" in logging for consistency with our app.
  */
-const stateStore = new Map<string, { shop: string; timestamp: number; storeId?: string }>()
+interface StateData {
+  shop: string
+  timestamp: number
+  storeId?: string
+}
 
+// ✅ Use global variable to persist across serverless invocations
+declare global {
+  var __shopifyOAuthStateStore: Map<string, StateData> | undefined
+}
+
+// Initialize or retrieve the global state store
+const getStateStore = (): Map<string, StateData> => {
+  if (!global.__shopifyOAuthStateStore) {
+    global.__shopifyOAuthStateStore = new Map()
+    console.log('[Shopify Auth] ✅ Initialized global OAuth state store')
+  }
+  return global.__shopifyOAuthStateStore
+}
+
+/**
+ * ✅ FIXED: Save OAuth state with 30-minute timeout and better logging
+ * @param state - Random state token for CSRF protection
+ * @param shop - Store domain from Shopify (e.g., store.myshopify.com)
+ * @param storeId - Internal store ID (optional)
+ */
 export function saveOAuthState(state: string, shop: string, storeId?: string) {
+  const stateStore = getStateStore()
+
   stateStore.set(state, {
     shop,
     storeId,
     timestamp: Date.now(),
   })
 
-  // Clean up old states (older than 10 minutes)
-  const tenMinutesAgo = Date.now() - 10 * 60 * 1000
+  console.log('[Shopify Auth] ✅ Saved OAuth state:', {
+    statePreview: state.substring(0, 10) + '...',
+    shop,
+    storeId,
+    totalStates: stateStore.size
+  })
+
+  // ✅ FIXED: Clean up old states (older than 30 minutes instead of 10)
+  const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+  let cleanedCount = 0
+
   stateStore.forEach((value, key) => {
-    if (value.timestamp < tenMinutesAgo) {
+    if (value.timestamp < thirtyMinutesAgo) {
+      stateStore.delete(key)
+      cleanedCount++
+    }
+  })
+
+  if (cleanedCount > 0) {
+    console.log(`[Shopify Auth] 🧹 Cleaned up ${cleanedCount} expired state(s)`)
+  }
+}
+
+/**
+ * ✅ FIXED: Get OAuth state with better logging and validation
+ * @param state - State token to retrieve
+ * @returns StateData or undefined if not found
+ */
+export function getOAuthState(state: string): StateData | undefined {
+  const stateStore = getStateStore()
+
+  console.log('[Shopify Auth] 🔍 Retrieving OAuth state:', {
+    statePreview: state.substring(0, 10) + '...',
+    totalStates: stateStore.size,
+    availableStates: Array.from(stateStore.keys()).map(k => k.substring(0, 10) + '...')
+  })
+
+  // Clean up expired states before retrieval
+  const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+  stateStore.forEach((value, key) => {
+    if (value.timestamp < thirtyMinutesAgo) {
       stateStore.delete(key)
     }
   })
+
+  const stateData = stateStore.get(state)
+
+  if (!stateData) {
+    console.error('[Shopify Auth] ❌ OAuth state not found:', state.substring(0, 10) + '...')
+    console.error('[Shopify Auth] This usually means:')
+    console.error('[Shopify Auth] 1. User took longer than 30 minutes to authorize')
+    console.error('[Shopify Auth] 2. State was never created (check /auth route logs)')
+    console.error('[Shopify Auth] 3. Next.js serverless functions restarted')
+    console.error('[Shopify Auth] Available states:', Array.from(stateStore.keys()).map(k => k.substring(0, 10) + '...'))
+  } else {
+    const ageSeconds = Math.floor((Date.now() - stateData.timestamp) / 1000)
+    console.log('[Shopify Auth] ✅ OAuth state found:', {
+      shop: stateData.shop,
+      storeId: stateData.storeId,
+      ageSeconds
+    })
+  }
+
+  return stateData
 }
 
-export function getOAuthState(state: string) {
-  return stateStore.get(state)
-}
-
+/**
+ * Delete OAuth state after use
+ * @param state - State token to delete
+ */
 export function deleteOAuthState(state: string) {
+  const stateStore = getStateStore()
   stateStore.delete(state)
+  console.log('[Shopify Auth] 🗑️  Deleted OAuth state:', state.substring(0, 10) + '...')
+}
+
+/**
+ * ✅ NEW: Debug helper to inspect current state store
+ */
+export function debugStateStore() {
+  const stateStore = getStateStore()
+  console.log('[Shopify Auth] 🔍 State Store Debug:')
+  console.log('[Shopify Auth] Total states:', stateStore.size)
+
+  stateStore.forEach((value, key) => {
+    const ageSeconds = Math.floor((Date.now() - value.timestamp) / 1000)
+    console.log(`[Shopify Auth]   - State: ${key.substring(0, 10)}... | Shop: ${value.shop} | Age: ${ageSeconds}s`)
+  })
 }
 
 /**
@@ -136,7 +240,7 @@ export function createShopifyHeaders(accessToken: string): HeadersInit {
  * Make authenticated request to Shopify API
  * @param shop - Shop domain
  * @param accessToken - Access token
- * @param endpoint - API endpoint (e.g., '/admin/api/2024-01/orders.json')
+ * @param endpoint - API endpoint (e.g., '/admin/api/2025-10/graphql.json')
  * @param options - Fetch options
  * @returns Promise with response data
  */
@@ -165,9 +269,9 @@ export async function shopifyApiRequest<T>(
 }
 
 /**
- * Get Shopify API version
- * @returns string - API version (e.g., '2024-01')
+ * Get Shopify GraphQL API version
+ * @returns string - GraphQL API version (2025-10)
  */
 export function getShopifyApiVersion(): string {
-  return process.env.SHOPIFY_API_VERSION || '2024-01'
+  return process.env.SHOPIFY_API_VERSION || '2025-10'
 }
