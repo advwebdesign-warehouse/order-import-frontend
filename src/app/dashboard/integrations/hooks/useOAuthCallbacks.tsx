@@ -11,6 +11,7 @@ interface UseOAuthCallbacksProps {
   settings: any
   selectedStoreId: string
   stores: any[]
+  accountId: string
   updateIntegration: (id: string, data: any) => void
   addIntegration: (integration: Integration) => boolean
   setNotification: (notification: any) => void
@@ -21,6 +22,7 @@ export function useOAuthCallbacks({
   settings,
   selectedStoreId,
   stores,
+  accountId,
   updateIntegration,
   addIntegration,
   setNotification,
@@ -300,9 +302,7 @@ export function useOAuthCallbacks({
       // ✅ FIX: Trigger automatic sync with fresh data
       setTimeout(async () => {
         try {
-          // ✅ FIX: Read FRESH data from localStorage RIGHT BEFORE sync
-          const aid = getCurrentAccountId()
-          const freshSettings = getAccountIntegrations(aid)
+          const freshSettings = getAccountIntegrations(accountId)
 
           if (!freshSettings) {
             console.error('[Auto-Sync] ❌ No fresh settings found')
@@ -336,7 +336,7 @@ export function useOAuthCallbacks({
           await ShopifyService.autoSyncOnConnection(
             integration as any,
             warehouseId,
-            aid,
+            accountId,
             (message) => {
               console.log('[Auto-Sync]', message)
             }

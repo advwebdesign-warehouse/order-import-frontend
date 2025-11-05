@@ -69,6 +69,7 @@ function IntegrationsContent() {
     settings,
     selectedStoreId,
     stores,
+    accountId,
     updateIntegration,
     addIntegration,
     setNotification,
