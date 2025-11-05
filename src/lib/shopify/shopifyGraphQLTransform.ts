@@ -104,6 +104,7 @@ export function transformGraphQLOrder(
     // Tracking info
     trackingNumber: trackingInfo?.number || undefined,
 
+    // ✅ CHANGED: Warehouse assignment removed - will be assigned by orderStorage.saveOrdersToStorage()
     // based on shipping address and store's warehouse configuration
     warehouseId: undefined
   };

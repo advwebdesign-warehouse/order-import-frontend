@@ -26,7 +26,7 @@ export interface Store {
   // Multi-tenant support
   accountId: string
 
-  // âœ… NEW: Warehouse assignment configuration
+  // Warehouse assignment configuration
   warehouseConfig?: WarehouseConfig
 }
 

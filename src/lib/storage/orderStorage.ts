@@ -50,7 +50,7 @@ export function saveOrdersToStorage(orders: Order[], accountId?: string): void {
       return order
     })
 
-    // âœ… NEW: Merge with existing orders (update if exists, add if new)
+    // ✅ NEW: Merge with existing orders (update if exists, add if new)
     const orderMap = new Map(existingOrders.map(o => [o.id, o]))
 
     ordersWithWarehouses.forEach(order => {
@@ -65,7 +65,7 @@ export function saveOrdersToStorage(orders: Order[], accountId?: string): void {
 
     localStorage.setItem(storageKey, JSON.stringify(mergedOrders))
 
-    console.log(`[Order Storage] âœ… Saved ${ordersWithWarehouses.length} orders (total: ${mergedOrders.length})`)
+    console.log(`[Order Storage] ✅ Saved ${ordersWithWarehouses.length} orders (total: ${mergedOrders.length})`)
   } catch (error) {
     console.error('Error saving orders to storage:', error)
   }
@@ -95,7 +95,10 @@ export function updateOrderTracking(trackingNumber: string, trackingData: any, a
     return order
   })
 
-  saveOrdersToStorage(updatedOrders, accountId)
+  // Save directly without triggering warehouse reassignment
+  const aid = accountId || getCurrentAccountId()
+  const storageKey = `${ORDERS_STORAGE_PREFIX}${aid}`
+  localStorage.setItem(storageKey, JSON.stringify(updatedOrders))
 }
 
 /**
@@ -139,7 +142,7 @@ export function getAccountsWithActiveShipments(): Array<{
 }
 
 /**
- * âœ… NEW: Reassign warehouses to all existing orders
+ * ✅ NEW: Reassign warehouses to all existing orders
  * Call this when warehouse assignments change
  */
 export function reassignAllOrderWarehouses(accountId?: string): { updated: number; skipped: number } {
@@ -156,12 +159,12 @@ export function reassignAllOrderWarehouses(accountId?: string): { updated: numbe
       if (orderWithWarehouse.warehouseId !== order.warehouseId) {
         updated++
         console.log(
-          `[Order Storage] Order ${order.orderNumber}: ${order.warehouseId || 'none'} â†' ${orderWithWarehouse.warehouseId}`
+          `[Order Storage] Order ${order.orderNumber}: ${order.warehouseId || 'none'}  → ${orderWithWarehouse.warehouseId}`
         )
       } else {
         skipped++
       }
-      
+
       return orderWithWarehouse
     } else {
       skipped++
@@ -174,6 +177,6 @@ export function reassignAllOrderWarehouses(accountId?: string): { updated: numbe
   const storageKey = `${ORDERS_STORAGE_PREFIX}${aid}`
   localStorage.setItem(storageKey, JSON.stringify(updatedOrders))
 
-  console.log(`[Order Storage] âœ… Warehouse reassignment: ${updated} updated, ${skipped} skipped`)
+  console.log(`[Order Storage] ✅ Warehouse reassignment: ${updated} updated, ${skipped} skipped`)
   return { updated, skipped }
 }

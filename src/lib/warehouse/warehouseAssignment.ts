@@ -97,7 +97,7 @@ export function findBestWarehouse(
 
   if (matchingWarehouses.length > 0) {
     const selectedWarehouse = matchingWarehouses[0]
-    console.log(`[Warehouse Assignment] âœ… Found warehouse: ${selectedWarehouse.warehouseName} (Priority: ${selectedWarehouse.priority})`)
+    console.log(`[Warehouse Assignment] ✅ Found warehouse: ${selectedWarehouse.warehouseName} (Priority: ${selectedWarehouse.priority})`)
     return selectedWarehouse.warehouseId
   }
 

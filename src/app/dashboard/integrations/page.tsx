@@ -18,6 +18,8 @@ import BrowseIntegrationsModal from './components/BrowseIntegrationsModal'
 import { Integration } from './types/integrationTypes'
 import { getStoresFromStorage } from '../../../app/dashboard/stores/utils/storeStorage'
 import Notification from '@/app/dashboard/shared/components/Notification'
+import WarehouseRequiredWarning from './components/WarehouseRequiredWarning'
+import { checkStoreWarehouseById } from './utils/storeWarehouseUtils'
 
 function IntegrationsContent() {
   const searchParams = useSearchParams()
@@ -28,6 +30,7 @@ function IntegrationsContent() {
   // Store state
   const [stores, setStores] = useState<any[]>([])
   const [selectedStoreId, setSelectedStoreId] = useState<string>('')
+  const [hasWarehouses, setHasWarehouses] = useState<boolean>(true)
 
   // Notification state
   const [notification, setNotification] = useState<{
@@ -108,6 +111,24 @@ function IntegrationsContent() {
       setSelectedStoreId(loadedStores[0].id)
     }
   }, [searchParams])
+
+  useEffect(() => {
+    if (selectedStoreId) {
+      console.log('[Integrations Page] Checking warehouses for store:', selectedStoreId)
+      const check = checkStoreWarehouseById(selectedStoreId)
+      console.log('[Integrations Page] Warehouse check result:', {
+        storeId: selectedStoreId,
+        storeName: check.store?.storeName,
+        hasWarehouses: check.hasWarehouses,
+        hasRegionRouting: check.hasRegionRouting,
+        warehouseConfig: check.store?.warehouseConfig
+      })
+      setHasWarehouses(check.hasWarehouses)
+    } else {
+      console.log('[Integrations Page] No store selected, defaulting hasWarehouses to true')
+      setHasWarehouses(true)
+    }
+  }, [selectedStoreId])
 
   // Handle store change
   const handleStoreChange = (storeId: string) => {
@@ -382,6 +403,7 @@ function IntegrationsContent() {
           <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
             <button
               onClick={() => setShowBrowseModal(true)}
+              disabled={!hasWarehouses}
               className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
               <PlusIcon className="h-5 w-5 mr-2" />
@@ -414,6 +436,15 @@ function IntegrationsContent() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {selectedStoreId && !hasWarehouses && (
+        <div className="mb-6">
+          <WarehouseRequiredWarning
+            storeName={getSelectedStoreName()}
+            storeId={selectedStoreId}
+          />
         </div>
       )}
 
