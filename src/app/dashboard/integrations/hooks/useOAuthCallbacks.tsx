@@ -11,7 +11,6 @@ interface UseOAuthCallbacksProps {
   settings: any
   selectedStoreId: string
   stores: any[]
-  accountId: string
   updateIntegration: (id: string, data: any) => void
   addIntegration: (integration: Integration) => boolean
   setNotification: (notification: any) => void
@@ -22,7 +21,6 @@ export function useOAuthCallbacks({
   settings,
   selectedStoreId,
   stores,
-  accountId,
   updateIntegration,
   addIntegration,
   setNotification,
@@ -302,6 +300,16 @@ export function useOAuthCallbacks({
       // ✅ FIX: Trigger automatic sync with fresh data
       setTimeout(async () => {
         try {
+          // ✅ NEW: Get accountId directly from storage (SOURCE OF TRUTH)
+          const accountId = getCurrentAccountId()
+
+          console.log('[Auto-Sync] ✅ AccountId from storage:', accountId)
+
+          if (!accountId || accountId === 'default') {
+            console.error('[Auto-Sync] ❌ Invalid accountId:', accountId)
+            throw new Error('Account ID not available. Please refresh and try again.')
+          }
+
           const freshSettings = getAccountIntegrations(accountId)
 
           if (!freshSettings) {

@@ -4,11 +4,11 @@
 
 import { IntegrationFactory } from '@/lib/integrations/integrationFactory'
 import { ShopifyIntegration, USPSIntegration, UPSIntegration } from '../types/integrationTypes'
+import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 
 interface UseIntegrationHandlersProps {
   settings: any
   selectedStoreId: string
-  accountId: string
   updateIntegration: (id: string, data: any) => void
   addIntegration: (integration: any) => void
   setNotification: (notification: any) => void
@@ -20,7 +20,6 @@ interface UseIntegrationHandlersProps {
 export function useIntegrationHandlers({
   settings,
   selectedStoreId,
-  accountId,
   updateIntegration,
   addIntegration,
   setNotification,
@@ -28,6 +27,9 @@ export function useIntegrationHandlers({
   setShowUspsModal,
   setShowUpsModal
 }: UseIntegrationHandlersProps) {
+
+  // ✅ NEW: Get accountId from storage at the top of the hook
+  const accountId = getCurrentAccountId()
 
   /**
    * Generic save handler using factory pattern
