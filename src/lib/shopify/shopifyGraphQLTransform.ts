@@ -7,6 +7,7 @@ import { LineItemWithWeight } from './shopifyTypes'
 /**
  * Transform GraphQL order to app Order format
  * ✅ UPDATED: Now properly maps updatedAt field for incremental sync
+ * ✅ UPDATED: Warehouse assignment removed - now handled by orderStorage.saveOrdersToStorage()
  */
 export function transformGraphQLOrder(
   graphqlOrder: any,
@@ -103,8 +104,8 @@ export function transformGraphQLOrder(
     // Tracking info
     trackingNumber: trackingInfo?.number || undefined,
 
-    // Warehouse assignment (if provided)
-    warehouseId: warehouseId
+    // based on shipping address and store's warehouse configuration
+    warehouseId: undefined
   };
 
   return order;
