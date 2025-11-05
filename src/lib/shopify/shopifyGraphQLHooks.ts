@@ -3,7 +3,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ShopifyGraphQLClient } from './shopifyGraphQLClient';
 import { transformGraphQLOrder, transformGraphQLProduct } from './shopifyGraphQLTransform';
-import { saveShopifyOrder, saveShopifyProduct, getShopifySyncStats } from './shopifyStorage';
+import { getShopifySyncStats } from './shopifyStorage';
+import { saveOrdersToStorage } from '@/lib/storage/orderStorage';
+import { saveProductsToStorage } from '@/lib/storage/productStorage';
 import { Order } from '@/app/dashboard/orders/utils/orderTypes';
 import { Product } from '@/app/dashboard/products/utils/productTypes';
 
@@ -118,7 +120,6 @@ export function useShopifyOrderSync(accountId: string) {
         // Transform and save orders
         for (const graphqlOrder of response.orders) {
           const order = transformGraphQLOrder(graphqlOrder, storeId, storeName);
-          await saveShopifyOrder(order, accountId);
           allOrders.push(order);
         }
 
@@ -129,6 +130,11 @@ export function useShopifyOrderSync(accountId: string) {
         // Update pagination
         hasNextPage = response.pageInfo.hasNextPage;
         endCursor = response.pageInfo.endCursor;
+      }
+
+      // ✅ FIXED: Save all orders at once
+      if (allOrders.length > 0) {
+        saveOrdersToStorage(allOrders, accountId);
       }
 
       setProgress(100);
@@ -198,7 +204,6 @@ export function useShopifyProductSync(accountId: string) {
         // Transform and save products
         for (const graphqlProduct of response.products) {
           const product = transformGraphQLProduct(graphqlProduct, storeId);
-          await saveShopifyProduct(product, accountId);
           allProducts.push(product);
         }
 
@@ -209,6 +214,11 @@ export function useShopifyProductSync(accountId: string) {
         // Update pagination
         hasNextPage = response.pageInfo.hasNextPage;
         endCursor = response.pageInfo.endCursor;
+      }
+
+      // ✅ FIXED: Save all products at once
+      if (allProducts.length > 0) {
+        saveProductsToStorage(allProducts, accountId);
       }
 
       setProgress(100);

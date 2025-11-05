@@ -483,6 +483,58 @@ export default function ProductsPage() {
         </div>
       )}
 
+      {/* Empty State - Has Integrations but No Products */}
+      {hasIntegrations && products.length === 0 && (
+        <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 p-6">
+          <div className="text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-blue-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+              />
+            </svg>
+            <h3 className="mt-2 text-lg font-medium text-gray-900">No Products Yet</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              You have {integrationCount} integration{integrationCount > 1 ? 's' : ''} connected, but no products have been synced yet.
+            </p>
+            <div className="mt-6">
+              <button
+                onClick={handleSyncProducts}
+                disabled={syncing}
+                className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {syncing ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Sync Products Now
+                  </>
+                )}
+              </button>
+            </div>
+            {syncError && (
+              <div className="mt-4 text-sm text-red-600">
+                Error: {syncError}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Warehouse Selector */}
       {products.length > 0 && (
         <div className="mb-6">

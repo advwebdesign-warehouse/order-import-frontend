@@ -4,7 +4,9 @@ import { useState, useCallback, useEffect } from 'react'
 import { getAccountIntegrations, getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { isEcommerceIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 import type { Integration } from '@/app/dashboard/integrations/types/integrationTypes'
-import { saveProduct, getProductsFromStorage } from '@/lib/storage/productStorage'
+import { getProductsFromStorage } from '@/lib/storage/productStorage'
+import { IntegrationFactory } from '@/lib/integrations/integrationFactory'
+import { EcommerceIntegration } from '@/lib/integrations/base/baseIntegration'
 
 interface SyncProgress {
   integration: string
@@ -33,73 +35,62 @@ export function useProductSync(accountId?: string) {
   }, [aid])
 
   /**
-   * Sync products from Shopify
+   * Generic sync using factory pattern
+   * Works with ANY integration automatically
    */
-  const syncShopifyProducts = async (integration: any) => {
+  const syncIntegrationWithFactory = async (integrationData: any) => {
     try {
-      // Import Shopify-specific sync
-      const { ShopifyService } = await import('@/lib/shopify/shopifyService')
+      console.log(`[Factory Sync] Creating ${integrationData.name} instance...`)
 
-      const service = new ShopifyService({
-        shop: integration.config.storeUrl,
-        accessToken: integration.config.accessToken,
-        accountId: aid,
-        storeId: integration.storeId,
+      // Create integration instance using factory
+      const integration = IntegrationFactory.create({
+        ...integrationData,
+        accountId: aid
       })
 
-      const result = await service.syncProducts()
+      if (!integration) {
+        return {
+          success: false,
+          count: 0,
+          error: `${integrationData.name} not supported yet`
+        }
+      }
+
+      // Verify it's an e-commerce integration
+      if (!(integration instanceof EcommerceIntegration)) {
+        return {
+          success: false,
+          count: 0,
+          error: `${integrationData.name} is not an e-commerce integration`
+        }
+      }
+
+      // Check if it supports product sync
+      if (!integration.supportsFeature('productSync')) {
+        return {
+          success: false,
+          count: 0,
+          error: `${integrationData.name} does not support product sync`
+        }
+      }
+
+      console.log(`[Factory Sync] Syncing products from ${integrationData.name}...`)
+
+      // Sync products using the integration's method
+      const result = await integration.syncProducts()
+
+      console.log(`[Factory Sync] ${integrationData.name} result:`, result)
+
       return result
     } catch (error: any) {
-      console.error('[Shopify Sync] Error:', error)
-      return { success: false, count: 0, error: error.message }
-    }
-  }
-
-  /**
-   * Sync products from WooCommerce
-   */
-  const syncWooCommerceProducts = async (integration: any) => {
-    try {
-      // TODO: Implement WooCommerce product sync
-      console.log('[WooCommerce Sync] Starting...')
-
-      // Placeholder - replace with actual WooCommerce sync logic
-      return { success: true, count: 0, error: 'WooCommerce sync not implemented yet' }
-    } catch (error: any) {
-      return { success: false, count: 0, error: error.message }
-    }
-  }
-
-  /**
-   * Sync products from Etsy
-   */
-  const syncEtsyProducts = async (integration: any) => {
-    try {
-      // TODO: Implement Etsy product sync
-      console.log('[Etsy Sync] Starting...')
-
-      return { success: true, count: 0, error: 'Etsy sync not implemented yet' }
-    } catch (error: any) {
-      return { success: false, count: 0, error: error.message }
-    }
-  }
-
-  /**
-   * Sync products from eBay
-   */
-  const syncEbayProducts = async (integration: any) => {
-    try {
-      // TODO: Implement eBay product sync
-      console.log('[eBay Sync] Starting...')
-
-      return { success: true, count: 0, error: 'eBay sync not implemented yet' }
-    } catch (error: any) {
+      console.error(`[Factory Sync] Error syncing ${integrationData.name}:`, error)
       return { success: false, count: 0, error: error.message }
     }
   }
 
   /**
    * Main sync function - syncs products from all connected integrations
+   * Uses factory pattern - automatically works with ANY integration
    */
   const syncProducts = useCallback(async () => {
     if (ecommerceIntegrations.length === 0) {
@@ -138,23 +129,8 @@ export function useProductSync(accountId?: string) {
           }
         }))
 
-        let result
-        switch (integration.name) {
-          case 'Shopify':
-            result = await syncShopifyProducts(integration)
-            break
-          case 'WooCommerce':
-            result = await syncWooCommerceProducts(integration)
-            break
-          case 'Etsy':
-            result = await syncEtsyProducts(integration)
-            break
-          case 'eBay':
-            result = await syncEbayProducts(integration)
-            break
-          default:
-            result = { success: false, count: 0, error: 'Unknown integration type' }
-        }
+        // Use factory pattern - works with ANY integration
+        const result = await syncIntegrationWithFactory(integration)
 
         if (result.success) {
           totalCount += result.count
@@ -208,6 +184,7 @@ export function useProductSync(accountId?: string) {
 
   /**
    * Sync products from a specific integration
+   * Uses factory pattern - works with ANY integration
    */
   const syncSingleIntegration = useCallback(async (integrationId: string) => {
     const integration = ecommerceIntegrations.find(i => i.id === integrationId)
@@ -227,23 +204,8 @@ export function useProductSync(accountId?: string) {
       }
     })
 
-    let result
-    switch (integration.name) {
-      case 'Shopify':
-        result = await syncShopifyProducts(integration)
-        break
-      case 'WooCommerce':
-        result = await syncWooCommerceProducts(integration)
-        break
-      case 'Etsy':
-        result = await syncEtsyProducts(integration)
-        break
-      case 'eBay':
-        result = await syncEbayProducts(integration)
-        break
-      default:
-        result = { success: false, count: 0, error: 'Unknown integration type' }
-    }
+    // Use factory pattern
+    const result = await syncIntegrationWithFactory(integration)
 
     setProgress({
       [integrationId]: {

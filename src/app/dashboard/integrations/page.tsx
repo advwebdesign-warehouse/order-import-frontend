@@ -79,6 +79,7 @@ function IntegrationsContent() {
   const { handleSaveShopify, handleSaveUsps, handleSaveUps } = useIntegrationHandlers({
     settings,
     selectedStoreId,
+    accountId,
     updateIntegration,
     addIntegration,
     setNotification,

@@ -16,60 +16,74 @@ export function useProducts(warehouseId?: string) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
 
+  // ✅ NEW: Mark as mounted (client-side only)
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true)
+    setMounted(true)
+  }, [])
 
-        const accountId = getCurrentAccountId()
-
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        let filteredProducts: Product[]
-
-        if (warehouseId) {
-          // Filter by warehouse (checks warehouseStock array)
-          filteredProducts = getProductsByWarehouse(warehouseId, accountId)
-        } else {
-          // Get all products
-          filteredProducts = getProductsFromStorage(accountId)
-        }
-
-        setProducts(filteredProducts)
-        setError(null)
-      } catch (err) {
-        setError('Failed to fetch products')
-        console.error('Error fetching products:', err)
-      } finally {
-        setLoading(false)
-      }
+  // ✅ UPDATED: Only load products after mounting
+  useEffect(() => {
+    if (!mounted) {
+      return // Skip during SSR
     }
 
-    fetchProducts()
-  }, [warehouseId])
+    console.log('[useProducts] 🔄 Loading products...')
+    setLoading(true)
 
-  const refetchProducts = async () => {
+    try {
+      const accountId = getCurrentAccountId()
+      console.log('[useProducts] 📋 Account ID:', accountId)
+
+      let filteredProducts: Product[]
+
+      if (warehouseId) {
+        console.log('[useProducts] 🏭 Filtering by warehouse:', warehouseId)
+        filteredProducts = getProductsByWarehouse(warehouseId, accountId)
+      } else {
+        console.log('[useProducts] 📦 Loading all products')
+        filteredProducts = getProductsFromStorage(accountId)
+      }
+
+      console.log('[useProducts] ✅ Loaded products:', filteredProducts.length)
+      setProducts(filteredProducts)
+      setError(null)
+    } catch (err) {
+      console.error('[useProducts] ❌ Error fetching products:', err)
+      setError('Failed to fetch products')
+    } finally {
+      setLoading(false)
+    }
+  }, [mounted, warehouseId]) // ✅ Re-run when mounted or warehouse changes
+
+  const refetchProducts = () => {
+    if (!mounted) {
+      console.warn('[useProducts] ⚠️ Cannot refetch - not mounted yet')
+      return
+    }
+
+    console.log('[useProducts] 🔄 Refetching products...')
     setLoading(true)
 
     try {
       const accountId = getCurrentAccountId()
 
-      await new Promise(resolve => setTimeout(resolve, 300))
-
       let filteredProducts: Product[]
 
       if (warehouseId) {
         // Filter by warehouse (checks warehouseStock array)
-        filteredProducts = getProductsByWarehouse(warehouseId)
+        filteredProducts = getProductsByWarehouse(warehouseId, accountId)
       } else {
         // Get all products
         filteredProducts = getProductsFromStorage(accountId)
       }
 
+      console.log('[useProducts] ✅ Refetched products:', filteredProducts.length)
       setProducts([...filteredProducts]) // Force re-render with fresh data
+      setError(null)
     } catch (err) {
-      console.error('Error refetching products:', err)
+      console.error('[useProducts] ❌ Error refetching products:', err)
       setError('Failed to refetch products')
     } finally {
       setLoading(false)

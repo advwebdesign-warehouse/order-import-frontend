@@ -9,20 +9,64 @@ const PRODUCTS_STORAGE_PREFIX = 'orderSync_products_'
  * Get all products for a specific account
  */
 export function getProductsFromStorage(accountId?: string): Product[] {
-  if (typeof window === 'undefined') return []
+  console.log('[getProductsFromStorage] 🔍 Called with accountId:', accountId)
+
+  if (typeof window === 'undefined') {
+    console.warn('[getProductsFromStorage] ⚠️ Window is undefined, returning empty array')
+    return []
+  }
 
   const aid = accountId || getCurrentAccountId()
-  if (!aid) return []
+  console.log('[getProductsFromStorage] 📋 Account ID resolved:', {
+    providedAccountId: accountId,
+    currentAccountId: getCurrentAccountId(),
+    finalAccountId: aid
+  })
+
+  if (!aid) {
+    console.error('[getProductsFromStorage] ❌ No account ID available, returning empty array')
+    return []
+  }
 
   const storageKey = `${PRODUCTS_STORAGE_PREFIX}${aid}`
+  console.log('[getProductsFromStorage] 🔑 Looking for products at key:', storageKey)
 
   try {
     const stored = localStorage.getItem(storageKey)
     if (stored) {
-      return JSON.parse(stored)
+      const products = JSON.parse(stored)
+      console.log('[getProductsFromStorage] ✅ Found products:', {
+        key: storageKey,
+        count: products.length,
+        dataSize: `${(stored.length / 1024).toFixed(2)} KB`
+      })
+      return products
+    } else {
+      console.warn('[getProductsFromStorage] ⚠️ No products found at key:', storageKey)
+
+      // Check if products exist under any other key
+      const allKeys = Object.keys(localStorage)
+      const productKeys = allKeys.filter(k => k.startsWith(PRODUCTS_STORAGE_PREFIX))
+
+      if (productKeys.length > 0) {
+        console.warn('[getProductsFromStorage] 🔍 But products found at other keys:')
+        productKeys.forEach(key => {
+          const data = localStorage.getItem(key)
+          if (data) {
+            try {
+              const parsed = JSON.parse(data)
+              console.warn(`  - ${key}: ${parsed.length} products`)
+            } catch (e) {
+              console.warn(`  - ${key}: (parse error)`)
+            }
+          }
+        })
+      } else {
+        console.warn('[getProductsFromStorage] 📭 No product keys found in localStorage at all')
+      }
     }
   } catch (error) {
-    console.error('Error loading products from storage:', error)
+    console.error('[getProductsFromStorage] ❌ Error loading products from storage:', error)
   }
 
   return []
@@ -32,17 +76,60 @@ export function getProductsFromStorage(accountId?: string): Product[] {
  * Save products for a specific account
  */
 export function saveProductsToStorage(products: Product[], accountId?: string): void {
-  if (typeof window === 'undefined') return
+  console.log('[saveProductsToStorage] 💾 Called with:', {
+    productsCount: products?.length || 0,
+    accountIdParam: accountId,
+    isWindowDefined: typeof window !== 'undefined'
+  })
+
+  if (typeof window === 'undefined') {
+    console.warn('[saveProductsToStorage] ⚠️ Window is undefined, skipping save')
+    return
+  }
 
   const aid = accountId || getCurrentAccountId()
-  if (!aid) return
+  console.log('[saveProductsToStorage] 📋 Account ID resolved:', {
+    providedAccountId: accountId,
+    currentAccountId: getCurrentAccountId(),
+    finalAccountId: aid
+  })
+
+  if (!aid) {
+    console.error('[saveProductsToStorage] ❌ No account ID available, cannot save products!')
+    return
+  }
 
   const storageKey = `${PRODUCTS_STORAGE_PREFIX}${aid}`
+  console.log('[saveProductsToStorage] 🔑 Storage key:', storageKey)
 
   try {
-    localStorage.setItem(storageKey, JSON.stringify(products))
+    const productsJson = JSON.stringify(products)
+    console.log('[saveProductsToStorage] 📦 Attempting to save:', {
+      key: storageKey,
+      productsCount: products.length,
+      dataSize: `${(productsJson.length / 1024).toFixed(2)} KB`
+    })
+
+    localStorage.setItem(storageKey, productsJson)
+
+    // Verify the save
+    const verification = localStorage.getItem(storageKey)
+    if (verification) {
+      const parsed = JSON.parse(verification)
+      console.log('[saveProductsToStorage] ✅ Save successful and verified!', {
+        key: storageKey,
+        verifiedCount: parsed.length
+      })
+    } else {
+      console.error('[saveProductsToStorage] ❌ Save appeared to succeed but verification failed!')
+    }
   } catch (error) {
-    console.error('Error saving products to storage:', error)
+    console.error('[saveProductsToStorage] ❌ Error saving products to storage:', error)
+    console.error('[saveProductsToStorage] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      storageKey,
+      productsCount: products.length
+    })
   }
 }
 

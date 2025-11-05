@@ -30,12 +30,12 @@ export class ShopifyWebhooks {
   ): Promise<void> {
     // Import GraphQL transformation functions
     const { transformGraphQLOrder } = await import('./shopifyGraphQLTransform');
-    const { saveShopifyOrder } = await import('./shopifyStorage');
+    const { saveOrdersToStorage } = await import('@/lib/storage/orderStorage');
 
     // Transform using the REST-format webhook data
     // (Shopify webhooks still use REST format regardless of API)
     const transformedOrder = transformGraphQLOrder(order, storeId, accountId);
-    await saveShopifyOrder(transformedOrder, accountId);
+    saveOrdersToStorage([transformedOrder], accountId);
   }
 
   /**
@@ -48,11 +48,11 @@ export class ShopifyWebhooks {
   ): Promise<void> {
     // Import GraphQL transformation functions
     const { transformGraphQLProduct } = await import('./shopifyGraphQLTransform');
-    const { saveShopifyProduct } = await import('./shopifyStorage');
+    const { saveProductsToStorage } = await import('@/lib/storage/productStorage');
 
     // Transform and save the product
     const transformedProduct = transformGraphQLProduct(product, storeId);
-    await saveShopifyProduct(transformedProduct, accountId);
+    saveProductsToStorage([transformedProduct], accountId);
   }
 
   /**

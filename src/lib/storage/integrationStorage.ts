@@ -7,7 +7,7 @@ const INTEGRATION_STORAGE_PREFIX = 'orderSync_integrations_'
 const DEFAULT_SETTINGS: IntegrationSettings = {
   integrations: [], // ✅ Start with empty array - users add via Browse
   lastUpdated: new Date().toISOString(),  // <-- Changed from lastSyncedAt
-  accountId: 'default'
+  accountId: 'default_account'
 }
 
 /**

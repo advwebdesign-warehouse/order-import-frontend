@@ -2,7 +2,9 @@
 
 import { ShopifyGraphQLClient, ShopifyPermissionError } from './shopifyGraphQLClient'
 import { transformGraphQLOrder, transformGraphQLProduct } from './shopifyGraphQLTransform'
-import { saveShopifyOrder, saveShopifyProduct, getLastShopifyOrderUpdateDate } from './shopifyStorage'
+import { getLastShopifyOrderUpdateDate } from './shopifyStorage'
+import { saveProductsToStorage } from '@/lib/storage/productStorage'
+import { saveOrdersToStorage } from '@/lib/storage/orderStorage'
 import { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 
 export interface ShopifyServiceConfig {
@@ -60,7 +62,7 @@ export class ShopifyService {
         const response = await this.client.getOrders({
           first: 50,
           after: endCursor || undefined,
-          updatedAtMin: updatedAtMin || undefined, // ✅ NEW: Pass date filter for incremental sync
+          updatedAtMin: updatedAtMin || undefined,
         })
 
         if (response.orders.length === 0) {
@@ -75,15 +77,18 @@ export class ShopifyService {
             this.config.storeId,
             this.config.warehouseId
           )
-
-          // Save to storage using existing function
-          await saveShopifyOrder(order, this.config.accountId)
           allOrders.push(order)
         }
 
         // Update pagination
         hasNextPage = response.pageInfo.hasNextPage
         endCursor = response.pageInfo.endCursor
+      }
+
+      // Save all orders at once using centralized storage
+      if (allOrders.length > 0) {
+        console.log(`[Shopify Service] 💾 Saving ${allOrders.length} orders to storage...`)
+        saveOrdersToStorage(allOrders, this.config.accountId)
       }
 
       const syncType = isIncremental ? 'Incremental sync' : 'Full sync';
@@ -130,15 +135,18 @@ export class ShopifyService {
             graphqlProduct,
             this.config.storeId
           )
-
-          // Save to storage using existing function
-          await saveShopifyProduct(product, this.config.accountId)
           allProducts.push(product)
         }
 
         // Update pagination
         hasNextPage = response.pageInfo.hasNextPage
         endCursor = response.pageInfo.endCursor
+      }
+
+      // Save all products at once using centralized storage
+      if (allProducts.length > 0) {
+        console.log(`[Shopify Service] 💾 Saving ${allProducts.length} products to storage...`)
+        saveProductsToStorage(allProducts, this.config.accountId)
       }
 
       console.log(`[Shopify Service] ✅ Synced ${allProducts.length} products`)
@@ -452,19 +460,17 @@ export class ShopifyService {
       if (result.data) {
         console.log('[Shopify Service] 💾 Saving data to localStorage...')
 
-        // Save orders to localStorage (client-side)
-        if (result.data.orders && Array.isArray(result.data.orders)) {
-          for (const order of result.data.orders) {
-            await saveShopifyOrder(order, accountId)
-          }
+        // ✅ FIXED: Save orders using proper storage (batch save)
+        if (result.data.orders && Array.isArray(result.data.orders) && result.data.orders.length > 0) {
+          console.log(`[Shopify Service] 💾 Saving ${result.data.orders.length} orders...`)
+          saveOrdersToStorage(result.data.orders, accountId)
           console.log(`[Shopify Service] ✅ Saved ${result.data.orders.length} orders`)
         }
 
-        // Save products to localStorage (client-side)
-        if (result.data.products && Array.isArray(result.data.products)) {
-          for (const product of result.data.products) {
-            await saveShopifyProduct(product, accountId)
-          }
+        // ✅ FIXED: Save products using proper storage (batch save)
+        if (result.data.products && Array.isArray(result.data.products) && result.data.products.length > 0) {
+          console.log(`[Shopify Service] 💾 Saving ${result.data.products.length} products...`)
+          saveProductsToStorage(result.data.products, accountId)
           console.log(`[Shopify Service] ✅ Saved ${result.data.products.length} products`)
         }
 
