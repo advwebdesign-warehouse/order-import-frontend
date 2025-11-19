@@ -73,13 +73,14 @@ export async function GET(request: NextRequest) {
 
     // Generate unique integration ID
     const integrationId = `shopify-${shop.replace('.myshopify.com', '')}-${Date.now()}`;
+    const accountId = shop.replace('.myshopify.com', '');
 
     // Save integration
     const integration = {
       id: integrationId,
       provider: 'shopify' as const,
       storeId: storeId || `store-${Date.now()}`,
-      accountId: shop.replace('.myshopify.com', ''),
+      accountId,
       status: 'connected' as const,
       config: {
         storeUrl: shop,
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
       connectedAt: new Date().toISOString(),
     };
 
-    saveIntegration(integration);
+    await saveIntegration(integration, accountId);
     console.log('[OAuth Callback] ✅ Integration saved');
 
     // Register webhooks
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
         console.log('[OAuth Callback] ✅ Webhooks registered:', webhookResult.registered);
 
         // Update integration with webhook status
-        updateIntegrationConfig(integrationId, {
+        await updateIntegrationConfig(integrationId, {
           ...integration.config,
           webhooksRegistered: true,
           registeredWebhooks: webhookResult.registered,
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
         console.error('[OAuth Callback] ⚠️  Webhook registration had errors:', webhookResult.errors);
 
         // Still mark as partial success
-        updateIntegrationConfig(integrationId, {
+        await updateIntegrationConfig(integrationId, {
           ...integration.config,
           webhooksRegistered: webhookResult.registered.length > 0,
           registeredWebhooks: webhookResult.registered,
@@ -156,7 +157,7 @@ export async function GET(request: NextRequest) {
         });
 
         // Update last sync time
-        updateIntegrationConfig(integrationId, {
+        await updateIntegrationConfig(integrationId, {
           ...integration.config,
           lastSyncTime: new Date().toISOString(),
           lastSyncOrderCount: syncData.orderCount,

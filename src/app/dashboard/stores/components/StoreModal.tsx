@@ -6,7 +6,7 @@ import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { Store, StoreFormData, WarehouseConfig, US_STATES } from '../utils/storeTypes'
-import { createStore, updateStore } from '../utils/storeStorage'
+import { storeApi } from '@/app/services/storeApi'
 import { useWarehouses } from '../../warehouses/context/WarehouseContext'
 import WarehouseAssignmentTab from './WarehouseAssignmentTab'
 
@@ -19,6 +19,7 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
   const { warehouses } = useWarehouses()
   const [isSaving, setIsSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [apiError, setApiError] = useState<string | null>(null)
 
   // Store Information Form State - All fields explicitly set to ensure controlled inputs
   const [formData, setFormData] = useState<StoreFormData>({
@@ -53,6 +54,11 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
         delete newErrors[field]
         return newErrors
       })
+    }
+
+    // Clear API error when user makes changes
+    if (apiError) {
+      setApiError(null)
     }
   }
 
@@ -104,10 +110,11 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
     }
 
     setIsSaving(true)
+    setApiError(null)
 
     try {
-      const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt' | 'accountId'> = {
-        storeName: formData.storeName!, // Non-null assertion - validation ensures it exists
+      const storeData: Partial<Store> = {
+              storeName: formData.storeName!,
         ...(formData.logo && { logo: formData.logo }),
         ...(formData.website && { website: formData.website }),
         ...(formData.email && { email: formData.email }),
@@ -125,17 +132,17 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
       }
 
       if (store) {
-        // Update existing store
-        updateStore(store.id, storeData)
+        // Update existing store via API
+        await storeApi.updateStore(store.id, storeData)
       } else {
-        // Create new store
-        createStore(storeData)
+        // Create new store via API
+        await storeApi.createStore(storeData)
       }
 
       onClose(true)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving store:', error)
-      alert('Failed to save store. Please try again.')
+      setApiError(error.message || 'Failed to save store. Please try again.')
     } finally {
       setIsSaving(false)
     }
@@ -183,11 +190,24 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                       <XMarkIcon className="h-6 w-6" aria-hidden="true" />
                     </button>
                   </div>
-
                   <p className="mt-1 text-sm text-gray-500">
                     Store information will be used for order-related documents such as packing slips and shipping labels.
                   </p>
                 </div>
+
+                  {/* API Error Message */}
+                  {apiError && (
+                    <div className="mt-4 rounded-md bg-red-50 p-4">
+                      <div className="flex">
+                        <div className="ml-3">
+                          <h3 className="text-sm font-medium text-red-800">Error</h3>
+                          <div className="mt-2 text-sm text-red-700">
+                            <p>{apiError}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Form */}
                 <form onSubmit={handleSubmit}>

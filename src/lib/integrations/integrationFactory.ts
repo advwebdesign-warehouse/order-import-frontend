@@ -1,13 +1,16 @@
 //file path: src/lib/integrations/integrationFactory.ts
 
-import { BaseIntegration, EcommerceIntegration, ShippingIntegration, IntegrationConfig } from './base/baseIntegration'
+import { BaseIntegrationService, EcommerceIntegrationService, ShippingIntegrationService, IntegrationConfig } from './base/baseIntegration'
 import { ShopifyIntegration } from './ecommerce/shopifyIntegration'
-import { WooCommerceIntegration } from './ecommerce/woocommerceIntegration'
+import { USPSIntegration } from './shipping/uspsIntegration'
+import { UPSIntegration } from './shipping/upsIntegration'
+// ✅ COMMENTED OUT: WooCommerce not yet implemented
+// import { WooCommerceIntegration } from './ecommerce/woocommerceIntegration'
 
 /**
  * Integration Constructor Type
  */
-type IntegrationConstructor = new (config: IntegrationConfig) => BaseIntegration
+type IntegrationConstructor = new (config: IntegrationConfig) => BaseIntegrationService
 
 /**
  * Integration Registry
@@ -38,12 +41,15 @@ class IntegrationRegistry {
   private registerDefaultIntegrations() {
     // E-commerce Integrations
     this.register('Shopify', ShopifyIntegration)
-    this.register('WooCommerce', WooCommerceIntegration)
+    // ✅ COMMENTED OUT: WooCommerce not yet implemented
+    // this.register('WooCommerce', WooCommerceIntegration)
 
     // Shipping Integrations
-    // this.register('USPS', USPSIntegration) // TODO: Implement
-    // this.register('UPS', UPSIntegration)   // TODO: Implement
+    // ✅ NOW ACTIVE: USPS and UPS integrations implemented
+    this.register('USPS', USPSIntegration)
+    this.register('UPS', UPSIntegration)
     // this.register('FedEx', FedExIntegration) // TODO: Implement
+    // this.register('DHL', DHLIntegration)     // TODO: Implement
 
     console.log('[IntegrationRegistry] Registered integrations:', Array.from(this.registry.keys()))
   }
@@ -99,7 +105,7 @@ export class IntegrationFactory {
    * @param integrationData - Integration data from storage
    * @returns Integration instance or null if not supported
    */
-  static create(integrationData: any): BaseIntegration | null {
+  static create(integrationData: any): BaseIntegrationService  | null {
     const name = integrationData.name
 
     if (!this.registry.has(name)) {
@@ -134,10 +140,10 @@ export class IntegrationFactory {
    * @param integrations - Array of integration data
    * @returns Array of integration instances
    */
-  static createMany(integrations: any[]): BaseIntegration[] {
+  static createMany(integrations: any[]): BaseIntegrationService[] {
     return integrations
       .map(integration => this.create(integration))
-      .filter((instance): instance is BaseIntegration => instance !== null)
+      .filter((instance): instance is BaseIntegrationService => instance !== null)
   }
 
   /**
@@ -166,29 +172,29 @@ export class IntegrationFactory {
    * Filter integrations by type
    */
   static filterByType(
-    integrations: BaseIntegration[],
+    integrations: BaseIntegrationService[],
     type: 'ecommerce' | 'shipping' | 'other'
-  ): BaseIntegration[] {
+  ): BaseIntegrationService[] {
     return integrations.filter(integration => integration.getType() === type)
   }
 
   /**
    * Get all e-commerce integrations
    */
-  static getEcommerceIntegrations(integrations: BaseIntegration[]): EcommerceIntegration[] {
+  static getEcommerceIntegrations(integrations: BaseIntegrationService[]): EcommerceIntegrationService[] {
     return integrations.filter(
-      (integration): integration is EcommerceIntegration =>
-        integration instanceof EcommerceIntegration
+      (integration): integration is EcommerceIntegrationService  =>
+        integration instanceof EcommerceIntegrationService
     )
   }
 
   /**
    * Get all shipping integrations
    */
-  static getShippingIntegrations(integrations: BaseIntegration[]): ShippingIntegration[] {
+  static getShippingIntegrations(integrations: BaseIntegrationService[]): ShippingIntegrationService[] {
     return integrations.filter(
-      (integration): integration is ShippingIntegration =>
-        integration instanceof ShippingIntegration
+      (integration): integration is ShippingIntegrationService  =>
+        integration instanceof ShippingIntegrationService
     )
   }
 }

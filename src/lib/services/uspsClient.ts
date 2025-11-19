@@ -1,131 +1,84 @@
 //file path: src/lib/services/uspsClient.ts
 
-import { getUserIntegrations } from '@/lib/storage/integrationStorage'
+/**
+ * USPS Client - Frontend API calls to backend
+ * ✅ Uses existing baseApi pattern for authentication
+ * ✅ No longer uses localStorage for credentials - fetched from database by backend
+ * ✅ Passes storeId to all endpoints for proper integration lookup
+ */
+
+import { apiRequest } from '@/lib/api/baseApi'
 
 /**
- * Get USPS credentials from localStorage for the current user
+ * Get shipping rates - Backend will fetch credentials from database
  */
-function getUSPSCredentials() {
-  const integrations = getUserIntegrations()
-  const uspsIntegration = integrations?.integrations.find(
-    i => i.id === 'usps' && i.enabled
-  )
-
-  if (uspsIntegration && uspsIntegration.type === 'shipping' && uspsIntegration.name === 'USPS') {
-    return {
-      consumerKey: uspsIntegration.config.consumerKey,
-      consumerSecret: uspsIntegration.config.consumerSecret,
-      environment: uspsIntegration.config.environment
-    }
-  }
-
-  return null
+export async function getShippingRates(shipment: any, storeId: string) {
+  if (!storeId) throw new Error('Store ID is required')
+  return apiRequest('/shipping/usps/rates', {
+    method: 'POST',
+    body: JSON.stringify({ shipment, storeId })
+  })
 }
 
 /**
- * Get shipping rates - Client-side function that includes credentials
+ * Validate address - Backend will fetch credentials from database
  */
-export async function getShippingRates(shipment: any) {
-  const credentials = getUSPSCredentials()
-
-  if (!credentials) {
-    throw new Error('USPS not configured. Please set up USPS integration in settings.')
-  }
-
-  const response = await fetch('/api/shipping/usps/rates', {
+export async function validateAddress(address: any, storeId: string) {
+  if (!storeId) throw new Error('Store ID is required')
+  return apiRequest('/shipping/usps/validate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      shipment,
-      credentials
-    })
+    body: JSON.stringify({ address, storeId })
   })
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to get shipping rates')
-  }
-
-  return await response.json()
 }
 
 /**
- * Validate address - Client-side function that includes credentials
+ * Create shipping label - Backend will fetch credentials from database
  */
-export async function validateAddress(address: any) {
-  const credentials = getUSPSCredentials()
-
-  if (!credentials) {
-    throw new Error('USPS not configured. Please set up USPS integration in settings.')
-  }
-
-  const response = await fetch('/api/shipping/usps/validate', {
+export async function createShippingLabel(shipment: any, storeId: string) {
+  if (!storeId) throw new Error('Store ID is required')  // ✅ ADDED: Validation
+  return apiRequest('/shipping/usps/labels', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      address,
-      credentials
-    })
+    body: JSON.stringify({ shipment, storeId })
   })
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to validate address')
-  }
-
-  return await response.json()
 }
 
 /**
- * Create shipping label - Client-side function that includes credentials
+ * Track package - Backend will fetch credentials from database
  */
-export async function createShippingLabel(shipment: any) {
-  const credentials = getUSPSCredentials()
-
-  if (!credentials) {
-    throw new Error('USPS not configured. Please set up USPS integration in settings.')
-  }
-
-  const response = await fetch('/api/shipping/usps/labels', {
+export async function trackPackage(trackingNumber: string, storeId: string) {
+  if (!storeId) throw new Error('Store ID is required')  // ✅ ADDED: Validation
+  return apiRequest('/shipping/usps/tracking', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      shipment,
-      credentials
-    })
+    body: JSON.stringify({ trackingNumber, storeId })
   })
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to create shipping label')
-  }
-
-  return await response.json()
 }
 
 /**
- * Track package - Client-side function that includes credentials
+ * Get available services - Backend will fetch credentials from database
  */
-export async function trackPackage(trackingNumber: string) {
-  const credentials = getUSPSCredentials()
-
-  if (!credentials) {
-    throw new Error('USPS not configured. Please set up USPS integration in settings.')
-  }
-
-  const response = await fetch('/api/shipping/usps/tracking', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      trackingNumber,
-      credentials
-    })
+export async function getAvailableServices(storeId: string) {
+  if (!storeId) throw new Error('Store ID is required')  // ✅ ADDED: Validation
+  
+  return apiRequest(`/shipping/usps/services?storeId=${storeId}`, {
+    method: 'GET'
   })
+}
 
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error || 'Failed to track package')
-  }
+/**
+ * Get available containers - Backend will fetch credentials from database
+ */
+export async function getAvailableContainers(storeId: string, originZip?: string, destZip?: string) {
+  if (!storeId) throw new Error('Store ID is required')  // ✅ ADDED: Validation
 
-  return await response.json()
+  const params = new URLSearchParams()
+  params.append('storeId', storeId)  // ✅ FIXED: Added storeId
+  if (originZip) params.append('originZip', originZip)
+  if (destZip) params.append('destZip', destZip)
+
+  const queryString = params.toString()
+  const endpoint = `/shipping/usps/containers?${queryString}`
+
+  return apiRequest(endpoint, {
+    method: 'GET'
+  })
 }

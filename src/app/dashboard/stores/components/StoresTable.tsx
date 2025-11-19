@@ -12,7 +12,7 @@ import {
   BuildingOffice2Icon
 } from '@heroicons/react/24/outline'
 import { Store, StoreColumnConfig, StoreSortState } from '../utils/storeTypes'
-import { deleteStore } from '../utils/storeStorage'
+import { storeApi } from '@/app/services/storeApi'
 
 interface StoresTableProps {
   stores: Store[]
@@ -41,11 +41,19 @@ export default function StoresTable({
 }: StoresTableProps) {
   const [deleteConfirm, setDeleteConfirm] = React.useState<string | null>(null)
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (deleteConfirm === id) {
-      deleteStore(id)
-      setDeleteConfirm(null)
-      onRefresh()
+      try {
+        // ✅ UPDATED: Delete store via existing API service
+        await storeApi.deleteStore(id)
+        setDeleteConfirm(null)
+        onRefresh()
+      } catch (error) {
+        console.error('Error deleting store:', error)
+        // Optionally show error to user
+        alert('Failed to delete store. Please try again.')
+        setDeleteConfirm(null)
+      }
     } else {
       setDeleteConfirm(id)
       setTimeout(() => setDeleteConfirm(null), 3000)
@@ -130,7 +138,7 @@ export default function StoresTable({
               </div>
             </div>
           )
-          
+
         case 'warehouses':
           const assignedWarehouses = getAssignedWarehouses(store)
 

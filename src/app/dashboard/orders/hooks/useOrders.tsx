@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { Order } from '../utils/orderTypes'
-import { getOrdersFromStorage, saveOrdersToStorage } from '@/lib/storage/orderStorage'
-import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
+import { OrderAPI } from '@/lib/api/orderApi'
 
 /**
  * Hook to fetch all orders across all warehouses
+ * ✅ UPDATED: Now uses API instead of localStorage
  */
 export function useOrders() {
   const [orders, setOrders] = useState<Order[]>([])
@@ -19,13 +19,12 @@ export function useOrders() {
       setError(null)
 
       try {
-        // ✅ FIX: Read orders from localStorage where Shopify sync saves them
-        const accountId = getCurrentAccountId()
-        const storedOrders = getOrdersFromStorage(accountId)
+        // ✅ UPDATED: Fetch orders from API (accountId handled by backend via auth token)
+        const ordersData = await OrderAPI.getOrders()
 
-        console.log('[useOrders] Loaded orders from storage:', storedOrders.length)
+        console.log('[useOrders] Loaded orders from API:', ordersData.length)
 
-        setOrders(storedOrders)
+        setOrders(ordersData)
       } catch (err) {
         console.error('[useOrders] Error fetching orders:', err)
         setError('Failed to load orders')
@@ -38,12 +37,11 @@ export function useOrders() {
   }, [])
 
   const refreshOrders = async () => {
-    // ✅ FIX: Refresh from localStorage, not mock data
+    // ✅ UPDATED: Refresh from API
     try {
-      const accountId = getCurrentAccountId()
-      const storedOrders = getOrdersFromStorage(accountId)
-      console.log('[useOrders] Refreshed orders from storage:', storedOrders.length)
-      setOrders(storedOrders)
+      const ordersData = await OrderAPI.getOrders()
+      console.log('[useOrders] Refreshed orders from API:', ordersData.length)
+      setOrders(ordersData)
     } catch (err) {
       console.error('[useOrders] Error refreshing orders:', err)
       setError('Failed to refresh orders')
@@ -53,9 +51,7 @@ export function useOrders() {
   // Add function to update order fulfillment status
   const updateOrdersFulfillmentStatus = async (orderIds: string[], newStatus: string) => {
     try {
-      const accountId = getCurrentAccountId()
-
-      // Update the orders in state
+      // Optimistic update - update local state immediately
       setOrders(prevOrders =>
         prevOrders.map(order =>
           orderIds.includes(order.id)
@@ -64,20 +60,20 @@ export function useOrders() {
         )
       )
 
-      // ✅ FIX: Save back to localStorage
-      const allOrders = getOrdersFromStorage(accountId)
-      const updatedOrders = allOrders.map(order =>
-        orderIds.includes(order.id)
-          ? { ...order, fulfillmentStatus: newStatus }
-          : order
+      // ✅ UPDATED: Update via API (accountId handled by backend)
+      await Promise.all(
+        orderIds.map(orderId =>
+          OrderAPI.updateOrder(orderId, { fulfillmentStatus: newStatus })
+        )
       )
-      saveOrdersToStorage(updatedOrders, accountId)
 
       console.log('[useOrders] Updated fulfillment status for', orderIds.length, 'orders')
       return true
     } catch (err) {
       console.error('[useOrders] Error updating orders:', err)
       setError('Failed to update orders')
+      // Refresh to get correct state from server
+      await refreshOrders()
       return false
     }
   }
@@ -87,25 +83,21 @@ export function useOrders() {
    */
   const updateStatus = async (orderId: string, newStatus: string): Promise<void> => {
     try {
-      const accountId = getCurrentAccountId()
-
-      // Update local state
+      // Optimistic update - update local state immediately
       setOrders(prevOrders =>
         prevOrders.map(order =>
           order.id === orderId ? { ...order, status: newStatus } : order
         )
       )
 
-      // ✅ FIX: Save back to localStorage
-      const allOrders = getOrdersFromStorage(accountId)
-      const updatedOrders = allOrders.map(order =>
-        order.id === orderId ? { ...order, status: newStatus } : order
-      )
-      saveOrdersToStorage(updatedOrders, accountId)
+      // ✅ UPDATED: Update via API (accountId handled by backend)
+      await OrderAPI.updateOrder(orderId, { status: newStatus })
 
       console.log(`[useOrders] Order ${orderId} status updated to ${newStatus}`)
     } catch (error) {
       console.error('[useOrders] Error updating order status:', error)
+      // Refresh to get correct state from server
+      await refreshOrders()
       throw error
     }
   }
@@ -115,30 +107,25 @@ export function useOrders() {
    */
   const updateFulfillmentStatus = async (orderId: string, newStatus: string): Promise<void> => {
     try {
-      const accountId = getCurrentAccountId()
-
-      // Update local state
+      // Optimistic update - update local state immediately
       setOrders(prevOrders =>
         prevOrders.map(order =>
           order.id === orderId ? { ...order, fulfillmentStatus: newStatus } : order
         )
       )
 
-      // ✅ FIX: Save back to localStorage
-      const allOrders = getOrdersFromStorage(accountId)
-      const updatedOrders = allOrders.map(order =>
-        order.id === orderId ? { ...order, fulfillmentStatus: newStatus } : order
-      )
-      saveOrdersToStorage(updatedOrders, accountId)
+      // ✅ UPDATED: Update via API (accountId handled by backend)
+      await OrderAPI.updateOrder(orderId, { fulfillmentStatus: newStatus })
 
       console.log(`[useOrders] Order ${orderId} fulfillment status updated to ${newStatus}`)
     } catch (error) {
       console.error('[useOrders] Error updating order fulfillment status:', error)
+      // Refresh to get correct state from server
+      await refreshOrders()
       throw error
     }
   }
 
-  // Then UPDATE your return statement to include these:
   return {
     orders,
     loading,

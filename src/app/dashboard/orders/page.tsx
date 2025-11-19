@@ -3,6 +3,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useCurrentAccountId } from '@/hooks/useAccountInitialization'
 import OrderDetailsModal from './OrderDetailsModal'
 import PackingSlip from './PackingSlip'
 import PackingSlipModal from './components/PackingSlipModal'
@@ -28,6 +29,7 @@ import WarehouseSelector from '../shared/components/WarehouseSelector'
 import ColumnSettings, { ColumnConfig } from '../shared/components/ColumnSettings'
 import ScreenOptions from '../shared/components/ScreenOptions'
 import { usePagination } from '../shared/hooks/usePagination'
+import { withAuth } from '../shared/components/withAuth'
 
 // Utils
 import { transformToDetailedOrder } from './utils/orderUtils'
@@ -112,7 +114,9 @@ const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
   exportToCSV(orders, exportColumns, filename)
 }
 
-export default function OrdersPage() {
+// ✅ Main content component - receives guaranteed valid accountId from withAuth HOC
+function OrdersPageContent({ accountId }: { accountId: string }) {
+  // Warehouse selection (localStorage for UI state is OK - not auth-related)
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       // Then check localStorage
@@ -144,6 +148,8 @@ export default function OrdersPage() {
   const [showOrdersToShip, setShowOrdersToShip] = useState(false)
   const [showItemsToShip, setShowItemsToShip] = useState(false)
 
+  // localStorage for picking/packing state is OK - this is session UI state, not authentication
+  // These track which items have been picked/packed in the current session
   const [maxPickingOrders, setMaxPickingOrders] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('maxPickingOrders_main')
@@ -951,28 +957,7 @@ export default function OrdersPage() {
 
       {showShippingModal && orderToShip && (
         <ShippingModal
-          order={{
-            id: orderToShip.id,
-            orderNumber: orderToShip.orderNumber,
-            customer: {
-              name: orderToShip.customerName || '',
-              email: orderToShip.customerEmail || ''
-            },
-            shippingAddress: {
-              streetAddress: orderToShip.shippingAddress1 || '',
-              secondaryAddress: orderToShip.shippingAddress2,
-              city: orderToShip.shippingCity || '',
-              state: orderToShip.shippingProvince || '',
-              zipCode: orderToShip.shippingZip || ''
-            },
-            items: orderToShip.lineItems ? JSON.parse(orderToShip.lineItems).map((item: any) => ({
-              name: item.name || '',
-              quantity: item.quantity || 0,
-              sku: item.sku || ''
-            })) : [],
-            total: orderToShip.totalAmount || 0,
-            weight: orderToShip.totalWeight
-          }}
+          order={transformToDetailedOrder(orderToShip)}
           isOpen={showShippingModal}
           onClose={() => {
             setShowShippingModal(false)
@@ -987,3 +972,6 @@ export default function OrdersPage() {
     </div>
   )
 }
+
+// ✅ Export the HOC-wrapped component - handles all authentication automatically!
+export default withAuth(OrdersPageContent)

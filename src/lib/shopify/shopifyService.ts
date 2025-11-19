@@ -2,10 +2,10 @@
 
 import { ShopifyGraphQLClient, ShopifyPermissionError } from './shopifyGraphQLClient'
 import { transformGraphQLOrder, transformGraphQLProduct } from './shopifyGraphQLTransform'
-import { getLastShopifyOrderUpdateDate } from './shopifyStorage'
-import { saveProductsToStorage } from '@/lib/storage/productStorage'
-import { saveOrdersToStorage } from '@/lib/storage/orderStorage'
+import { OrderAPI } from '@/lib/api/orderApi'
+import { ProductAPI } from '@/lib/api/productApi'
 import { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
+import { assignWarehousesToOrders } from '@/lib/warehouse/warehouseAssignment'
 
 export interface ShopifyServiceConfig {
   shop: string
@@ -29,6 +29,7 @@ export class ShopifyService {
 
   /**
    * Sync orders from Shopify using GraphQL
+   * ✅ FIXED: Now assigns warehouses to orders before saving
    * ✅ NEW: Now supports incremental sync - only fetches orders modified since last sync
    * Automatically called on connection and can be triggered periodically
    */
@@ -36,12 +37,14 @@ export class ShopifyService {
     try {
       console.log('[Shopify Service] 🔥 Starting order sync with GraphQL...')
 
-      // ✅ NEW: Get last sync date for incremental sync
+      // ✅ UPDATED: Get last sync date for incremental sync
+      // TODO: Implement API endpoint to get last sync date
       let updatedAtMin: string | null = null;
       let isIncremental = false;
 
       if (!forceFullSync) {
-        updatedAtMin = getLastShopifyOrderUpdateDate(this.config.accountId, this.config.storeId);
+        // TODO: Call API to get last order update date
+        // updatedAtMin = await OrderAPI.getLastShopifyOrderUpdateDate(this.config.storeId);
 
         if (updatedAtMin) {
           isIncremental = true;
@@ -85,10 +88,20 @@ export class ShopifyService {
         endCursor = response.pageInfo.endCursor
       }
 
-      // Save all orders at once using centralized storage
+      // ✅ CRITICAL FIX: Assign warehouses to all orders BEFORE saving
       if (allOrders.length > 0) {
-        console.log(`[Shopify Service] 💾 Saving ${allOrders.length} orders to storage...`)
-        saveOrdersToStorage(allOrders, this.config.accountId)
+        console.log(`[Shopify Service] 🏭 Assigning warehouses to ${allOrders.length} orders...`)
+        allOrders = assignWarehousesToOrders(
+          allOrders,
+          this.config.storeId,
+          this.config.accountId
+        )
+        console.log('[Shopify Service] ✅ Warehouse assignment complete')
+
+        // ✅ UPDATED: Save all orders at once using API
+        console.log(`[Shopify Service] 💾 Saving ${allOrders.length} orders via API...`)
+        await OrderAPI.saveOrders(allOrders)
+        console.log('[Shopify Service] ✅ Orders saved')
       }
 
       const syncType = isIncremental ? 'Incremental sync' : 'Full sync';
@@ -143,10 +156,10 @@ export class ShopifyService {
         endCursor = response.pageInfo.endCursor
       }
 
-      // Save all products at once using centralized storage
+     // ✅ UPDATED: Save all products at once using API
       if (allProducts.length > 0) {
-        console.log(`[Shopify Service] 💾 Saving ${allProducts.length} products to storage...`)
-        saveProductsToStorage(allProducts, this.config.accountId)
+        console.log(`[Shopify Service] 💾 Saving ${allProducts.length} products via API...`)
+        await ProductAPI.saveProducts(allProducts)
       }
 
       console.log(`[Shopify Service] ✅ Synced ${allProducts.length} products`)
@@ -161,7 +174,7 @@ export class ShopifyService {
   /**
    * Sync both orders and products
    * This is called automatically on first connection
-   * ✅ NEW: Added forceFullSync parameter
+   * Added forceFullSync parameter
    */
   async syncAll(forceFullSync: boolean = false): Promise<{
     success: boolean
@@ -238,7 +251,7 @@ export class ShopifyService {
     } catch (error: any) {
       console.error('[Shopify Service] ❌ Connection test error:', error)
 
-      // ✅ NEW: Handle permission errors specifically
+      // Handle permission errors specifically
       if (error instanceof ShopifyPermissionError) {
         return {
           success: false,
@@ -255,28 +268,33 @@ export class ShopifyService {
 
   /**
    * Static helper: Get last sync time for an integration
+   * ✅ UPDATED: This should be retrieved from backend via API
+   * TODO: Implement API endpoint to get last sync time
    */
-  static getLastSyncTime(integrationId: string): Date | null {
-    if (typeof window === 'undefined') return null
+  static async getLastSyncTime(integrationId: string): Promise<Date | null> {
+    // TODO: Call API to get last sync time from database
+    // const syncInfo = await IntegrationAPI.getLastSyncTime(integrationId)
+    // return syncInfo?.lastSyncTime ? new Date(syncInfo.lastSyncTime) : null
 
-    const syncKey = `shopify_last_sync_${integrationId}`
-    const lastSync = localStorage.getItem(syncKey)
-    return lastSync ? new Date(lastSync) : null
+    console.warn('[Shopify Service] getLastSyncTime: TODO - implement API endpoint')
+    return null
   }
 
   /**
    * Static helper: Update last sync time for an integration
+   * ✅ UPDATED: This should be saved to backend via API
+   * TODO: Implement API endpoint to update last sync time
    */
-  static updateLastSyncTime(integrationId: string): void {
-    if (typeof window === 'undefined') return
+   static async updateLastSyncTime(integrationId: string): Promise<void> {
+     // TODO: Call API to update last sync time in database
+     // await IntegrationAPI.updateLastSyncTime(integrationId, new Date().toISOString())
 
-    const syncKey = `shopify_last_sync_${integrationId}`
-    localStorage.setItem(syncKey, new Date().toISOString())
-  }
+     console.log('[Shopify Service] ✅ Sync time would be updated in database (TODO: implement API endpoint)')
+   }
 
   /**
    * Static helper: Create service from integration
-   * ✅ FIXED: Warehouse must be passed from the store, not from integration
+   * Warehouse must be passed from the store, not from integration
    * Caller should get warehouse from store.warehouseConfig.defaultWarehouseId
    */
   static fromIntegration(
@@ -298,7 +316,7 @@ export class ShopifyService {
    * This method can be safely called from the client (browser)
    * Uses your existing API route at /api/integrations/shopify/sync
    * Returns the data for the client to save
-   * ✅ NEW: Added forceFullSync parameter
+   * Added forceFullSync parameter
    */
   static async syncViaAPI(
     shop: string,
@@ -324,7 +342,7 @@ export class ShopifyService {
           storeId,
           warehouseId,
           syncType, // Using 'syncType' to match your API
-          forceFullSync, // ✅ NEW: Pass forceFullSync flag to API
+          forceFullSync, // Pass forceFullSync flag to API
         }),
       })
 
@@ -345,7 +363,7 @@ export class ShopifyService {
   }
 
   /**
-   * ✅ NEW: CLIENT-SAFE: Test connection without doing a full sync
+   * CLIENT-SAFE: Test connection without doing a full sync
    * Use this before marking integration as "connected"
    * This method can be safely called from the client (browser)
    */
@@ -410,6 +428,7 @@ export class ShopifyService {
    * If sync fails, it will throw an error so the calling code can handle it appropriately
    * (e.g., show error to user, don't mark as connected)
    *
+   * ✅ FIXED: Now assigns warehouses to orders before saving
    * ✅ storeId comes from integration.storeId (no need for separate parameter)
    * @param integration - The Shopify integration config
    * @param warehouseId - Optional warehouse ID
@@ -428,7 +447,7 @@ export class ShopifyService {
     if (onProgress) onProgress('Testing connection to Shopify...')
 
     try {
-      // ✅ NEW: First, test the connection before attempting sync
+      // First, test the connection before attempting sync
       const testResult = await ShopifyService.testConnectionViaAPI(
         integration.config.storeUrl,
         integration.config.accessToken
@@ -449,7 +468,7 @@ export class ShopifyService {
         integration.storeId,
         warehouseId,
         'all', // Sync both orders and products
-        true // ✅ NEW: Force full sync on first connection
+        true // Force full sync on first connection
       )
 
       if (!result.success) {
@@ -458,24 +477,37 @@ export class ShopifyService {
       }
 
       if (result.data) {
-        console.log('[Shopify Service] 💾 Saving data to localStorage...')
+        console.log('[Shopify Service] 💾 Saving data via API...')
 
-        // ✅ FIXED: Save orders using proper storage (batch save)
+        // ✅ CRITICAL FIX: Assign warehouses to orders BEFORE saving
         if (result.data.orders && Array.isArray(result.data.orders) && result.data.orders.length > 0) {
-          console.log(`[Shopify Service] 💾 Saving ${result.data.orders.length} orders...`)
-          saveOrdersToStorage(result.data.orders, accountId)
-          console.log(`[Shopify Service] ✅ Saved ${result.data.orders.length} orders`)
+          console.log(`[Shopify Service] 🏭 Assigning warehouses to ${result.data.orders.length} orders...`)
+
+          const ordersWithWarehouses = assignWarehousesToOrders(
+            result.data.orders,
+            integration.storeId,
+            accountId
+          )
+
+          console.log('[Shopify Service] ✅ Warehouse assignment complete')
+          console.log(`[Shopify Service] 💾 Saving ${ordersWithWarehouses.length} orders via API...`)
+
+          // ✅ UPDATED: Save to database via API
+          await OrderAPI.saveOrders(ordersWithWarehouses)
+          console.log(`[Shopify Service] ✅ Saved ${ordersWithWarehouses.length} orders`)
         }
 
-        // ✅ FIXED: Save products using proper storage (batch save)
+        // Save products using API
         if (result.data.products && Array.isArray(result.data.products) && result.data.products.length > 0) {
-          console.log(`[Shopify Service] 💾 Saving ${result.data.products.length} products...`)
-          saveProductsToStorage(result.data.products, accountId)
+          console.log(`[Shopify Service] 💾 Saving ${result.data.products.length} products via API...`)
+
+          // ✅ UPDATED: Save to database via API
+          await ProductAPI.saveProducts(result.data.products)
           console.log(`[Shopify Service] ✅ Saved ${result.data.products.length} products`)
         }
 
         // Update last sync time
-        ShopifyService.updateLastSyncTime(integration.id)
+        await ShopifyService.updateLastSyncTime(integration.id)
 
         const syncType = result.isIncremental ? 'Updated' : 'Synced';
         const message = `✅ Synced ${result.orderCount || result.data.orders?.length || 0} orders and ${result.productCount || result.data.products?.length || 0} products`

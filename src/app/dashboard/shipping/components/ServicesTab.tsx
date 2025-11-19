@@ -2,19 +2,31 @@
 
 'use client'
 
+/**
+ * ServicesTab - Manages shipping services with API-BASED storage
+ *
+ * Architecture v2 (API-BASED):
+ * - All services stored in database via API
+ * - No localStorage for service data
+ * - Each warehouse has independent services
+ * - Services synced from carrier APIs (USPS, UPS, FedEx)
+ * - Uses IntegrationAPI wrapper for all API calls
+ */
+
 import { useState, useEffect } from 'react'
 import { CarrierService } from '../utils/shippingTypes'
 import { TruckIcon, CheckCircleIcon, XCircleIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import Notification from '../../shared/components/Notification'
 import { useNotification } from '../../shared/hooks/useNotification'
-import { getEnabledShippingCarriers, getUserUSPSCredentials, getUserUPSCredentials } from '@/lib/storage/integrationStorage'
 import { useWarehouses } from '../../warehouses/hooks/useWarehouses'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
 
 interface ServicesTabProps {
   selectedWarehouseId: string
+  accountId: string
 }
 
-export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
+export default function ServicesTab({ selectedWarehouseId, accountId }: ServicesTabProps) {
   const [services, setServices] = useState<CarrierService[]>([])
   const [filteredServices, setFilteredServices] = useState<CarrierService[]>([])
   const [selectedCarrier, setSelectedCarrier] = useState<'all' | 'USPS' | 'UPS' | 'FedEx'>('all')
@@ -23,105 +35,91 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
   const [enabledCarriers, setEnabledCarriers] = useState<string[]>([])
   const [isLoadingCarriers, setIsLoadingCarriers] = useState(true)
   const [syncing, setSyncing] = useState(false)
-
+  const [integrations, setIntegrations] = useState<any[]>([])
   const { notification, showSuccess, showError, closeNotification } = useNotification()
-
-  // Get all warehouses for syncing to multiple warehouses
   const { warehouses } = useWarehouses()
 
-  // Get the localStorage key for specific warehouse
-  const getStorageKey = (warehouseId: string) => {
-    return `shipping_services_${warehouseId}`
-  }
-
-  // Get enabled carriers
+  // Get enabled carriers from API
   useEffect(() => {
-    const carriers = getEnabledShippingCarriers()
-    setEnabledCarriers(carriers)
-    setIsLoadingCarriers(false)
-  }, [])
+    const fetchIntegrations = async () => {
+      try {
+        setIsLoadingCarriers(true)
+        const response = await fetch(`/api/integrations?type=shipping`, {
+          headers: {
+            'Authorization': `Bearer ${accountId}`
+          }
+        })
 
-  // Load services from localStorage (warehouse-specific) - NO DEFAULT INITIALIZATION
+        if (!response.ok) {
+          throw new Error('Failed to fetch integrations')
+        }
+
+        const data = await response.json()
+        setIntegrations(data.integrations || [])
+
+        const carriers = data.integrations
+          .filter((i: any) => i.type === 'shipping' && i.status === 'connected' && i.enabled)
+          .map((i: any) => i.name)
+
+        setEnabledCarriers(carriers)
+      } catch (error) {
+        console.error('[ServicesTab] Error fetching integrations:', error)
+        setEnabledCarriers([])
+      } finally {
+        setIsLoadingCarriers(false)
+      }
+    }
+
+    if (accountId) {
+      fetchIntegrations()
+    }
+  }, [accountId])
+
+  // Load services from API
   useEffect(() => {
     if (isLoadingCarriers || enabledCarriers.length === 0) return
 
     if (selectedWarehouseId === '') {
-      // "All Warehouses" view - merge services from all warehouses
       loadAllWarehousesServices()
     } else {
-      // Specific warehouse - load only that warehouse's services
       loadWarehouseServices(selectedWarehouseId)
     }
   }, [enabledCarriers, isLoadingCarriers, selectedWarehouseId, warehouses])
 
-  // Auto-sync check on load (24 hours)
-  useEffect(() => {
-    const checkAndAutoSync = async () => {
-      if (enabledCarriers.length === 0 || !selectedWarehouseId) return
+  const loadWarehouseServices = async (warehouseId: string) => {
+    const servicesFromAPI = await IntegrationAPI.getWarehouseServices(warehouseId)
+      .then(data => data.services || [])
 
-      const lastSyncKey = `services_last_sync_${selectedWarehouseId}`
-      const lastSync = localStorage.getItem(lastSyncKey)
-      const now = Date.now()
-      const oneDayMs = 24 * 60 * 60 * 1000 // 24 hours
+      const filtered = servicesFromAPI.filter((service: CarrierService) => {
+        return enabledCarriers.some(carrier => carrier === service.carrier.toUpperCase())
+      })
 
-      // Check if last sync was more than 24 hours ago
-      if (!lastSync || now - parseInt(lastSync) > oneDayMs) {
-        console.log('[Auto-Sync Services] Last sync was more than 24 hours ago, syncing...')
+      setServices(filtered)
 
-        // Auto-sync in background
-        try {
-          await handleSyncFromAPI()
-          localStorage.setItem(lastSyncKey, now.toString())
-        } catch (error) {
-          console.error('[Auto-Sync Services] Failed:', error)
-        }
+      if (filtered.length === 0) {
+        console.log(`[ServicesTab] No services found for warehouse ${warehouseId}. User must sync from API.`)
       }
     }
 
-    checkAndAutoSync()
-  }, [enabledCarriers, selectedWarehouseId])
-
-  const loadWarehouseServices = (warehouseId: string) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedServices = localStorage.getItem(storageKey)
-
-    if (savedServices) {
-      const parsed = JSON.parse(savedServices)
-      // Filter services to only show those for enabled carriers
-      const filtered = parsed.filter((service: CarrierService) => {
-        return enabledCarriers.some(carrier => carrier === service.carrier.toUpperCase())
-      })
-      setServices(filtered)
-    } else {
-      // No services found - user needs to sync from API
-      console.log(`[ServicesTab] No services found for warehouse ${warehouseId}. User must sync from API.`)
-      setServices([])
-    }
-  }
-
-  const loadAllWarehousesServices = () => {
-    // Merge services from all warehouses
+  const loadAllWarehousesServices = async () => {
     const serviceMap = new Map<string, CarrierService>()
     let hasAnyServices = false
 
-    warehouses.forEach(warehouse => {
-      const storageKey = getStorageKey(warehouse.id)
-      const savedServices = localStorage.getItem(storageKey)
+    for (const warehouse of warehouses) {
+      const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
+        .then(data => data.services || [])
 
-      if (savedServices) {
+      if (warehouseServices.length > 0) {
         hasAnyServices = true
-        const parsed = JSON.parse(savedServices) as CarrierService[]
 
-        parsed.forEach(service => {
-          // Use a unique key based on carrier and service code
+        warehouseServices.forEach(service => {
           const serviceKey = `${service.carrier}-${service.serviceCode}`
-
           if (!serviceMap.has(serviceKey)) {
             serviceMap.set(serviceKey, service)
           }
         })
       }
-    })
+    }
 
     if (!hasAnyServices) {
       console.log(`[ServicesTab] No services found in any warehouse. User must sync from API.`)
@@ -130,8 +128,6 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
     }
 
     const merged = Array.from(serviceMap.values())
-
-    // Filter services to only show those for enabled carriers
     const filtered = merged.filter((service: CarrierService) => {
       return enabledCarriers.some(carrier => carrier === service.carrier.toUpperCase())
     })
@@ -143,39 +139,42 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
   const handleSyncFromAPI = async () => {
     setSyncing(true)
     try {
-      // Gather credentials for all enabled carriers
       const allCredentials: any = {}
 
       if (enabledCarriers.includes('USPS')) {
-        const uspsCredentials = getUserUSPSCredentials()
-        if (uspsCredentials) {
-          allCredentials.usps = uspsCredentials
+        const uspsIntegration = integrations.find((i: any) => i.name === 'USPS')
+        if (uspsIntegration && uspsIntegration.config) {
+          allCredentials.usps = {
+            consumerKey: uspsIntegration.config.consumerKey,
+            consumerSecret: uspsIntegration.config.consumerSecret,
+            accessToken: uspsIntegration.config.accessToken,
+            environment: uspsIntegration.config.environment || 'sandbox'
+          }
         } else {
-          showError('USPS credentials not found', 'Please configure USPS in Integrations.')
+          showError('USPS Credentials Missing', 'Please configure USPS in Integrations.')
           setSyncing(false)
           return
         }
       }
 
       if (enabledCarriers.includes('UPS')) {
-        const upsCredentials = getUserUPSCredentials()
-        if (upsCredentials) {
-          allCredentials.ups = upsCredentials
+        const upsIntegration = integrations.find((i: any) => i.name === 'UPS')
+        if (upsIntegration && upsIntegration.config) {
+          allCredentials.ups = {
+            accountNumber: upsIntegration.config.accountNumber,
+            accessToken: upsIntegration.config.accessToken,
+            refreshToken: upsIntegration.config.refreshToken,
+            environment: upsIntegration.config.environment || 'sandbox'
+          }
         } else {
-          showError('UPS credentials not found', 'Please configure UPS in Integrations.')
+          showError('UPS Credentials Missing', 'Please configure UPS in Integrations.')
           setSyncing(false)
           return
         }
       }
 
-      // Determine which warehouses to sync
-      const warehousesToSync = selectedWarehouseId === ''
-        ? warehouses.map(w => w.id)
-        : [selectedWarehouseId]
+      console.log('[ServicesTab] Starting sync...')
 
-      console.log('[ServicesTab] Syncing services for warehouses:', warehousesToSync)
-
-      // Call API to get available services from carrier
       const response = await fetch('/api/shipping/services/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,130 +186,105 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
 
       if (response.ok) {
         const data = await response.json()
-        console.log('[ServicesTab] API Response:', data)
-
         const apiServices = data.services || []
 
-        if (apiServices.length === 0) {
-          showError('No services found', 'No services were returned from the API.')
-          setSyncing(false)
-          return
-        }
+        console.log('[ServicesTab] Sync response:', apiServices.length, 'services')
 
-        // Save services to each warehouse
-        warehousesToSync.forEach(warehouseId => {
-          const storageKey = getStorageKey(warehouseId)
-          const existingServices = localStorage.getItem(storageKey)
-
-          let mergedServices: CarrierService[]
-
-          if (existingServices) {
-            // Merge with existing services, preserving user preferences
-            const existing = JSON.parse(existingServices) as CarrierService[]
-            mergedServices = smartMergeServices(existing, apiServices)
-          } else {
-            // No existing services, use API services as-is
-            mergedServices = apiServices
-          }
-
-          localStorage.setItem(storageKey, JSON.stringify(mergedServices))
-
-          // Update last sync timestamp
-          const lastSyncKey = `services_last_sync_${warehouseId}`
-          localStorage.setItem(lastSyncKey, Date.now().toString())
-
-          console.log(`[ServicesTab] Saved ${mergedServices.length} services to warehouse ${warehouseId}`)
-        })
-
-        // Reload services for current view
         if (selectedWarehouseId === '') {
-          loadAllWarehousesServices()
+          for (const warehouse of warehouses) {
+            await syncWarehouseServices(warehouse.id, apiServices)
+          }
         } else {
-          loadWarehouseServices(selectedWarehouseId)
+          await syncWarehouseServices(selectedWarehouseId, apiServices)
         }
 
-        const warehouseText = warehousesToSync.length === 1 ? 'warehouse' : `${warehousesToSync.length} warehouses`
         showSuccess(
-          'Services synced successfully',
-          `Synced ${apiServices.length} services to ${warehouseText}`
+          'Sync Successful',
+          `Synced ${apiServices.length} services`
         )
+
+        setTimeout(() => {
+          if (selectedWarehouseId === '') {
+            loadAllWarehousesServices()
+          } else {
+            loadWarehouseServices(selectedWarehouseId)
+          }
+          setSyncing(false)
+        }, 100)
       } else {
         const error = await response.json()
-        showError('Sync failed', error.error || 'Unknown error occurred')
+        showError('Sync Failed', error.error || 'Unknown error occurred')
+        setSyncing(false)
       }
     } catch (error: any) {
       console.error('[ServicesTab] Sync error:', error)
-      showError('Sync failed', 'Failed to sync services. Check console for details.')
-    } finally {
+      showError('Sync Failed', 'Failed to sync services. Check console for details.')
       setSyncing(false)
     }
   }
 
-  // Smart merge function - preserves user's active/inactive preferences
+  const syncWarehouseServices = async (warehouseId: string, apiServices: any[]) => {
+    const existingServices = await IntegrationAPI.getWarehouseServices(warehouseId)
+      .then(data => data.services || [])
+
+    const mergedServices = smartMergeServices(existingServices, apiServices)
+    await IntegrationAPI.saveWarehouseServices(warehouseId, mergedServices)
+
+    console.log(`[ServicesTab] Synced ${mergedServices.length} services to warehouse ${warehouseId}`)
+  }
+
   const smartMergeServices = (existingServices: CarrierService[], apiServices: any[]): CarrierService[] => {
     const merged: CarrierService[] = []
 
-    // Process API services first
     apiServices.forEach(apiService => {
-      // Find if this service already exists
       const existing = existingServices.find(service =>
         service.carrier === apiService.carrier &&
         service.serviceCode === apiService.serviceCode
       )
 
       if (existing) {
-        // Service exists - preserve user's isActive preference
-        console.log(`[ServicesTab] Updating existing service: ${existing.serviceName}`)
         merged.push({
           ...apiService,
-          id: existing.id, // Keep the same ID
-          isActive: existing.isActive, // Preserve active state
-          createdAt: existing.createdAt, // Preserve creation date
+          id: existing.id,
+          isActive: existing.isActive,
+          createdAt: existing.createdAt,
           updatedAt: new Date().toISOString()
         })
       } else {
-        // New service from API - add it
-        console.log(`[ServicesTab] Adding new service: ${apiService.serviceName}`)
         merged.push(apiService)
       }
     })
 
-    // Keep legacy carrier services that are no longer in API
     const existingCarrierServices = existingServices.filter(service =>
       !merged.some(m => m.carrier === service.carrier && m.serviceCode === service.serviceCode)
     )
 
     existingCarrierServices.forEach(service => {
-      console.log(`[ServicesTab] Keeping legacy service: ${service.serviceName}`)
       merged.push(service)
     })
 
     return merged
   }
 
-  // Get service state across all warehouses
-  const getServiceStateAcrossWarehouses = (service: CarrierService) => {
+  const getServiceStateAcrossWarehouses = async (service: CarrierService) => {
     const states: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
 
-    warehouses.forEach(warehouse => {
-      const storageKey = getStorageKey(warehouse.id)
-      const savedServices = localStorage.getItem(storageKey)
+    for (const warehouse of warehouses) {
+      const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
+        .then(data => data.services || [])
 
-      if (savedServices) {
-        const warehouseServices: CarrierService[] = JSON.parse(savedServices)
-        const matchingService = warehouseServices.find(s =>
-          s.carrier === service.carrier && s.serviceCode === service.serviceCode
-        )
+      const matchingService = warehouseServices.find(s =>
+        s.carrier === service.carrier && s.serviceCode === service.serviceCode
+      )
 
-        if (matchingService) {
-          states.push({
-            warehouseId: warehouse.id,
-            warehouseName: warehouse.name,
-            isActive: matchingService.isActive
-          })
-        }
+      if (matchingService) {
+        states.push({
+          warehouseId: warehouse.id,
+          warehouseName: warehouse.name,
+          isActive: matchingService.isActive
+        })
       }
-    })
+    }
 
     return states
   }
@@ -319,7 +293,6 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
   useEffect(() => {
     let filtered = services
 
-    // Carrier filter
     if (selectedCarrier !== 'all') {
       filtered = filtered.filter(service => service.carrier === selectedCarrier)
     }
@@ -348,47 +321,39 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
     setFilteredServices(filtered)
   }, [services, selectedCarrier, selectedType, searchTerm])
 
-  const handleToggleActive = (id: string) => {
+  const handleToggleActive = async (id: string) => {
     const service = services.find(s => s.id === id)
     if (!service) return
 
     if (selectedWarehouseId === '') {
-      // All Warehouses View - toggle in all warehouses
-      const serviceKey = `${service.carrier}-${service.serviceCode}`
+      const  anyEnabled = false
+      for (const warehouse of warehouses) {
+        const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
+          .then(data => data.services || [])
 
-      // Check current state across all warehouses
-      let anyEnabled = false
-      warehouses.forEach(warehouse => {
-        const storageKey = getStorageKey(warehouse.id)
-        const savedServices = localStorage.getItem(storageKey)
-        if (savedServices) {
-          const warehouseServices: CarrierService[] = JSON.parse(savedServices)
-          const matchingService = warehouseServices.find(s =>
-            s.carrier === service.carrier && s.serviceCode === service.serviceCode
-          )
-          if (matchingService?.isActive) {
-            anyEnabled = true
-          }
+        const matchingService = warehouseServices.find(s =>
+          s.carrier === service.carrier && s.serviceCode === service.serviceCode
+        )
+        if (matchingService?.isActive) {
+          break
         }
-      })
+      }
 
       // Toggle to opposite state in all warehouses
       const newState = !anyEnabled
-      warehouses.forEach(warehouse => {
-        toggleServiceInWarehouse(warehouse.id, service, newState)
-      })
-      loadAllWarehousesServices()
+      for (const warehouse of warehouses) {
+        await toggleServiceInWarehouse(warehouse.id, service, newState)
+      }
+      await loadAllWarehousesServices()
     } else {
-      // Single warehouse - normal toggle
-      toggleServiceInWarehouse(selectedWarehouseId, service)
-      loadWarehouseServices(selectedWarehouseId)
+      await toggleServiceInWarehouse(selectedWarehouseId, service)
+      await loadWarehouseServices(selectedWarehouseId)
     }
   }
 
-  const toggleServiceInWarehouse = (warehouseId: string, targetService: CarrierService, forceState?: boolean) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedServices = localStorage.getItem(storageKey)
-    const warehouseServices: CarrierService[] = savedServices ? JSON.parse(savedServices) : []
+  const toggleServiceInWarehouse = async (warehouseId: string, targetService: CarrierService, forceState?: boolean) => {
+    const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouseId)
+      .then(data => data.services || [])
 
     const updatedServices = warehouseServices.map(service => {
       const isMatch = service.carrier === targetService.carrier &&
@@ -403,7 +368,7 @@ export default function ServicesTab({ selectedWarehouseId }: ServicesTabProps) {
       return service
     })
 
-    localStorage.setItem(storageKey, JSON.stringify(updatedServices))
+    await IntegrationAPI.saveWarehouseServices(warehouseId, updatedServices)
     console.log(`[Toggle] Updated service in warehouse ${warehouseId}`)
   }
 

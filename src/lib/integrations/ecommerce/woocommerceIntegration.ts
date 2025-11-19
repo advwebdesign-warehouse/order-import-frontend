@@ -1,14 +1,14 @@
 //file path: src/lib/integrations/ecommerce/woocommerceIntegration.ts
 
-import { EcommerceIntegration, IntegrationConfig, SyncResult, TestConnectionResult } from '../base/baseIntegration'
+import { EcommerceIntegrationService, IntegrationConfig, SyncResult, TestConnectionResult } from '../base/baseIntegration'
 
 /**
  * WooCommerce Integration Implementation
- * Extends EcommerceIntegration base class
+ * Extends EcommerceIntegrationService base class
  *
  * TODO: Implement WooCommerce REST API integration
  */
-export class WooCommerceIntegration extends EcommerceIntegration {
+export class WooCommerceIntegration extends EcommerceIntegrationService {
 
   constructor(config: IntegrationConfig) {
     super(config)

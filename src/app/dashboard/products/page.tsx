@@ -3,6 +3,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useCurrentAccountId } from '@/hooks/useAccountInitialization'
 import ProductsToolbar from './components/ProductsToolbar'
 import ProductsFilters from './components/ProductsFilters'
 import ProductsTable from './components/ProductsTable'
@@ -20,12 +21,12 @@ import { ColumnConfig } from '../shared/components/ColumnSettings'
 import { usePagination } from '../shared/hooks/usePagination'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
 import { useSettings } from '../shared/hooks/useSettings'
+import { withAuth } from '../shared/components/withAuth'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
 
 // Utils
-import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { exportToCSV, ExportableItem } from '../shared/utils/csvExporter'
 import { getProductWarehouseNames } from './utils/productUtils'
 
@@ -119,12 +120,10 @@ const exportProductsToCSV = (
   exportToCSV(products, filteredColumns, filename)
 }
 
-export default function ProductsPage() {
+// ✅ Separate component that receives guaranteed valid accountId
+function ProductsPageContent({ accountId }: { accountId: string }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
-
-  // Get account ID
-  const accountId = getCurrentAccountId()
 
   // Get settings for stock management
   const { settings } = useSettings()
@@ -141,7 +140,7 @@ export default function ProductsPage() {
     hasIntegrations,
     integrationCount,
     getSyncStats
-  } = useProductSync(accountId)
+  } = useProductSync(accountId, []) // accountId is guaranteed to be valid here
 
   // Get sync stats
   const [syncStats, setSyncStats] = useState(() => getSyncStats())
@@ -616,3 +615,4 @@ export default function ProductsPage() {
     </div>
   )
 }
+export default withAuth(ProductsPageContent)

@@ -1,12 +1,11 @@
 //file path: app/dashboard/products/hooks/useProductSync.ts
 
 import { useState, useCallback, useEffect } from 'react'
-import { getAccountIntegrations, getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { isEcommerceIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 import type { Integration } from '@/app/dashboard/integrations/types/integrationTypes'
-import { getProductsFromStorage } from '@/lib/storage/productStorage'
+import { useProducts } from './useProducts'
 import { IntegrationFactory } from '@/lib/integrations/integrationFactory'
-import { EcommerceIntegration } from '@/lib/integrations/base/baseIntegration'
+import { EcommerceIntegrationService  } from '@/lib/integrations/base/baseIntegration'
 
 interface SyncProgress {
   integration: string
@@ -16,23 +15,22 @@ interface SyncProgress {
   message?: string
 }
 
-export function useProductSync(accountId?: string) {
-  const aid = accountId || getCurrentAccountId()
+export function useProductSync(accountId: string, integrations: Integration[]) {
   const [syncing, setSyncing] = useState(false)
   const [progress, setProgress] = useState<Record<string, SyncProgress>>({})
   const [error, setError] = useState<string | null>(null)
   const [ecommerceIntegrations, setEcommerceIntegrations] = useState<Integration[]>([])
 
-  // Load connected ecommerce integrations
+  // Load products from API
+  const { products: allProducts } = useProducts()
+
+  // Filter to connected ecommerce integrations
   useEffect(() => {
-    const integrations = getAccountIntegrations(aid)
-    if (integrations) {
-      const ecommerce = integrations.integrations.filter(i =>
-        isEcommerceIntegration(i) && i.status === 'connected' && i.enabled
-      )
-      setEcommerceIntegrations(ecommerce)
-    }
-  }, [aid])
+    const ecommerce = integrations.filter(i =>
+      isEcommerceIntegration(i) && i.status === 'connected' && i.enabled
+    )
+    setEcommerceIntegrations(ecommerce)
+  }, [integrations])
 
   /**
    * Generic sync using factory pattern
@@ -45,7 +43,7 @@ export function useProductSync(accountId?: string) {
       // Create integration instance using factory
       const integration = IntegrationFactory.create({
         ...integrationData,
-        accountId: aid
+        accountId: accountId
       })
 
       if (!integration) {
@@ -57,7 +55,7 @@ export function useProductSync(accountId?: string) {
       }
 
       // Verify it's an e-commerce integration
-      if (!(integration instanceof EcommerceIntegration)) {
+      if (!(integration instanceof EcommerceIntegrationService)) {
         return {
           success: false,
           count: 0,
@@ -180,7 +178,7 @@ export function useProductSync(accountId?: string) {
       totalCount,
       errors: errors.length > 0 ? errors : undefined
     }
-  }, [ecommerceIntegrations, aid])
+  }, [ecommerceIntegrations, accountId])
 
   /**
    * Sync products from a specific integration
@@ -224,13 +222,14 @@ export function useProductSync(accountId?: string) {
     }
 
     return result
-  }, [ecommerceIntegrations, aid])
+  }, [ecommerceIntegrations, accountId])
 
   /**
    * Get sync statistics
    */
   const getSyncStats = useCallback(() => {
-    const allProducts = getProductsFromStorage(aid)
+    // Use products from useProducts hook
+    // allProducts is already available from the hook above
 
     // Count by platform
     const byPlatform: Record<string, number> = {}
@@ -263,7 +262,7 @@ export function useProductSync(accountId?: string) {
       byStore,
       lastSyncDate
     }
-  }, [aid])
+  }, [allProducts])
 
   return {
     syncProducts,

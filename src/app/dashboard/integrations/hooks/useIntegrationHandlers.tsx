@@ -3,13 +3,14 @@
 'use client'
 
 import { IntegrationFactory } from '@/lib/integrations/integrationFactory'
-import { ShopifyIntegration, USPSIntegration, UPSIntegration } from '../types/integrationTypes'
-import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
+import { Integration, ShopifyIntegration, USPSIntegration, UPSIntegration } from '../types/integrationTypes'
 
+// ✅ FIXED: Updated interface with proper Integration import
 interface UseIntegrationHandlersProps {
-  settings: any
+  accountId: string
+  integrations: Integration[]
   selectedStoreId: string
-  updateIntegration: (id: string, data: any) => void
+  updateIntegration: (id: string, data: Partial<Integration>) => void
   addIntegration: (integration: any) => void
   setNotification: (notification: any) => void
   setShowShopifyModal: (show: boolean) => void
@@ -18,7 +19,8 @@ interface UseIntegrationHandlersProps {
 }
 
 export function useIntegrationHandlers({
-  settings,
+  accountId,
+  integrations,
   selectedStoreId,
   updateIntegration,
   addIntegration,
@@ -27,9 +29,6 @@ export function useIntegrationHandlers({
   setShowUspsModal,
   setShowUpsModal
 }: UseIntegrationHandlersProps) {
-
-  // ✅ NEW: Get accountId from storage at the top of the hook
-  const accountId = getCurrentAccountId()
 
   /**
    * Generic save handler using factory pattern
@@ -42,8 +41,9 @@ export function useIntegrationHandlers({
   ) => {
     const timestamp = Date.now()
 
-    const existingIntegration = settings.integrations.find(
-      (i: any) => i.name === integrationName && i.storeId === selectedStoreId
+    // Use integrations array directly
+    const existingIntegration = integrations.find(
+      (i: Integration) => i.name === integrationName && i.storeId === selectedStoreId
     )
 
     const isDisconnecting = data.status === 'disconnected'
@@ -65,7 +65,7 @@ export function useIntegrationHandlers({
               }
               return acc
             }, {} as Record<string, any>)
-          }
+          } as any // ✅ Type assertion to handle dynamic config clearing
         })
       } else {
         // For normal updates

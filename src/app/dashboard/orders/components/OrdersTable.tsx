@@ -41,7 +41,7 @@ import {
 import EditableStatusCell from './EditableStatusCell'
 import { ORDER_STATUS_OPTIONS, FULFILLMENT_STATUS_OPTIONS } from '../constants/statusOptions'
 import { convertTailwindToHex } from '../../shared/utils/colorUtils'
-import { getStoresFromStorage } from '../../stores/utils/storeStorage'
+import { useStores } from '../../stores/hooks/useStores'
 import { getStoreName, getWarehouseName } from '../utils/warehouseUtils'
 import { useWarehouses } from '../../warehouses/context/WarehouseContext'
 
@@ -76,7 +76,7 @@ interface OrdersTableProps {
   onViewOrder: (order: Order) => void
   onPrintPackingSlip: (order: Order) => void
   onPrintPickingList?: (order: Order) => void
-  onShipOrder?: (order: Order) => void  // ✅ ADD THIS
+  onShipOrder?: (order: Order) => void
   onColumnVisibilityChange?: (columnId: string, visible: boolean) => void
   onColumnReorder?: (columns: ColumnConfig[]) => void
   onUpdateStatus?: (orderId: string, newStatus: string) => Promise<void>
@@ -144,16 +144,11 @@ export default function OrdersTable({
   onUpdateFulfillmentStatus,
   fulfillmentStatusOptions
 }: OrdersTableProps) {
-  // Load stores from storage for store name resolution
-  const [stores, setStores] = useState<any[]>([])
+  // Load stores from API for store name resolution
+  const { stores } = useStores()
 
   // Get warehouses from context for warehouse name resolution
   const { warehouses } = useWarehouses()
-
-  useEffect(() => {
-    const loadedStores = getStoresFromStorage()
-    setStores(loadedStores)
-  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor),

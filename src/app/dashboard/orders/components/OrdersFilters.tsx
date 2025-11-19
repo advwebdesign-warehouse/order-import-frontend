@@ -8,7 +8,7 @@ import { ChevronUpDownIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, FunnelIco
 import { FilterState, Order } from '../utils/orderTypes'
 import { FILTER_OPTIONS } from '../constants/orderConstants'
 import { useWarehouses } from '../../warehouses/context/WarehouseContext'
-import { getStoresFromStorage } from '../../stores/utils/storeStorage'
+import { useStores } from '../../stores/hooks/useStores'
 import { getStoreName } from '../utils/warehouseUtils'
 import ScreenOptions from '../../shared/components/ScreenOptions'
 import { ColumnConfig } from '../../shared/components/ColumnSettings'
@@ -58,13 +58,8 @@ export default function OrdersFilters({
 }: OrdersFiltersProps) {
   const { warehouses } = useWarehouses()
 
-  // Load stores from storage
-  const [stores, setStores] = useState<any[]>([])
-
-  useEffect(() => {
-    const loadedStores = getStoresFromStorage()
-    setStores(loadedStores)
-  }, [])
+  // Load stores from API
+  const { stores } = useStores()
 
   // NEW: Dynamically generate store options from orders
   const storeOptions = useMemo(() => {

@@ -1,15 +1,16 @@
 // File: app/dashboard/orders/hooks/useOrderFilters.ts
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback  } from 'react'
 import { Order, FilterState } from '../utils/orderTypes'
 import { DEFAULT_FILTERS } from '../constants/orderConstants'
-import { getUserId, generateStorageKeys } from '../utils/orderUtils'
-import { getStoresFromStorage } from '@/app/dashboard/stores/utils/storeStorage'
+import { useStores } from '@/app/dashboard/stores/hooks/useStores'
 import { getStoreName, getWarehouseName } from '../utils/warehouseUtils'
 import { useWarehouses } from '@/app/dashboard/warehouses/context/WarehouseContext'
+import { useUserPreferences } from '@/hooks/useUserPreferences'
 
 // Default filters with Processing, Shipped, and Delivered pre-selected
 const DEFAULT_FILTERS_WITH_PRESETS: FilterState = {
+  ...DEFAULT_FILTERS,  // ✅ Uses constant from orderConstants
   status: ['PROCESSING'], // Processing status
   fulfillmentStatus: ['SHIPPED', 'DELIVERED'], // Shipped and Delivered fulfillment statuses
   platform: [],
@@ -36,90 +37,58 @@ const validateFilterState = (filters: any): FilterState => {
 
 export function useOrderFilters(orders: Order[]) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFiltersInternal] = useState<FilterState>(() => validateFilterState(DEFAULT_FILTERS_WITH_PRESETS))
-  const [initialized, setInitialized] = useState(false)
+  const [filters, setFiltersInternal] = useState<FilterState>(() =>
+    validateFilterState(DEFAULT_FILTERS_WITH_PRESETS)
+  )
+
+  // ✅ NEW: Use backend preferences instead of localStorage
+  const {
+    preferences,
+    updateField,
+    loading: preferencesLoading
+  } = useUserPreferences()
 
   // Load stores and warehouses for name resolution in search
-  const [stores, setStores] = useState<any[]>([])
+  const { stores } = useStores()
   const { warehouses } = useWarehouses()
 
-  const userId = getUserId()
-  const storageKeys = generateStorageKeys(userId)
-
-  // Load stores from storage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const loadedStores = getStoresFromStorage()
-      setStores(loadedStores)
-    }
-  }, [])
-
   // Safe setter that validates filter state
-  const setFilters = (newFilters: FilterState | ((prev: FilterState) => FilterState)) => {
+  const setFilters = useCallback((newFilters: FilterState | ((prev: FilterState) => FilterState)) => {
     setFiltersInternal(prev => {
       const updatedFilters = typeof newFilters === 'function' ? newFilters(prev) : newFilters
-      return validateFilterState(updatedFilters)
+      const validated = validateFilterState(updatedFilters)
+
+      // ✅ Save to backend (async, non-blocking)
+      updateField('orderFilters', validated).catch(err => {
+        console.error('[useOrderFilters] Error saving filters:', err)
+      })
+
+      return validated
     })
-  }
+  }, [updateField])
 
-  // Load saved filter settings on mount
+  const showFilters = preferences?.showOrderFilters ?? false
+
+  const setShowFilters = useCallback((show: boolean | ((prev: boolean) => boolean)) => {
+    // ✅ Get current value from preferences directly
+    const currentValue = preferences?.showOrderFilters ?? false
+    const newValue = typeof show === 'function' ? show(currentValue) : show
+    // ...
+  }, [preferences, updateField])
+
+  // ✅ Load saved filter settings from backend preferences on mount
   useEffect(() => {
-    // Only run on client side
-    if (typeof window === 'undefined') {
-      setInitialized(true)
-      return
-    }
-
-    try {
-      const savedFilters = localStorage.getItem(storageKeys.filters)
-      const savedShowFilters = localStorage.getItem(storageKeys.showFilters)
-
-      if (savedFilters) {
-        const parsedFilters = JSON.parse(savedFilters)
-        // Use the validation helper to ensure proper structure
-        const validatedFilters = validateFilterState({
-          ...DEFAULT_FILTERS_WITH_PRESETS,
-          ...parsedFilters
-        })
+    if (!preferencesLoading && preferences) {
+      // Load filters from backend
+      if (preferences.orderFilters) {
+        const validatedFilters = validateFilterState(preferences.orderFilters)
         setFiltersInternal(validatedFilters)
       } else {
-        // Use defaults with presets when no saved filters exist
+        // Use defaults if no saved filters
         setFiltersInternal(validateFilterState(DEFAULT_FILTERS_WITH_PRESETS))
       }
-
-      if (savedShowFilters) {
-        setShowFilters(JSON.parse(savedShowFilters))
-      }
-    } catch (error) {
-      console.error('Error loading filter settings:', error)
-      // Reset to safe defaults on error
-      setFiltersInternal(validateFilterState(DEFAULT_FILTERS_WITH_PRESETS))
-    } finally {
-      setInitialized(true)
     }
-  }, [storageKeys.filters, storageKeys.showFilters])
-
-  // Save filter settings when they change
-  useEffect(() => {
-    if (initialized && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(storageKeys.filters, JSON.stringify(filters))
-      } catch (error) {
-        console.error('Error saving filter settings:', error)
-      }
-    }
-  }, [filters, initialized, storageKeys.filters])
-
-  useEffect(() => {
-    if (initialized && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(storageKeys.showFilters, JSON.stringify(showFilters))
-      } catch (error) {
-        console.error('Error saving show filters setting:', error)
-      }
-    }
-  }, [showFilters, initialized, storageKeys.showFilters])
+  }, [preferencesLoading, preferences])
 
   // Filter orders based on current filters and search term
   const filteredOrders = useMemo(() => {
@@ -248,7 +217,7 @@ export function useOrderFilters(orders: Order[]) {
 
       return true
     })
-  }, [orders, searchTerm, filters])
+  }, [orders, searchTerm, filters, stores, warehouses])
 
   return {
     searchTerm,
@@ -257,6 +226,7 @@ export function useOrderFilters(orders: Order[]) {
     setShowFilters,
     filters: validateFilterState(filters), // Always return validated filters
     setFilters, // Use the safe setter
-    filteredOrders
+    filteredOrders,
+    preferencesLoading
   }
 }

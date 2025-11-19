@@ -2,15 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Product } from '../utils/productTypes'
-import {
-  getProductsFromStorage,
-  getProductsByWarehouse,
-  getProductsByPlatform,
-  getProductsByStore,
-  getProductsByIntegration,
-  getProductIntegrationDetails
-} from '@/lib/storage/productStorage'
-import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
+import { ProductAPI } from '@/lib/api/productApi'
 
 export function useProducts(warehouseId?: string) {
   const [products, setProducts] = useState<Product[]>([])
@@ -29,21 +21,22 @@ export function useProducts(warehouseId?: string) {
       return // Skip during SSR
     }
 
-    console.log('[useProducts] 🔄 Loading products...')
-    setLoading(true)
+    const fetchProducts = async () => {
+      console.log('[useProducts] 🔄 Loading products from API...')
+      setLoading(true)
 
     try {
-      const accountId = getCurrentAccountId()
-      console.log('[useProducts] 📋 Account ID:', accountId)
+      // ✅ UPDATED: Fetch from API (accountId handled by backend via auth token)
+      const productsData = await ProductAPI.getProducts()
 
-      let filteredProducts: Product[]
+      let filteredProducts = productsData
 
+      // Client-side filter by warehouse if needed
       if (warehouseId) {
         console.log('[useProducts] 🏭 Filtering by warehouse:', warehouseId)
-        filteredProducts = getProductsByWarehouse(warehouseId, accountId)
-      } else {
-        console.log('[useProducts] 📦 Loading all products')
-        filteredProducts = getProductsFromStorage(accountId)
+        filteredProducts = productsData.filter((product: Product) =>
+          product.warehouseStock?.some(stock => stock.warehouseId === warehouseId)
+        )
       }
 
       console.log('[useProducts] ✅ Loaded products:', filteredProducts.length)
@@ -55,9 +48,12 @@ export function useProducts(warehouseId?: string) {
     } finally {
       setLoading(false)
     }
-  }, [mounted, warehouseId]) // ✅ Re-run when mounted or warehouse changes
+  }
 
-  const refetchProducts = () => {
+  fetchProducts()
+}, [mounted, warehouseId]) // ✅ Re-run when mounted or warehouse changes
+
+  const refetchProducts = async () => {
     if (!mounted) {
       console.warn('[useProducts] ⚠️ Cannot refetch - not mounted yet')
       return
@@ -67,16 +63,16 @@ export function useProducts(warehouseId?: string) {
     setLoading(true)
 
     try {
-      const accountId = getCurrentAccountId()
+      // ✅ UPDATED: Fetch from API
+      const productsData = await ProductAPI.getProducts()
 
-      let filteredProducts: Product[]
+      let filteredProducts = productsData
 
+      // Client-side filter by warehouse if needed
       if (warehouseId) {
-        // Filter by warehouse (checks warehouseStock array)
-        filteredProducts = getProductsByWarehouse(warehouseId, accountId)
-      } else {
-        // Get all products
-        filteredProducts = getProductsFromStorage(accountId)
+        filteredProducts = productsData.filter((product: Product) =>
+          product.warehouseStock?.some(stock => stock.warehouseId === warehouseId)
+        )
       }
 
       console.log('[useProducts] ✅ Refetched products:', filteredProducts.length)
@@ -94,10 +90,11 @@ export function useProducts(warehouseId?: string) {
    * Get products by warehouse ID
    * Checks the warehouseStock array to see if product exists in that warehouse
    */
-  const getProductsByWarehouseId = (targetWarehouseId: string): Product[] => {
-    const accountId = getCurrentAccountId()
-    return getProductsByWarehouse(targetWarehouseId, accountId)
-  }
+   const getProductsByWarehouseId = (targetWarehouseId: string): Product[] => {
+     return products.filter((product: Product) =>
+       product.warehouseStock?.some(stock => stock.warehouseId === targetWarehouseId)
+     )
+   }
 
   /**
    * Get warehouse stock for a specific product and warehouse
@@ -109,36 +106,36 @@ export function useProducts(warehouseId?: string) {
 
   /**
    * Get products by platform name (e.g., 'Shopify', 'WooCommerce')
-   * Looks up integrations to find matching platform
+   * Uses product storeId and integration data
    */
   const getProductsByPlatformName = (platform: string): Product[] => {
-    const accountId = getCurrentAccountId()
-    return getProductsByPlatform(platform, accountId)
+    // This would need integration data - for now, filter by product platform if available
+    return products.filter(product => product.platform === platform)
   }
 
   /**
    * Get products by store ID
-   * Looks up integrations to find matching store
    */
   const getProductsByStoreId = (storeId: string): Product[] => {
-    const accountId = getCurrentAccountId()
-    return getProductsByStore(storeId, accountId)
+    return products.filter(product => product.storeId === storeId)
   }
 
   /**
    * Get products by integration ID
    */
   const getProductsByIntegrationId = (integrationId: string): Product[] => {
-    const accountId = getCurrentAccountId()
-    return getProductsByIntegration(integrationId, accountId)
+    return products.filter(product => product.integrationId === integrationId)
   }
 
   /**
    * Get integration details for a product (platform, store, etc.)
    */
   const getIntegrationDetails = (product: Product) => {
-    const accountId = getCurrentAccountId()
-    return getProductIntegrationDetails(product, accountId)
+    return {
+      platform: product.platform,
+      storeId: product.storeId,
+      integrationId: product.integrationId
+    }
   }
 
   /**

@@ -5,8 +5,10 @@
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, InformationCircleIcon, ChevronDownIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
-import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { USPSIntegration, Environment } from '../types/integrationTypes'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
+import { WarehouseAPI } from '@/lib/api/warehouseApi'
+import Notification, { NotificationType } from '@/app/dashboard/shared/components/Notification'
 
 interface USPSConfigModalProps {
   isOpen: boolean
@@ -43,6 +45,26 @@ export default function USPSConfigModal({
   const [syncing, setSyncing] = useState(false)
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
   const [environmentChanged, setEnvironmentChanged] = useState(false)
+
+  // Notification state
+  const [notification, setNotification] = useState<{
+    show: boolean
+    type: NotificationType
+    title: string
+    message?: string
+  }>({
+    show: false,
+    type: 'info',
+    title: ''
+  })
+
+  const showNotification = (type: NotificationType, title: string, message?: string) => {
+    setNotification({ show: true, type, title, message })
+  }
+
+  const closeNotification = () => {
+    setNotification(prev => ({ ...prev, show: false }))
+  }
 
   const handleEnvironmentChange = (env: Environment) => {
     setConfig({
@@ -96,44 +118,86 @@ export default function USPSConfigModal({
     }
   }
 
-  const handleSave = async () => {
+  const handleDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect USPS?')) return
+
     setSyncing(true)
     setSyncStage('saving-config')
 
     try {
-      // Step 1: Save config manually to localStorage (don't call onSave yet)
-      console.log('[USPS Config] Saving configuration to localStorage...')
+      // Clear integration config using API
+      await IntegrationAPI.updateIntegrationConfig(integration.id, {
+        consumerKey: '',
+        consumerSecret: '',
+        environment: 'sandbox',
+        apiUrl: 'https://apis-tem.usps.com'
+      })
 
-      // ✅ Get current account ID
-      const accountId = getCurrentAccountId()
-      const storageKey = `orderSync_integrations_${accountId}`
-      const stored = localStorage.getItem(storageKey)
-      const currentSettings = stored ? JSON.parse(stored) : null
+      // Update integration status
+      await IntegrationAPI.saveIntegration({
+        id: integration.id,
+        storeId: integration.storeId,
+        accountId: integration.accountId,
+        name: integration.name,
+        type: integration.type,
+        status: 'disconnected',
+        enabled: false,
+        connectedAt: null,
+        config: {
+          consumerKey: '',
+          consumerSecret: '',
+          environment: 'sandbox',
+          apiUrl: 'https://apis-tem.usps.com'
+        }
+      })
 
-      if (currentSettings) {
-        // Update the USPS integration
-        const updatedIntegrations = currentSettings.integrations.map((int: any) => {
-          if (int.id === integration.id) {
-            return {
-              ...int,
-              config,
-              status: 'connected',
-              enabled: true,
-              connectedAt: new Date().toISOString()
-            }
-          }
-          return int
-        })
+      console.log('[USPS Config] ✅ Disconnected successfully')
 
-        // Save back to localStorage
-        localStorage.setItem(storageKey, JSON.stringify({
-          ...currentSettings,
-          integrations: updatedIntegrations,
-          lastUpdated: new Date().toISOString()
-        }))
+      await new Promise(resolve => setTimeout(resolve, 500))
 
-        console.log('[USPS Config] ✅ Configuration saved to localStorage for account:', accountId)
+      setSyncStage('success')
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      onClose()
+      window.location.reload()
+
+    } catch (error: any) {
+      console.error('[USPS Config] Disconnect error:', error)
+      showNotification('error', 'Disconnect Failed', error.message || 'Failed to disconnect USPS')
+      setSyncing(false)
+      setSyncStage('idle')
+    }
+  }
+
+  const handleSave = async () => {
+    if (environmentChanged) {
+      if (!confirm('Changing the environment will require reconnecting to USPS. Continue?')) {
+        return
       }
+      handleDisconnect()
+      return
+    }
+
+    setSyncing(true)
+    setSyncStage('saving-config')
+
+    try {
+      // Step 1: Save config to database via API
+      console.log('[USPS Config] Saving configuration...')
+
+      await IntegrationAPI.saveIntegration({
+        id: integration.id,
+        storeId: integration.storeId,
+        accountId: integration.accountId,
+        name: integration.name,
+        type: integration.type,
+        config,
+        status: 'connected',
+        enabled: true,
+        connectedAt: new Date().toISOString()
+      })
+
+      console.log('[USPS Config] ✅ Configuration saved')
 
       await new Promise(resolve => setTimeout(resolve, 800))
 
@@ -158,25 +222,37 @@ export default function USPSConfigModal({
         const boxesData = await boxesResponse.json()
         console.log(`✅ Synced ${boxesData.count} USPS boxes`)
 
-        // Store boxes in localStorage for all warehouses
+        // ✅ NEW: Save boxes to backend via API (instead of localStorage)
         if (boxesData.boxes && boxesData.boxes.length > 0) {
-          const warehousesStr = localStorage.getItem('warehouses')
-          const warehouses = warehousesStr ? JSON.parse(warehousesStr) : []
+          // ✅ Get warehouses for the selected store via API
+          const storeWarehouses = selectedStoreId
+            ? await WarehouseAPI.getWarehousesByStore(selectedStoreId)
+            : await WarehouseAPI.getAllWarehouses()
 
-          if (warehouses.length > 0) {
-            warehouses.forEach((warehouse: any) => {
-              const storageKey = `shipping_boxes_${warehouse.id}`
-              const existingBoxes = localStorage.getItem(storageKey)
-              const parsed = existingBoxes ? JSON.parse(existingBoxes) : []
+          if (storeWarehouses.length > 0) {
+            console.log(`[USPS Config] Saving boxes to ${storeWarehouses.length} warehouses via API...`)
 
-              // Keep custom boxes, replace USPS boxes
-              const customBoxes = parsed.filter((box: any) => box.boxType === 'custom')
-              const updated = [...customBoxes, ...boxesData.boxes]
+            for (const warehouse of storeWarehouses) {
+              try {
+                // Get existing boxes for this warehouse from API
+                const existingBoxes = await IntegrationAPI.getWarehouseBoxes(warehouse.id)
 
-              localStorage.setItem(storageKey, JSON.stringify(updated))
-              localStorage.setItem(`boxes_last_sync_${warehouse.id}`, Date.now().toString())
-            })
-            console.log(`✅ Boxes stored for ${warehouses.length} warehouses`)
+                // Keep custom boxes, replace USPS carrier boxes
+                const customBoxes = existingBoxes.filter((box: any) => box.boxType === 'custom')
+
+                // Combine custom boxes with new USPS boxes
+                const updatedBoxes = [...customBoxes, ...boxesData.boxes]
+
+                // Save to backend via API
+                await IntegrationAPI.saveWarehouseBoxes(warehouse.id, updatedBoxes)
+
+                console.log(`✅ Saved ${updatedBoxes.length} boxes to warehouse ${warehouse.name} via API`)
+              } catch (error) {
+                console.error(`Failed to save boxes for warehouse ${warehouse.id}:`, error)
+              }
+            }
+
+            console.log(`✅ Boxes saved to ${storeWarehouses.length} warehouses via API`)
           }
         }
       } else {
@@ -185,7 +261,7 @@ export default function USPSConfigModal({
 
       await new Promise(resolve => setTimeout(resolve, 800))
 
-      // Step 3: Update Services
+      // Step 3: Update Services via API
       setSyncStage('updating-services')
       console.log('[USPS Config] Updating services...')
 
@@ -206,33 +282,49 @@ export default function USPSConfigModal({
         const servicesData = await servicesResponse.json()
         console.log(`✅ Synced ${servicesData.count} USPS services`)
 
-        // Store services in localStorage for all warehouses
+        // ✅ NEW: Save services to backend via API (instead of localStorage)
         if (servicesData.services && servicesData.services.length > 0) {
-          const warehousesStr = localStorage.getItem('warehouses')
-          const warehouses = warehousesStr ? JSON.parse(warehousesStr) : []
+          // ✅ Get warehouses for the selected store via API
+          const storeWarehouses = selectedStoreId
+            ? await WarehouseAPI.getWarehousesByStore(selectedStoreId)
+            : await WarehouseAPI.getAllWarehouses()
 
-          if (warehouses.length > 0) {
-            warehouses.forEach((warehouse: any) => {
-              const storageKey = `shipping_services_${warehouse.id}`
-              const existingServices = localStorage.getItem(storageKey)
-              const parsed = existingServices ? JSON.parse(existingServices) : []
+            if (storeWarehouses.length > 0) {
+              console.log(`[USPS Config] Saving services to ${storeWarehouses.length} warehouses via API...`)
 
-              // Merge services, preserving user preferences
-              const merged = servicesData.services.map((apiService: any) => {
-                const existing = parsed.find((s: any) =>
-                  s.carrier === apiService.carrier && s.serviceCode === apiService.serviceCode
-                )
+              for (const warehouse of storeWarehouses) {
+                try {
+                  // Get existing services for this warehouse from API
+                  const existingServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
 
-                if (existing) {
-                  return { ...apiService, isActive: existing.isActive, id: existing.id, createdAt: existing.createdAt }
-                }
-                return apiService
-              })
+                  // Merge services, preserving user preferences (isActive state)
+                  const mergedServices = servicesData.services.map((apiService: any) => {
+                    const existing = existingServices.find((s: any) =>
+                      s.carrier === apiService.carrier && s.serviceCode === apiService.serviceCode
+                    )
 
-              localStorage.setItem(storageKey, JSON.stringify(merged))
-              localStorage.setItem(`services_last_sync_${warehouse.id}`, Date.now().toString())
-            })
-            console.log(`✅ Services stored for ${warehouses.length} warehouses`)
+                    if (existing) {
+                      // Preserve user's isActive preference and other custom fields
+                      return {
+                        ...apiService,
+                        isActive: existing.isActive,
+                        id: existing.id,
+                        createdAt: existing.createdAt
+                      }
+                    }
+                    return apiService
+                  })
+
+                  // Save to backend via API
+                  await IntegrationAPI.saveWarehouseServices(warehouse.id, mergedServices)
+
+                console.log(`✅ Saved ${mergedServices.length} services to warehouse ${warehouse.name} via API`)
+              } catch (error) {
+                console.error(`Failed to save services for warehouse ${warehouse.id}:`, error)
+              }
+            }
+
+            console.log(`✅ Services saved to ${storeWarehouses.length} warehouses via API`)
           }
         }
       } else {
@@ -254,10 +346,9 @@ export default function USPSConfigModal({
       // Small delay to let parent update
       await new Promise(resolve => setTimeout(resolve, 100))
 
-      // ✅ FIX: Reload with store parameter to preserve selection
       console.log('[USPS Config] 🔄 Reloading page to refresh data...')
 
-      // Close modal (config already saved earlier)
+      // Close modal
       onClose()
 
       // Reload with store parameter to keep the selected store
@@ -266,14 +357,11 @@ export default function USPSConfigModal({
       } else {
         window.location.reload()
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[USPS Config] Error during sync:', error)
+      showNotification('error', 'Sync Failed', 'Configuration saved, but sync failed. Please try again.')
       setSyncing(false)
       setSyncStage('idle')
-      setTestResult({
-        success: false,
-        message: 'Configuration saved, but sync failed. Use "Sync from API" buttons to retry.'
-      })
     }
   }
 
@@ -300,6 +388,15 @@ export default function USPSConfigModal({
   const currentStageInfo = getStageInfo(syncStage)
 
   return (
+    <>
+      {/* ✅ NEW: Notification Component */}
+      <Notification
+        show={notification.show}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+        onClose={closeNotification}
+      />
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={syncing ? () => {} : onClose}>
         <Transition.Child
@@ -373,64 +470,7 @@ export default function USPSConfigModal({
                         </p>
                       </div>
                       <button
-                        onClick={async () => {
-                          if (!confirm('Are you sure you want to disconnect USPS?')) return
-
-                          setSyncing(true)
-                          setSyncStage('saving-config')
-
-                          try {
-                            // ✅ Use account-based storage
-                            const accountId = getCurrentAccountId()
-                            const storageKey = `orderSync_integrations_${accountId}`
-                            const stored = localStorage.getItem(storageKey)
-                            const currentSettings = stored ? JSON.parse(stored) : null
-
-                            if (currentSettings) {
-                              const updatedIntegrations = currentSettings.integrations.map((int: any) => {
-                                if (int.id === integration.id) {
-                                  return {
-                                    ...int,
-                                    config: {
-                                      consumerKey: '',
-                                      consumerSecret: '',
-                                      environment: 'sandbox',
-                                      apiUrl: 'https://apis-tem.usps.com'
-                                    },
-                                    status: 'disconnected',
-                                    enabled: false,
-                                    connectedAt: null
-                                  }
-                                }
-                                return int
-                              })
-
-                              localStorage.setItem(storageKey, JSON.stringify({
-                                ...currentSettings,
-                                integrations: updatedIntegrations,
-                                lastUpdated: new Date().toISOString()
-                              }))
-
-                              console.log('[USPS Config] ✅ Disconnected and saved to localStorage for account:', accountId)
-                            }
-
-                            await new Promise(resolve => setTimeout(resolve, 500))
-
-                            // Show success
-                            setSyncStage('success')
-                            await new Promise(resolve => setTimeout(resolve, 1000))
-
-                            // Close modal
-                            onClose()
-
-                            // Reload page
-                            window.location.reload()
-                          } catch (error) {
-                            console.error('[USPS Config] Disconnect error:', error)
-                            setSyncing(false)
-                            setSyncStage('idle')
-                          }
-                        }}
+                        onClick={handleDisconnect}
                         disabled={syncing}
                         className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -723,5 +763,6 @@ export default function USPSConfigModal({
         </div>
       </Dialog>
     </Transition>
+    </>
   )
 }

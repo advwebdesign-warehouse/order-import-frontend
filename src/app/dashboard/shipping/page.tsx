@@ -45,6 +45,7 @@ const tabs = [
 
 export default function ShippingPage() {
   const [selectedTab, setSelectedTab] = useState(0)
+  const [accountId, setAccountId] = useState<string>('')
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -55,6 +56,22 @@ export default function ShippingPage() {
   })
 
   const { warehouses, loading: warehousesLoading } = useWarehouses()
+
+  // Fetch account ID
+  useEffect(() => {
+    const fetchAccount = async () => {
+      try {
+        const response = await fetch('/api/accounts/current')
+        if (response.ok) {
+          const data = await response.json()
+          setAccountId(data.accountId || data.id || '')
+        }
+      } catch (error) {
+        console.error('Error fetching account:', error)
+      }
+    }
+    fetchAccount()
+  }, [])
 
   const handleWarehouseChange = (warehouseId: string) => {
     setSelectedWarehouseId(warehouseId)
@@ -173,7 +190,10 @@ export default function ShippingPage() {
 
           <Tab.Panels className="mt-6">
             <Tab.Panel>
-              <BoxesTab selectedWarehouseId={selectedWarehouseId} />
+            <BoxesTab
+              selectedWarehouseId={selectedWarehouseId}
+              accountId={accountId}
+            />
             </Tab.Panel>
             <Tab.Panel>
               <ServicesTab selectedWarehouseId={selectedWarehouseId} />

@@ -2,7 +2,7 @@
 
 import { Store, WarehouseAssignment } from '@/app/dashboard/stores/utils/storeTypes'
 import { Order } from '@/app/dashboard/orders/utils/orderTypes'
-import { getStoreById } from '@/app/dashboard/stores/utils/storeStorage'
+import { storeApi } from '@/app/services/storeApi'
 
 /**
  * Normalize state code to 2-letter uppercase format
@@ -107,71 +107,98 @@ export function findBestWarehouse(
 }
 
 /**
- * Assign warehouse to an order based on shipping address
- * This is the main function to call when processing orders
+ * ✅ Assign warehouse to an order based on shipping address
+ *
+ * Account security: API automatically scopes to authenticated user's account via JWT token.
+ * Backend ensures one account cannot access another account's stores.
  *
  * @param order - The order to assign warehouse to
  * @param storeId - The store ID (to fetch store configuration)
- * @param accountId - Optional account ID
  * @returns The order with warehouseId assigned
  */
-export function assignWarehouseToOrder(
+export async function assignWarehouseToOrder(
   order: Order,
-  storeId: string,
-  accountId?: string
-): Order {
-  // Get store configuration
-  const store = getStoreById(storeId, accountId)
+  storeId: string
+): Promise<Order> {
+  console.log(`[Warehouse Assignment] Assigning warehouse for order ${order.id}`)
+  console.log(`[Warehouse Assignment] Store ID: ${storeId}`)
 
-  if (!store) {
-    console.error(`[Warehouse Assignment] Store not found: ${storeId}`)
+  try {
+    // ✅ Fetch store configuration from API instead of localStorage
+    const store = await storeApi.getStoreById(storeId)
+
+    if (!store) {
+      console.error(`[Warehouse Assignment] ❌ Store not found: ${storeId}`)
+      console.warn(`[Warehouse Assignment] ⚠️ Order ${order.id} will have no warehouse assigned`)
+      return order
+    }
+
+    console.log(`[Warehouse Assignment] ✅ Found store: ${store.storeName}`)
+
+    // Extract shipping info from order
+    const shippingState = order.shippingProvince || order.shippingAddress1?.split(',')[1]?.trim() || ''
+    const shippingCountryCode = order.shippingCountryCode || 'US'
+
+    console.log(`[Warehouse Assignment] Shipping address: ${shippingState}, ${shippingCountryCode}`)
+
+    // Find best warehouse
+    const warehouseId = findBestWarehouse(shippingState, shippingCountryCode, store)
+
+    if (warehouseId) {
+      console.log(`[Warehouse Assignment] ✅ Assigned warehouse: ${warehouseId} to order ${order.id}`)
+    } else {
+      console.warn(`[Warehouse Assignment] ⚠️ No warehouse assigned to order ${order.id}`)
+    }
+
+    // Assign warehouse to order
+    return {
+      ...order,
+      warehouseId
+    }
+  } catch (error) {
+    console.error(`[Warehouse Assignment] ❌ Error fetching store or assigning warehouse:`, error)
+    console.warn(`[Warehouse Assignment] ⚠️ Order ${order.id} will have no warehouse assigned`)
     return order
-  }
-
-  // Extract shipping info from order
-  const shippingState = order.shippingProvince || order.shippingAddress1?.split(',')[1]?.trim() || ''
-  const shippingCountryCode = order.shippingCountryCode || 'US'
-
-  // Find best warehouse
-  const warehouseId = findBestWarehouse(shippingState, shippingCountryCode, store)
-
-  // Assign warehouse to order
-  return {
-    ...order,
-    warehouseId
   }
 }
 
 /**
- * Batch assign warehouses to multiple orders
+ * ✅ UPDATED: Batch assign warehouses to multiple orders
+ * Now async and uses API instead of localStorage
  *
  * @param orders - Array of orders to assign warehouses to
  * @param storeId - The store ID
- * @param accountId - Optional account ID
  * @returns Array of orders with warehouses assigned
  */
-export function assignWarehousesToOrders(
+export async function assignWarehousesToOrders(
   orders: Order[],
-  storeId: string,
-  accountId?: string
-): Order[] {
-  return orders.map(order => assignWarehouseToOrder(order, storeId, accountId))
+  storeId: string
+): Promise<Order[]> {
+  console.log(`[Warehouse Assignment] Batch assigning warehouses for ${orders.length} orders`)
+
+  // Process all orders in parallel for better performance
+  const ordersWithWarehouses = await Promise.all(
+    orders.map(order => assignWarehouseToOrder(order, storeId))
+  )
+
+  return ordersWithWarehouses
 }
 
 /**
- * Re-assign warehouse to existing order (useful when warehouse config changes)
+ * ✅ Re-assign warehouse to existing order (useful when warehouse config changes)
  *
- * @param orderId - The order ID
- * @param accountId - Optional account ID
+ * Account security: API automatically scopes to authenticated user's account via JWT token.
+ *
+ * @param order - The order to re-assign
+ * @returns The order with updated warehouseId
  */
-export function reassignOrderWarehouse(
-  order: Order,
-  accountId?: string
-): Order {
+export async function reassignOrderWarehouse(
+  order: Order
+): Promise<Order> {
   if (!order.storeId) {
     console.error('[Warehouse Assignment] Order has no storeId')
     return order
   }
 
-  return assignWarehouseToOrder(order, order.storeId, accountId)
+  return assignWarehouseToOrder(order, order.storeId)
 }

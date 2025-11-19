@@ -15,17 +15,18 @@ import {
   WrenchScrewdriverIcon,
   TruckIcon, // NEW: Import shipping icon
 } from '@heroicons/react/24/outline'
+import { useAccountInitialization } from '@/hooks/useAccountInitialization'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import DashboardProviders from './providers'
-import { hasShippingIntegration } from '@/lib/storage/integrationStorage' // NEW: Import helper
+import { hasShippingIntegration } from '@/lib/storage/integrationStorage'
 
 // Navigation item interface - simplified
 interface NavigationItem {
   name: string
   href: string
   icon: any
-  condition?: () => boolean // NEW: Optional condition for showing item
+  condition?: () => boolean
 }
 
 function DashboardLayoutContent({
@@ -34,14 +35,21 @@ function DashboardLayoutContent({
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [showShipping, setShowShipping] = useState(false) // NEW: State for shipping visibility
+  const [showShipping, setShowShipping] = useState(false)
   const pathname = usePathname()
 
-  // NEW: Check for shipping integration on mount and when pathname changes
+  useAccountInitialization()
+
+  // ✅ FIXED: Check for shipping integration on mount and when pathname changes
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setShowShipping(hasShippingIntegration())
+    const checkShippingIntegration = async () => {
+      if (typeof window !== 'undefined') {
+        const hasShipping = await hasShippingIntegration()
+        setShowShipping(hasShipping)
+      }
     }
+
+    checkShippingIntegration()
   }, [pathname])
 
   const isCurrentPage = (href: string): boolean => {
@@ -63,7 +71,7 @@ function DashboardLayoutContent({
     { name: 'Settings', href: '/dashboard/settings', icon: WrenchScrewdriverIcon }
   ]
 
-  // NEW: Filter navigation based on conditions
+  // Filter navigation based on conditions
   const navigation = navigationItems.filter(item =>
     !item.condition || item.condition()
   )

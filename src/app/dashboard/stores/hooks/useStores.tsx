@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react'
 import { Store } from '../utils/storeTypes'
-import { getStoresFromStorage } from '../utils/storeStorage'
+import { storeApi } from '@/app/services/storeApi'
 
 export function useStores() {
   const [stores, setStores] = useState<Store[]>([])
@@ -14,10 +14,11 @@ export function useStores() {
     loadStores()
   }, [])
 
-  const loadStores = () => {
+  const loadStores = async () => {
     setLoading(true)
     try {
-      const loadedStores = getStoresFromStorage()
+      // ✅ UPDATED: Fetch stores from API (accountId handled by backend via auth token)
+      const loadedStores = await storeApi.getStores()
       setStores(loadedStores)
     } catch (error) {
       console.error('Error loading stores:', error)

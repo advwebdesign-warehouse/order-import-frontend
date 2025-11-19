@@ -2,6 +2,8 @@
 
 import crypto from 'crypto';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com';
+
 export class ShopifyWebhooks {
   /**
    * Verify webhook HMAC signature
@@ -26,33 +28,67 @@ export class ShopifyWebhooks {
   static async processOrderWebhook(
     order: any,
     accountId: string,
-    storeId: string
+    storeId: string,
+    warehouseId?: string
   ): Promise<void> {
-    // Import GraphQL transformation functions
-    const { transformGraphQLOrder } = await import('./shopifyGraphQLTransform');
-    const { saveOrdersToStorage } = await import('@/lib/storage/orderStorage');
+    try {
+      // Import GraphQL transformation functions
+      const { transformGraphQLOrder } = await import('./shopifyGraphQLTransform');
 
-    // Transform using the REST-format webhook data
-    // (Shopify webhooks still use REST format regardless of API)
-    const transformedOrder = transformGraphQLOrder(order, storeId, accountId);
-    saveOrdersToStorage([transformedOrder], accountId);
+      // Transform using the REST-format webhook data
+      const transformedOrder = transformGraphQLOrder(order, storeId, warehouseId);
+
+      // ✅ Save to backend via API
+      const response = await fetch(`${API_BASE_URL}/api/orders/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orders: [transformedOrder],
+          accountId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save order: ${response.statusText}`);
+      }
+
+      console.log('[ShopifyWebhooks] Order saved successfully');
+    } catch (error) {
+      console.error('[ShopifyWebhooks] Error processing order webhook:', error);
+      throw error;
+    }
   }
 
   /**
    * Process product created/updated webhook
    */
-  static async processProductWebhook(
-    product: any,
-    accountId: string,
-    storeId: string
-  ): Promise<void> {
-    // Import GraphQL transformation functions
-    const { transformGraphQLProduct } = await import('./shopifyGraphQLTransform');
-    const { saveProductsToStorage } = await import('@/lib/storage/productStorage');
+  static async processProductWebhook(product: any, storeId: string, accountId: string): Promise<void> {
+    try {
+      // Import GraphQL transformation functions
+      const { transformGraphQLProduct } = await import('./shopifyGraphQLTransform');
 
-    // Transform and save the product
-    const transformedProduct = transformGraphQLProduct(product, storeId);
-    saveProductsToStorage([transformedProduct], accountId);
+      // Transform the product
+      const transformedProduct = transformGraphQLProduct(product, storeId);
+
+      // ✅ Save to backend via API
+      const response = await fetch(`${API_BASE_URL}/api/products/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          products: [transformedProduct],
+          accountId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save product: ${response.statusText}`);
+      }
+
+      console.log('[ShopifyWebhooks] Product saved successfully');
+    } catch (error) {
+      console.error('[ShopifyWebhooks] Error processing product webhook:', error);
+      throw error;
+    }
   }
 
   /**
@@ -60,12 +96,48 @@ export class ShopifyWebhooks {
    */
   static async processOrderCancellation(
     order: any,
-    accountId: string
+    accountId: string,
+    storeId: string
   ): Promise<void> {
-    const { updateOrderStatus } = await import('./shopifyStorage');
+    try {
+      // ✅ Check if order exists
+      const checkResponse = await fetch(
+        `${API_BASE_URL}/api/orders/check?externalId=${order.id}&storeId=${storeId}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
 
-    // Update order status to cancelled
-    await updateOrderStatus(order.id.toString(), 'cancelled', accountId);
+      if (!checkResponse.ok) {
+        throw new Error('Failed to check order existence');
+      }
+
+      const { exists, orderId } = await checkResponse.json();
+
+      if (exists && orderId) {
+        // ✅ Update order status to cancelled
+        const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'CANCELLED',
+            fulfillmentStatus: 'CANCELLED'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to cancel order: ${response.statusText}`);
+        }
+
+        console.log('[ShopifyWebhooks] Order cancelled successfully');
+      } else {
+        console.warn('[ShopifyWebhooks] Order not found for cancellation:', order.id);
+      }
+    } catch (error) {
+      console.error('[ShopifyWebhooks] Error processing order cancellation:', error);
+      throw error;
+    }
   }
 
   /**
@@ -73,21 +145,52 @@ export class ShopifyWebhooks {
    */
   static async processFulfillmentWebhook(
     fulfillment: any,
-    accountId: string
+    accountId: string,
+    storeId: string
   ): Promise<void> {
-    const { updateOrderFulfillment } = await import('./shopifyStorage');
+    try {
+      // ✅ Check if order exists
+      const checkResponse = await fetch(
+        `${API_BASE_URL}/api/orders/check?externalId=${fulfillment.order_id}&storeId=${storeId}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
 
-    // Update order with fulfillment info
-    await updateOrderFulfillment(
-      fulfillment.order_id.toString(),
-      {
-        fulfillmentId: fulfillment.id.toString(),
-        trackingNumber: fulfillment.tracking_number,
-        trackingCompany: fulfillment.tracking_company,
-        status: fulfillment.status,
-      },
-      accountId
-    );
+      if (!checkResponse.ok) {
+        throw new Error('Failed to check order existence');
+      }
+
+      const { exists, orderId } = await checkResponse.json();
+
+      if (exists && orderId) {
+        // ✅ Update order with fulfillment info
+        const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'SHIPPED',
+            fulfillmentStatus: 'SHIPPED',
+            fulfillmentId: fulfillment.id?.toString(),
+            trackingNumber: fulfillment.tracking_number,
+            trackingCompany: fulfillment.tracking_company,
+            trackingUrl: fulfillment.tracking_url
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update fulfillment: ${response.statusText}`);
+        }
+
+        console.log('[ShopifyWebhooks] Order fulfillment updated successfully');
+      } else {
+        console.warn('[ShopifyWebhooks] Order not found for fulfillment:', fulfillment.order_id);
+      }
+    } catch (error) {
+      console.error('[ShopifyWebhooks] Error processing fulfillment webhook:', error);
+      throw error;
+    }
   }
 
   /**

@@ -7,8 +7,6 @@ import {
   getConnectedShopifyStores,
   updateIntegrationConfig
 } from '@/lib/storage/shopifyIntegrationHelpers';
-import { saveOrder } from '@/lib/storage/orderStorageHelpers';
-import { saveProduct } from '@/lib/storage/productStorage';
 import { Product } from '@/app/dashboard/products/utils/productTypes';
 
 /**
@@ -27,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   // Verify cron secret to prevent unauthorized access
   const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET || 'your-secure-cron-secret-here';
+  const cronSecret = process.env.CRON_SECRET;
 
   if (authHeader !== `Bearer ${cronSecret}`) {
     console.error('[Shopify Cron] ❌ Unauthorized: Invalid or missing authorization');
@@ -44,9 +42,11 @@ export async function GET(request: NextRequest) {
     errors: [] as string[],
   };
 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://advorderflow.com';
+
   try {
     // Get all connected Shopify stores
-    const shopifyIntegrations = getConnectedShopifyStores();
+    const shopifyIntegrations = await getConnectedShopifyStores();
 
     console.log(`[Shopify Cron] Found ${shopifyIntegrations.length} connected Shopify stores`);
 
@@ -63,8 +63,9 @@ export async function GET(request: NextRequest) {
       // Type the config as Shopify config
       const config = integration.config as any;
 
-      // Ensure storeId exists
+      // Ensure storeId and accountId exist
       const storeId = integration.storeId || integration.id || 'unknown';
+      const accountId = integration.accountId || 'default';
       const integrationId = integration.id;
 
       const storeResult = {
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest) {
         console.log(`[Shopify Cron] 📦 Syncing orders for ${shop}...`);
         let hasNextPage = true;
         let endCursor: string | null = null;
-        let ordersCount = 0;
+        const ordersToSave: any[] = [];
 
         while (hasNextPage) {
           const response = await client.getOrders({
@@ -121,22 +122,35 @@ export async function GET(request: NextRequest) {
               storeId,
               config?.defaultWarehouseId
             );
-            saveOrder(order);
-            ordersCount++;
+            ordersToSave.push(order);
           }
 
           hasNextPage = response.pageInfo.hasNextPage;
           endCursor = response.pageInfo.endCursor;
         }
 
-        storeResult.ordersSynced = ordersCount;
-        console.log(`[Shopify Cron] ✅ Synced ${ordersCount} orders for ${shop}`);
+        // ✅ Bulk save orders using internal API call
+        if (ordersToSave.length > 0) {
+          const response = await fetch(`${API_BASE_URL}/api/orders/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orders: ordersToSave, accountId })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to save orders: ${response.statusText}`);
+          }
+
+          storeResult.ordersSynced = ordersToSave.length;
+        }
+
+        console.log(`[Shopify Cron] ✅ Synced ${ordersToSave.length} orders for ${shop}`);
 
         // Sync products
-        console.log(`[Shopify Cron] 🏷️  Syncing products for ${shop}...`);
+        console.log(`[Shopify Cron] 🏷️ Syncing products for ${shop}...`);
         hasNextPage = true;
         endCursor = null;
-        let productsCount = 0;
+        const productsToSave: Product[] = [];
 
         while (hasNextPage) {
           const response = await client.getProducts({
@@ -149,21 +163,33 @@ export async function GET(request: NextRequest) {
 
           // Transform and save products
           for (const graphqlProduct of response.products) {
-            // Convert GraphQL product to simple Product format
             const product = transformToSimpleProduct(graphqlProduct, integrationId);
-            saveProduct(product);
-            productsCount++;
+            productsToSave.push(product);
           }
 
           hasNextPage = response.pageInfo.hasNextPage;
           endCursor = response.pageInfo.endCursor;
         }
 
-        storeResult.productsSynced = productsCount;
-        console.log(`[Shopify Cron] ✅ Synced ${productsCount} products for ${shop}`);
+        // ✅ Bulk save products using internal API call
+        if (productsToSave.length > 0) {
+          const response = await fetch(`${API_BASE_URL}/api/products/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ products: productsToSave, accountId })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to save products: ${response.statusText}`);
+          }
+
+          storeResult.productsSynced = productsToSave.length;
+        }
+
+        console.log(`[Shopify Cron] ✅ Synced ${productsToSave.length} products for ${shop}`);
 
         // Update last sync time
-        updateIntegrationConfig(integration.id, {
+        await updateIntegrationConfig(integration.id, {
           ...config,
           lastSyncTime: new Date().toISOString(),
         });
@@ -204,7 +230,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * Transform GraphQL product to simple Product format (matches productStorage.ts)
+ * Transform GraphQL product to simple Product format
  */
 function transformToSimpleProduct(graphqlProduct: any, integrationId: string): Product {
   const firstVariant = graphqlProduct.variants?.edges?.[0]?.node;

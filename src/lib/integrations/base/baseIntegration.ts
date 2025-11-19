@@ -29,10 +29,11 @@ export interface TestConnectionResult {
 }
 
 /**
- * Base Integration Class
+ * ✅ RENAMED: BaseIntegration → BaseIntegrationService
+ * Base Integration Service Class
  * Provides common functionality for all integrations
  */
-export abstract class BaseIntegration {
+export abstract class BaseIntegrationService {
   protected config: IntegrationConfig
 
   constructor(config: IntegrationConfig) {
@@ -90,10 +91,11 @@ export abstract class BaseIntegration {
 }
 
 /**
+ * ✅ RENAMED: EcommerceIntegration → EcommerceIntegrationService
  * Ecommerce Integration Base Class
  * Specific base for e-commerce platforms
  */
-export abstract class EcommerceIntegration extends BaseIntegration {
+export abstract class EcommerceIntegrationService extends BaseIntegrationService  {
   /**
    * Sync all data (products + orders)
    */
@@ -141,7 +143,7 @@ export abstract class EcommerceIntegration extends BaseIntegration {
  * Shipping Integration Base Class
  * Specific base for shipping carriers
  */
-export abstract class ShippingIntegration extends BaseIntegration {
+export abstract class ShippingIntegrationService extends BaseIntegrationService  {
   /**
    * Generate shipping label
    */

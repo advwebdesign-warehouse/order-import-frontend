@@ -5,14 +5,17 @@
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, InformationCircleIcon, ChevronDownIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
-import { getCurrentAccountId } from '@/lib/storage/integrationStorage'
 import { UPSIntegration, Environment } from '../types/integrationTypes'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
+import { WarehouseAPI } from '@/lib/api/warehouseApi'
+import Notification, { NotificationType } from '@/app/dashboard/shared/components/Notification'
 
 interface UPSConfigModalProps {
   isOpen: boolean
   onClose: () => void
   integration: UPSIntegration
   onSave: (integrationId: string, config: any) => void
+  selectedStoreId?: string
   onTest?: () => Promise<{ success: boolean; message: string }>
   isTesting?: boolean
 }
@@ -25,6 +28,7 @@ export default function UPSConfigModal({
   onClose,
   integration,
   onSave,
+  selectedStoreId,
   onTest,
   isTesting = false
 }: UPSConfigModalProps) {
@@ -36,6 +40,26 @@ export default function UPSConfigModal({
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [environmentChanged, setEnvironmentChanged] = useState(false)
+
+  // ✅ NEW: Notification state
+  const [notification, setNotification] = useState<{
+    show: boolean
+    type: NotificationType
+    title: string
+    message?: string
+  }>({
+    show: false,
+    type: 'info',
+    title: ''
+  })
+
+  const showNotification = (type: NotificationType, title: string, message?: string) => {
+    setNotification({ show: true, type, title, message })
+  }
+
+  const closeNotification = () => {
+    setNotification(prev => ({ ...prev, show: false }))
+  }
 
   const isConnected = integration.status === 'connected' && integration.config?.accessToken
 
@@ -89,16 +113,18 @@ export default function UPSConfigModal({
   }
 
   const handleConnect = async () => {
+    // ✅ UPDATED: Use notification instead of alert
     if (!accountNumber || accountNumber.length !== 6) {
-      alert('Please enter a valid 6-character UPS Account Number')
+      showNotification('error', 'Invalid Account Number', 'Please enter a valid 6-character UPS Account Number')
       return
     }
 
     const clientId = process.env.NEXT_PUBLIC_UPS_CLIENT_ID
-    const redirectUri = process.env.NEXT_PUBLIC_UPS_REDIRECT_URI || 'https://orders-warehouse.adv.design/api/auth/ups/callback'
+    const redirectUri = process.env.NEXT_PUBLIC_UPS_REDIRECT_URI || 'https://advorderflow.com/api/auth/ups/callback'
 
     if (!clientId) {
-      alert('UPS integration is not configured. Please contact support.')
+      // ✅ UPDATED: Use notification instead of alert
+      showNotification('error', 'Configuration Error', 'UPS integration is not configured. Please contact support.')
       console.error('❌ Missing NEXT_PUBLIC_UPS_CLIENT_ID environment variable')
       return
     }
@@ -116,7 +142,7 @@ export default function UPSConfigModal({
 
       const state = `ups_${Date.now()}_${environment}`
 
-      // ✅ FIX: Add storeId to cookies
+      // Set cookies for OAuth flow
       document.cookie = `ups_oauth_state=${state}; path=/; max-age=600; SameSite=Lax`
       document.cookie = `ups_account_number=${accountNumber}; path=/; max-age=600; SameSite=Lax`
       document.cookie = `ups_environment=${environment}; path=/; max-age=600; SameSite=Lax`
@@ -138,52 +164,48 @@ export default function UPSConfigModal({
       window.location.href = authUrl
     } catch (error: any) {
       console.error('❌ Connection error:', error)
-      alert(error.message || 'Failed to initiate UPS connection')
+      // ✅ UPDATED: Use notification instead of alert
+      showNotification('error', 'Connection Failed', error.message || 'Failed to initiate UPS connection')
       setConnecting(false)
     }
   }
 
+  // ✅ UPDATED: Use IntegrationAPI instead of raw fetch
   const handleDisconnect = async () => {
+    // ✅ FIXED: Added confirm dialog
     if (!confirm('Are you sure you want to disconnect UPS?')) return
 
     setSyncing(true)
     setSyncStage('saving-config')
 
     try {
-      const accountId = getCurrentAccountId()
-      const storageKey = `orderSync_integrations_${accountId}`
-      const stored = localStorage.getItem(storageKey)
-      const currentSettings = stored ? JSON.parse(stored) : null
+      await IntegrationAPI.updateIntegrationConfig(integration.id, {
+        accountNumber: '',
+        accessToken: undefined,
+        refreshToken: undefined,
+        tokenExpiry: undefined,
+        environment: 'sandbox',
+        apiUrl: 'https://wwwcie.ups.com'
+      })
 
-      if (currentSettings) {
-        const updatedIntegrations = currentSettings.integrations.map((int: any) => {
-          if (int.id === integration.id) {
-            return {
-              ...int,
-              config: {
-                accountNumber: '',
-                accessToken: undefined,
-                refreshToken: undefined,
-                tokenExpiry: undefined,
-                environment: 'sandbox',
-                apiUrl: 'https://wwwcie.ups.com'
-              },
-              status: 'disconnected',
-              enabled: false,
-              connectedAt: null
-            }
-          }
-          return int
-        })
+      // Update integration status using API client
+      await IntegrationAPI.saveIntegration({
+        id: integration.id,
+        storeId: integration.storeId,
+        accountId: integration.accountId,
+        name: integration.name,
+        type: integration.type,
+        status: 'disconnected',
+        enabled: false,
+        connectedAt: null,
+        config: {
+          accountNumber: '',
+          environment: 'sandbox',
+          apiUrl: 'https://wwwcie.ups.com'
+        }
+      })
 
-        localStorage.setItem(storageKey, JSON.stringify({
-          ...currentSettings,
-          integrations: updatedIntegrations,
-          lastUpdated: new Date().toISOString()
-        }))
-
-        console.log('[UPS Config] ✅ Disconnected for account:', accountId)
-      }
+      console.log('[UPS Config] ✅ Disconnected successfully')
 
       setTimeout(() => {
         setSyncStage('success')
@@ -194,14 +216,17 @@ export default function UPSConfigModal({
 
     } catch (error: any) {
       console.error('❌ Disconnect error:', error)
-      alert(error.message || 'Failed to disconnect UPS')
+      // ✅ UPDATED: Use notification instead of alert
+      showNotification('error', 'Disconnect Failed', error.message || 'Failed to disconnect UPS')
       setSyncing(false)
       setSyncStage('idle')
     }
   }
 
+  // ✅ UPDATED: Use IntegrationAPI for saving config
   const handleSave = async () => {
     if (environmentChanged) {
+      // ✅ FIXED: Added confirm dialog
       if (!confirm('Changing the environment will require reconnecting to UPS. Continue?')) {
         return
       }
@@ -218,7 +243,9 @@ export default function UPSConfigModal({
       setSyncStage('updating-services')
       const servicesResponse = await fetch('/api/integrations/ups/services', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           accessToken: integration.config?.accessToken,
           environment: integration.config?.environment
@@ -237,7 +264,9 @@ export default function UPSConfigModal({
       setSyncStage('updating-boxes')
       const packagingResponse = await fetch('/api/integrations/ups/packaging', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           accessToken: integration.config?.accessToken,
           environment: integration.config?.environment
@@ -252,33 +281,87 @@ export default function UPSConfigModal({
 
       console.log('[UPS Config] ✅ Fetched packaging:', packagingData.packaging?.length || 0)
 
-      // Save to localStorage
-      const accountId = getCurrentAccountId()
-      const storageKey = `orderSync_integrations_${accountId}`
-      const stored = localStorage.getItem(storageKey)
-      const currentSettings = stored ? JSON.parse(stored) : null
+      // ✅ Save boxes to warehouses via API (instead of integration config)
+      if (packagingData.packaging && packagingData.packaging.length > 0) {
+        // Get warehouses for the selected store via API
+        const storeWarehouses = selectedStoreId
+          ? await WarehouseAPI.getWarehousesByStore(selectedStoreId)
+          : await WarehouseAPI.getAllWarehouses()
 
-      if (currentSettings) {
-        // Update integrations
-        const updatedIntegrations = currentSettings.integrations.map((int: any) => {
-          if (int.id === integration.id) {
-            return {
-              ...int,
-              services: servicesData.services || [],
-              packaging: packagingData.packaging || []
+        if (storeWarehouses.length > 0) {
+          console.log(`[UPS Config] Saving boxes to ${storeWarehouses.length} warehouses via API...`)
+
+          for (const warehouse of storeWarehouses) {
+            try {
+              // Get existing boxes for this warehouse from API
+              const existingBoxes = await IntegrationAPI.getWarehouseBoxes(warehouse.id)
+
+              // Keep custom boxes, replace UPS carrier boxes
+              const customBoxes = existingBoxes.filter((box: any) => box.boxType === 'custom')
+
+              // Combine custom boxes with new UPS boxes
+              const updatedBoxes = [...customBoxes, ...packagingData.packaging]
+
+              // Save to backend via API
+              await IntegrationAPI.saveWarehouseBoxes(warehouse.id, updatedBoxes)
+
+              console.log(`✅ Saved ${updatedBoxes.length} boxes to warehouse ${warehouse.name} via API`)
+            } catch (error) {
+              console.error(`Failed to save boxes for warehouse ${warehouse.id}:`, error)
             }
           }
-          return int
-        })
 
-        localStorage.setItem(storageKey, JSON.stringify({
-          ...currentSettings,
-          integrations: updatedIntegrations,
-          lastUpdated: new Date().toISOString()
-        }))
-
-        console.log('[UPS Config] ✅ Saved to localStorage')
+          console.log(`✅ Boxes saved to ${storeWarehouses.length} warehouses via API`)
+        }
       }
+
+      // ✅ Save services to warehouses via API (instead of integration config)
+      if (servicesData.services && servicesData.services.length > 0) {
+        // Get warehouses for the selected store via API
+        const storeWarehouses = selectedStoreId
+          ? await WarehouseAPI.getWarehousesByStore(selectedStoreId)
+          : await WarehouseAPI.getAllWarehouses()
+
+        if (storeWarehouses.length > 0) {
+          console.log(`[UPS Config] Saving services to ${storeWarehouses.length} warehouses via API...`)
+
+          for (const warehouse of storeWarehouses) {
+            try {
+              // Get existing services for this warehouse from API
+              const existingServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
+
+              // Merge services, preserving user preferences (isActive state)
+              const mergedServices = servicesData.services.map((apiService: any) => {
+                const existing = existingServices.find((s: any) =>
+                  s.carrier === apiService.carrier && s.serviceCode === apiService.serviceCode
+                )
+
+                if (existing) {
+                  // Preserve user's isActive preference and other custom fields
+                  return {
+                    ...apiService,
+                    isActive: existing.isActive,
+                    id: existing.id,
+                    createdAt: existing.createdAt
+                  }
+                }
+                return apiService
+              })
+
+              // Save to backend via API
+              await IntegrationAPI.saveWarehouseServices(warehouse.id, mergedServices)
+
+              console.log(`✅ Saved ${mergedServices.length} services to warehouse ${warehouse.name} via API`)
+            } catch (error) {
+              console.error(`Failed to save services for warehouse ${warehouse.id}:`, error)
+            }
+          }
+
+          console.log(`✅ Services saved to ${storeWarehouses.length} warehouses via API`)
+        }
+      }
+
+      console.log('[UPS Config] ✅ Sync complete')
 
       setSyncStage('success')
       setTimeout(() => {
@@ -287,7 +370,8 @@ export default function UPSConfigModal({
 
     } catch (error: any) {
       console.error('❌ Save error:', error)
-      alert(error.message || 'Failed to sync UPS data')
+      // ✅ UPDATED: Use notification instead of alert
+      showNotification('error', 'Sync Failed', error.message || 'Failed to sync UPS data')
       setSyncing(false)
       setSyncStage('idle')
     }
@@ -307,6 +391,16 @@ export default function UPSConfigModal({
   const currentStageInfo = stageInfo[syncStage]
 
   return (
+    <>
+      {/* ✅ NEW: Notification Component */}
+      <Notification
+        show={notification.show}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+        onClose={closeNotification}
+      />
+
     <Transition show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={syncing ? () => {} : onClose}>
         <Transition.Child
@@ -594,5 +688,6 @@ export default function UPSConfigModal({
         </div>
       </Dialog>
     </Transition>
+    </>
   )
 }

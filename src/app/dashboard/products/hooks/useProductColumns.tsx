@@ -4,122 +4,36 @@ import { useState, useEffect, useMemo } from 'react'
 import { Product, ProductColumnConfig, ProductSortState } from '../utils/productTypes'
 import { DEFAULT_PRODUCT_COLUMNS, DEFAULT_PRODUCT_SORT } from '../constants/productConstants'
 import { useSettings } from '../../shared/hooks/useSettings'
-import { getCurrentUserId } from '@/lib/storage/userStorage'
+import { useProductPreferences } from './useProductPreferences'
 
+/**
+ * Hook to manage product columns and sorting
+ *
+ * ✅ API-BASED: Uses backend storage for preferences
+ * - Column order, visibility, and sorting persist across devices
+ * - Synced via API, not localStorage
+ */
 export function useProductColumns(products: Product[]) {
   const { settings } = useSettings()
-  const [columns, setColumns] = useState<ProductColumnConfig[]>([])
-  const [sortConfig, setSortConfig] = useState<ProductSortState>(DEFAULT_PRODUCT_SORT)
-  const [initialized, setInitialized] = useState(false)
+  const {
+    preferences,
+    loading: prefsLoading,
+    initialized,
+    updateColumns: saveColumns,
+    updateSortConfig: saveSortConfig,
+    resetToDefaults: resetPreferences
+  } = useProductPreferences()
 
-  // ✅ NEW: User-specific storage keys
-  const userId = getCurrentUserId()
-  const storageKeys = {
-    columns: `productColumns_${userId}`,
-    sortConfig: `productSort_${userId}`
-  }
+  const [columns, setColumns] = useState<ProductColumnConfig[]>(preferences.columns)
+  const [sortConfig, setSortConfig] = useState<ProductSortState>(preferences.sortConfig)
 
-  // ✅ NEW: Load saved user preferences on mount
+  // Sync local state with preferences when they load
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      setInitialized(true)
-      return
+    if (initialized) {
+      setColumns(preferences.columns)
+      setSortConfig(preferences.sortConfig)
     }
-
-    try {
-      // Load sort config
-      const savedSort = localStorage.getItem(storageKeys.sortConfig)
-      if (savedSort) {
-        const parsedSort = JSON.parse(savedSort)
-        setSortConfig(parsedSort)
-      }
-
-      // Load column config
-      const savedColumns = localStorage.getItem(storageKeys.columns)
-      if (savedColumns) {
-        const parsedColumns = JSON.parse(savedColumns)
-
-        // Merge with defaults to handle new columns
-        const mergedColumns = []
-
-        // First, add saved columns in their saved order
-        for (const savedCol of parsedColumns) {
-          const defaultCol = DEFAULT_PRODUCT_COLUMNS.find(col => col.id === savedCol.id)
-          if (defaultCol) {
-            mergedColumns.push({
-              ...defaultCol,
-              ...savedCol // Override with saved preferences
-            })
-          }
-        }
-
-        // Then add any new default columns that weren't in saved config
-        for (const defaultCol of DEFAULT_PRODUCT_COLUMNS) {
-          if (!mergedColumns.find(col => col.id === defaultCol.id)) {
-            mergedColumns.push(defaultCol)
-          }
-        }
-
-        setColumns(mergedColumns)
-      }
-    } catch (error) {
-      console.error('Error loading product column settings:', error)
-    } finally {
-      setInitialized(true)
-    }
-  }, [storageKeys.columns, storageKeys.sortConfig])
-
-  // ✅ NEW: Save column settings when they change
-  useEffect(() => {
-    if (initialized && typeof window !== 'undefined' && columns.length > 0) {
-      try {
-        localStorage.setItem(storageKeys.columns, JSON.stringify(columns))
-      } catch (error) {
-        console.error('Error saving product column settings:', error)
-      }
-    }
-  }, [columns, initialized, storageKeys.columns])
-
-  // ✅ NEW: Save sort config when it changes
-  useEffect(() => {
-    if (initialized && typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(storageKeys.sortConfig, JSON.stringify(sortConfig))
-      } catch (error) {
-        console.error('Error saving product sort config:', error)
-      }
-    }
-  }, [sortConfig, initialized, storageKeys.sortConfig])
-
-  // Initialize columns based on stock management settings
-  useEffect(() => {
-    // ✅ UPDATED: Only initialize if we don't have saved columns
-    if (!initialized) return
-
-    const getFilteredColumns = () => {
-      // If we have saved columns, use those
-      if (columns.length > 0) {
-        return columns
-      }
-
-      // Otherwise, initialize from defaults based on stock management
-      if (settings.inventory.manageStock) {
-        return DEFAULT_PRODUCT_COLUMNS
-      } else {
-        return DEFAULT_PRODUCT_COLUMNS.map(column => {
-          if (column.field === 'stockStatus' || column.field === 'stockQuantity') {
-            return { ...column, visible: false }
-          }
-          return column
-        })
-      }
-    }
-
-    // Only set if columns are empty (first load)
-    if (columns.length === 0) {
-      setColumns(getFilteredColumns())
-    }
-  }, [settings.inventory.manageStock, initialized, columns.length])
+  }, [preferences, initialized])
 
   // Filter columns for display based on stock management setting
   const visibleColumns = useMemo(() => {
@@ -260,13 +174,13 @@ export function useProductColumns(products: Product[]) {
       return // Don't allow sorting on hidden stock columns
     }
 
-    setSortConfig(prevSort => {
-      const newDirection = prevSort.field === field && prevSort.direction === 'asc' ? 'desc' : 'asc'
-      return {
-        field,
-        direction: newDirection
-      }
-    })
+    const newSort: ProductSortState = {
+      field,
+      direction: sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc'
+    }
+
+    setSortConfig(newSort)
+    saveSortConfig(newSort) // Save to API
   }
 
   // Handle column visibility changes
@@ -278,33 +192,37 @@ export function useProductColumns(products: Product[]) {
       return
     }
 
-    setColumns(prevColumns => {
-      return prevColumns.map(col =>
-        col.id === columnId ? { ...col, visible } : col
-      )
-    })
+    const newColumns = columns.map(col =>
+      col.id === columnId ? { ...col, visible } : col
+    )
+
+    setColumns(newColumns)
+    saveColumns(newColumns) // Save to API
   }
 
   // Handle column reordering (for drag & drop)
   const handleColumnReorder = (newColumns: ProductColumnConfig[]) => {
     setColumns(newColumns)
+    saveColumns(newColumns) // Save to API
   }
 
   // Reset to defaults
-  const resetToDefaults = () => {
+  const resetToDefaults = async () => {
+    // Reset columns based on current stock management setting
+    const defaultColumns = settings.inventory.manageStock
+      ? DEFAULT_PRODUCT_COLUMNS
+      : DEFAULT_PRODUCT_COLUMNS.map(column => {
+          if (column.field === 'stockStatus' || column.field === 'stockQuantity') {
+            return { ...column, visible: false }
+          }
+          return column
+        })
+
+    setColumns(defaultColumns)
     setSortConfig(DEFAULT_PRODUCT_SORT)
 
-    // Reset columns based on current stock management setting
-    if (settings.inventory.manageStock) {
-      setColumns(DEFAULT_PRODUCT_COLUMNS)
-    } else {
-      setColumns(DEFAULT_PRODUCT_COLUMNS.map(column => {
-        if (column.field === 'stockStatus' || column.field === 'stockQuantity') {
-          return { ...column, visible: false }
-        }
-        return column
-      }))
-    }
+    // Reset in API
+    await resetPreferences()
   }
 
   return {
@@ -318,6 +236,6 @@ export function useProductColumns(products: Product[]) {
     // Additional helpers
     isStockManagementEnabled: settings.inventory.manageStock,
     stockSettings: settings.inventory,
-    isLoading: !initialized // ✅ NEW: Expose loading state
+    isLoading: prefsLoading || !initialized
   }
 }

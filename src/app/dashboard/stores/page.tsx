@@ -9,7 +9,7 @@ import StoresTable from './components/StoresTable'
 import StoreModal from './components/StoreModal'
 import StoresToolbar from './components/StoresToolbar'
 import { Store, StoreSortState } from './utils/storeTypes'
-import { getStoresFromStorage, ensureDefaultStore } from './utils/storeStorage'
+import { storeApi } from '@/app/services/storeApi'
 import { useStoreFilters } from './hooks/useStoreFilters'
 import { useStoreSelection } from './hooks/useStoreSelection'
 import { useStoreColumns } from './hooks/useStoreColumns'
@@ -33,6 +33,7 @@ function StoresContent() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedStore, setSelectedStore] = useState<Store | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Use the custom hooks
   const {
@@ -61,7 +62,6 @@ function StoresContent() {
   } = useStoreColumns(filteredStores)
 
   useEffect(() => {
-    ensureDefaultStore()
     loadStores()
   }, [])
 
@@ -86,11 +86,18 @@ function StoresContent() {
     }
   }, [searchParams, stores])
 
-  const loadStores = () => {
-    setLoading(true)
-    const loadedStores = getStoresFromStorage()
-    setStores(loadedStores)
-    setLoading(false)
+  const loadStores = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const loadedStores = await storeApi.getStores()
+      setStores(loadedStores)
+    } catch (err: any) {
+      console.error('Failed to load stores:', err)
+      setError(err.message || 'Failed to load stores')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleCreateStore = () => {
@@ -116,20 +123,62 @@ function StoresContent() {
     }
   }
 
-  const handleBulkAction = (action: string) => {
+  const handleBulkAction = async (action: string) => {
     if (selectedStores.size === 0) {
       alert('Please select at least one store.')
       return
     }
 
-    // Implement bulk actions
-    console.log('Bulk action:', action, 'for stores:', Array.from(selectedStores))
-    // Add your bulk action logic here
-    clearSelection()
+    try {
+      if (action === 'delete') {
+        const confirmDelete = window.confirm(
+          `Are you sure you want to delete ${selectedStores.size} store(s)?`
+        )
+        if (!confirmDelete) return
+
+        // Delete stores via API
+        const deletePromises = Array.from(selectedStores).map(storeId =>
+          storeApi.deleteStore(storeId)
+        )
+        await Promise.all(deletePromises)
+
+        await loadStores()
+        clearSelection()
+        alert('Stores deleted successfully')
+      }
+    } catch (err: any) {
+      console.error('Bulk action failed:', err)
+      alert(err.message || 'Failed to perform bulk action')
+    }
   }
 
   if (loading) {
     return <StoresLoading />
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="rounded-md bg-red-50 p-4">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error loading stores</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>{error}</p>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={loadStores}
+                  className="text-sm font-medium text-red-800 hover:text-red-600"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

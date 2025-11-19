@@ -1,7 +1,7 @@
 //file path: src/app/dashboard/integrations/utils/storeWarehouseUtils.ts
 
 import { Store } from '@/app/dashboard/stores/utils/storeTypes'
-import { getStoreById } from '@/app/dashboard/stores/utils/storeStorage'
+import { storeApi } from '@/app/services/storeApi'
 
 /**
  * Check if a store has at least one warehouse assigned
@@ -37,22 +37,32 @@ export function storeHasRegionRouting(store: Store | null): boolean {
 }
 
 /**
- * Get store by ID and check if it has warehouses
+ * ✅ UPDATED: Get store by ID from API and check if it has warehouses
+ * Now async and uses API instead of localStorage
  */
-export function checkStoreWarehouseById(
-  storeId: string,
-  accountId?: string
-): {
+export async function checkStoreWarehouseById(
+  storeId: string
+): Promise<{
   store: Store | null
   hasWarehouses: boolean
   hasRegionRouting: boolean
-} {
-  const store = getStoreById(storeId, accountId)
+}> {
+  try {
+    // ✅ Fetch store from API instead of localStorage
+    const store = await storeApi.getStoreById(storeId)
 
-  return {
-    store,
-    hasWarehouses: storeHasWarehouses(store),
-    hasRegionRouting: storeHasRegionRouting(store)
+    return {
+      store,
+      hasWarehouses: storeHasWarehouses(store),
+      hasRegionRouting: storeHasRegionRouting(store)
+    }
+  } catch (error) {
+    console.error('[checkStoreWarehouseById] Error fetching store:', error)
+    return {
+      store: null,
+      hasWarehouses: false,
+      hasRegionRouting: false
+    }
   }
 }
 

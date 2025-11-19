@@ -6,31 +6,10 @@ import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, TruckIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { getShippingRates, validateAddress } from '@/lib/services/uspsClient'
+import { OrderWithDetails, ShippingAddress, orderToShippingAddress } from '../utils/orderTypes'
 
-interface ShippingAddress {
-  streetAddress: string
-  secondaryAddress?: string
-  city: string
-  state: string
-  zipCode: string
-}
-
-interface Order {
-  id: string
-  orderNumber: string
-  customer: {
-    name: string
-    email: string
-  }
-  shippingAddress: ShippingAddress
-  items: Array<{
-    name: string
-    quantity: number
-    sku: string
-  }>
-  total: number
-  weight?: number
-}
+// ✅ ShippingAddress now imported from orderTypes
+// ✅ Removed duplicate interface
 
 interface ShippingRate {
   mailClass: string
@@ -41,7 +20,7 @@ interface ShippingRate {
 }
 
 interface Props {
-  order: Order
+  order: OrderWithDetails // OrderWithDetails includes items array
   isOpen: boolean
   onClose: () => void
   onShipmentCreated?: () => void
@@ -57,7 +36,7 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
   const [addressConfirmed, setAddressConfirmed] = useState(false)
 
   // Package dimensions
-  const [weight, setWeight] = useState(order.weight || 16)
+  const [weight, setWeight] = useState(order.totalWeight || 16)
   const [length, setLength] = useState(10)
   const [width, setWidth] = useState(8)
   const [height, setHeight] = useState(6)
@@ -66,25 +45,32 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
   const [rates, setRates] = useState<ShippingRate[]>([])
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null)
 
+  // ✅ Use helper function to get shipping address from order
+  const orderAddress = orderToShippingAddress(order)
+
+  // ✅ FIXED: Added storeId as second parameter
   const handleValidateAddress = async () => {
     setLoading(true)
     setError('')
 
     try {
       const result = await validateAddress({
-        streetAddress: order.shippingAddress.streetAddress,
-        secondaryAddress: order.shippingAddress.secondaryAddress,
-        city: order.shippingAddress.city,
-        state: order.shippingAddress.state,
-        ZIPCode: order.shippingAddress.zipCode
-      })
+        streetAddress: orderAddress.streetAddress,
+        secondaryAddress: orderAddress.secondaryAddress,
+        city: orderAddress.city,
+        state: orderAddress.state,
+        ZIPCode: orderAddress.zipCode
+      }, order.storeId)
 
       setValidatedAddress({
         streetAddress: result.streetAddress,
         secondaryAddress: result.secondaryAddress,
         city: result.city,
         state: result.state,
-        zipCode: result.ZIPCode + (result.ZIPPlus4 ? `-${result.ZIPPlus4}` : '')
+        zipCode: result.ZIPCode + (result.ZIPPlus4 ? `-${result.ZIPPlus4}` : ''),
+        country: orderAddress.country,
+        countryCode: orderAddress.countryCode,
+        phone: orderAddress.phone,
       })
 
       setStep('dimensions')
@@ -95,11 +81,14 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
     }
   }
 
+  // ✅ FIXED: Added storeId as second parameter
   const handleCalculateRates = async () => {
     setLoading(true)
     setError('')
 
     try {
+      const address = validatedAddress || orderAddress
+
       const shipment = {
         fromAddress: {
           streetAddress: "475 L'Enfant Plaza SW", // TODO: Get from warehouse settings
@@ -108,11 +97,11 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
           ZIPCode: '20260'
         },
         toAddress: {
-          streetAddress: validatedAddress?.streetAddress || order.shippingAddress.streetAddress,
-          secondaryAddress: validatedAddress?.secondaryAddress || order.shippingAddress.secondaryAddress,
-          city: validatedAddress?.city || order.shippingAddress.city,
-          state: validatedAddress?.state || order.shippingAddress.state,
-          ZIPCode: (validatedAddress?.zipCode || order.shippingAddress.zipCode).split('-')[0]
+          streetAddress: address.streetAddress,
+          secondaryAddress: address.secondaryAddress,
+          city: address.city,
+          state: address.state,
+          ZIPCode: address.zipCode.split('-')[0]
         },
         weight,
         length,
@@ -120,7 +109,7 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
         height
       }
 
-      const result = await getShippingRates(shipment)
+      const result = await getShippingRates(shipment,order.storeId)
       setRates(result.rates)
       setStep('rates')
     } catch (err: any) {
@@ -138,7 +127,16 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
 
     try {
       // TODO: Implement label generation
-      console.log('Generating label with rate:', selectedRate)
+      console.log('Generating label:', {
+        rate: selectedRate,
+        order: {
+          id: order.id,
+          number: order.orderNumber,
+          storeId: order.storeId,
+          integrationId: order.integrationId,
+        },
+        address: validatedAddress || orderAddress
+      })
 
       // For now, just show success
       alert('Label generation will be implemented in next step!')
@@ -241,8 +239,8 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
                           Customer Information
                         </h3>
                         <p className="text-sm text-blue-800">
-                          <strong>{order.customer.name}</strong><br />
-                          {order.customer.email}
+                          <strong>{order.customerName}</strong><br />
+                          {order.customerEmail}
                         </p>
                       </div>
 
@@ -251,12 +249,12 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
                           Shipping Address (Original)
                         </h3>
                         <p className="text-sm text-yellow-800">
-                          {order.shippingAddress.streetAddress}
-                          {order.shippingAddress.secondaryAddress && (
-                            <>, {order.shippingAddress.secondaryAddress}</>
+                          {orderAddress.streetAddress}
+                          {orderAddress.secondaryAddress && (
+                            <>, {orderAddress.secondaryAddress}</>
                           )}
                           <br />
-                          {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zipCode}
+                          {orderAddress.city}, {orderAddress.state} {orderAddress.zipCode}
                         </p>
                       </div>
 
@@ -286,6 +284,7 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
                   {/* Step 2: Package Dimensions */}
                   {step === 'dimensions' && (
                     <div className="space-y-4">
+                    {order.items && order.items.length > 0 && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <h3 className="text-sm font-medium text-blue-900 mb-2">
                           Order Items
@@ -298,6 +297,7 @@ export default function ShippingModal({ order, isOpen, onClose, onShipmentCreate
                           ))}
                         </ul>
                       </div>
+                      )}
 
                       <div>
                         <h3 className="text-sm font-medium text-gray-900 mb-3">

@@ -1,120 +1,86 @@
 //file path: src/app/api/cron/tracking-update/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import { USPSTrackingService } from '@/lib/usps/trackingService'
-import { getAllAccountsWithUSPS } from '@/lib/storage/integrationStorage'
-import { getActiveTrackingNumbers, updateOrderTracking } from '@/lib/storage/orderStorage'
+
+/**
+ * Cron Job: Update tracking for all active shipments
+ *
+ * This route delegates to the backend API which handles:
+ * - Fetching all accounts with active shipments
+ * - Getting USPS credentials from database
+ * - Calling USPS tracking API
+ * - Updating order statuses
+ *
+ * Trigger: Set up in Vercel Cron or similar service
+ * Schedule: Every 6 hours recommended
+ */
+
+// ✅ Use backend API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com';
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
 
+  // Verify cron secret
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
   if (!cronSecret) {
-    console.error('[CRON] CRON_SECRET not configured')
+    console.error('[CRON Frontend] CRON_SECRET not configured')
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
   }
 
   if (authHeader !== `Bearer ${cronSecret}`) {
-    console.warn('[CRON] Unauthorized cron attempt')
+    console.warn('[CRON Frontend] Unauthorized cron attempt')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    console.log('[CRON] Starting multi-account tracking update job...')
+    console.log('[CRON Frontend] Starting tracking update job...')
+    console.log('[CRON Frontend] Calling backend API:', `${API_BASE_URL}/api/cron/tracking-update`)
 
-    const accountsWithUSPS = getAllAccountsWithUSPS()
+    // Call backend cron endpoint
+    const response = await fetch(`${API_BASE_URL}/api/cron/tracking-update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cronSecret}` // Pass cron secret to backend
+      }
+    })
 
-    console.log(`[CRON] Found ${accountsWithUSPS.length} accounts with USPS integration`)
-
-    if (accountsWithUSPS.length === 0) {
-      return NextResponse.json({
-        success: true,
-        message: 'No accounts with USPS integration found',
-        totalAccounts: 0,
-        totalShipments: 0,
-        duration: Date.now() - startTime
-      })
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[CRON Frontend] Backend returned error:', errorText)
+      throw new Error(`Backend cron failed: ${response.status} - ${errorText}`)
     }
 
-    let totalUpdated = 0
-    let totalDelivered = 0
-    let totalExceptions = 0
-    let totalShipments = 0
-
-    for (const account of accountsWithUSPS) {
-      console.log(`[CRON] Processing account: ${account.accountId}`)
-
-      const trackingNumbers = getActiveTrackingNumbers(account.accountId)
-
-      if (trackingNumbers.length === 0) {
-        console.log(`[CRON] No active shipments for account: ${account.accountId}`)
-        continue
-      }
-
-      console.log(`[CRON] Account ${account.accountId} has ${trackingNumbers.length} active shipments`)
-      totalShipments += trackingNumbers.length
-
-      const trackingService = new USPSTrackingService(
-        account.credentials.consumerKey,
-        account.credentials.consumerSecret,
-        account.credentials.environment
-      )
-
-      const updates = await trackingService.getMultipleTrackingUpdates(trackingNumbers)
-
-      console.log(`[CRON] Received ${updates.length} updates for account: ${account.accountId}`)
-
-      for (const update of updates) {
-        updateOrderTracking(update.trackingNumber, update, account.accountId)
-        totalUpdated++
-
-        if (trackingService.isDelivered(update.statusCategory)) {
-          totalDelivered++
-          console.log(`[CRON] Package delivered for account ${account.accountId}: ${update.trackingNumber}`)
-        }
-
-        if (trackingService.needsAttention(update.statusCategory)) {
-          totalExceptions++
-          console.log(`[CRON] Package needs attention for account ${account.accountId}: ${update.trackingNumber}`)
-        }
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 2000))
-    }
-
+    const result = await response.json()
     const duration = Date.now() - startTime
 
-    console.log(`[CRON] Multi-account tracking update completed in ${duration}ms`)
+    console.log('[CRON Frontend] Tracking update completed:', result)
 
     return NextResponse.json({
-      success: true,
-      message: `Successfully updated ${totalUpdated} shipments across ${accountsWithUSPS.length} accounts`,
-      stats: {
-        totalAccounts: accountsWithUSPS.length,
-        totalShipments,
-        updated: totalUpdated,
-        delivered: totalDelivered,
-        exceptions: totalExceptions
-      },
-      duration
+      ...result,
+      frontendDuration: duration,
+      source: 'frontend-proxy'
     })
 
   } catch (error: any) {
-    console.error('[CRON] Multi-account tracking update error:', error)
+    console.error('[CRON Frontend] Tracking update error:', error)
 
     return NextResponse.json(
       {
         success: false,
         error: error.message || 'Failed to update tracking',
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
+        source: 'frontend-proxy'
       },
       { status: 500 }
     )
   }
 }
 
+// Support POST for manual triggers
 export async function POST(request: NextRequest) {
   return GET(request)
 }

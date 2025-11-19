@@ -1,13 +1,13 @@
 //file path: src/lib/storage/shopifyIntegrationHelpers.ts
 
-import { getAccountIntegrations, saveAccountIntegrations, getCurrentAccountId } from './integrationStorage'
+import { getAccountIntegrations, saveAccountIntegrations } from './integrationStorage'
 
 /**
  * Get all Shopify integrations
+ * ✅ FIXED: Made accountId required (removed getCurrentAccountId dependency)
  */
-export function getShopifyIntegrations(accountId?: string) {
-  const aid = accountId || getCurrentAccountId()
-  const settings = getAccountIntegrations(aid)
+export async function getShopifyIntegrations(accountId: string) {
+  const settings = await getAccountIntegrations()
 
   if (!settings) return []
 
@@ -19,8 +19,8 @@ export function getShopifyIntegrations(accountId?: string) {
 /**
  * Get integration by shop domain
  */
-export function getIntegrationByShop(shop: string, accountId?: string) {
-  const integrations = getShopifyIntegrations(accountId)
+export async function getIntegrationByShop(shop: string, accountId: string) {
+  const integrations = await getShopifyIntegrations(accountId)
   return integrations.find((int: any) =>
     int.config?.storeUrl === shop &&
     (int.status === 'connected' || int.enabled)
@@ -30,9 +30,8 @@ export function getIntegrationByShop(shop: string, accountId?: string) {
 /**
  * Get integration by ID
  */
-export function getIntegrationById(integrationId: string, accountId?: string) {
-  const aid = accountId || getCurrentAccountId()
-  const settings = getAccountIntegrations(aid)
+export async function getIntegrationById(integrationId: string, accountId: string) {
+  const settings = await getAccountIntegrations()
 
   if (!settings) return null
 
@@ -42,9 +41,8 @@ export function getIntegrationById(integrationId: string, accountId?: string) {
 /**
  * Update integration config
  */
-export function updateIntegrationConfig(integrationId: string, newConfig: any, accountId?: string) {
-  const aid = accountId || getCurrentAccountId()
-  const settings = getAccountIntegrations(aid)
+export async function updateIntegrationConfig(integrationId: string, newConfig: any, accountId?: string) {
+  const settings = await getAccountIntegrations()
 
   if (!settings) return false
 
@@ -58,19 +56,18 @@ export function updateIntegrationConfig(integrationId: string, newConfig: any, a
     lastUpdated: new Date().toISOString()
   }
 
-  saveAccountIntegrations(settings, aid)
+  await saveAccountIntegrations(settings)
   return true
 }
 
 /**
  * Save new integration
  */
-export function saveIntegration(integration: any, accountId?: string) {
-  const aid = accountId || getCurrentAccountId()
-  const settings = getAccountIntegrations(aid) || {
+export async function saveIntegration(integration: any, accountId: string) {
+  const settings = await getAccountIntegrations() || {
     integrations: [],
     lastUpdated: new Date().toISOString(),
-    accountId: aid
+    accountId
   }
 
   // Check if integration already exists
@@ -82,14 +79,20 @@ export function saveIntegration(integration: any, accountId?: string) {
     settings.integrations.push(integration)
   }
 
-  saveAccountIntegrations(settings, aid)
+  await saveAccountIntegrations(settings)
 }
 
 /**
  * Get all connected Shopify stores
+ * ✅ FIXED: Returns all connected stores (accountId is managed by API)
  */
-export function getConnectedShopifyStores(accountId?: string) {
-  return getShopifyIntegrations(accountId).filter((int: any) =>
-    int.status === 'connected' || int.enabled
-  )
-}
+ export async function getConnectedShopifyStores() {
+   const settings = await getAccountIntegrations()
+
+   if (!settings) return []
+
+   return settings.integrations.filter((int: any) =>
+     (int.provider === 'shopify' || int.name?.toLowerCase().includes('shopify')) &&
+     (int.status === 'connected' || int.enabled)
+   )
+ }

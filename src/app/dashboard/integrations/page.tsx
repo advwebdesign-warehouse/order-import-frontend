@@ -16,19 +16,37 @@ import ShopifyConfigModal from './components/ShopifyConfigModal'
 import StoreSelector from './components/StoreSelector'
 import BrowseIntegrationsModal from './components/BrowseIntegrationsModal'
 import { Integration } from './types/integrationTypes'
-import { getStoresFromStorage } from '../../../app/dashboard/stores/utils/storeStorage'
+import { storeApi } from '@/app/services/storeApi'
 import Notification from '@/app/dashboard/shared/components/Notification'
 import WarehouseRequiredWarning from './components/WarehouseRequiredWarning'
 import { checkStoreWarehouseById } from './utils/storeWarehouseUtils'
+import { withAuth } from '@/app/dashboard/shared/components/withAuth'
 
-function IntegrationsContent() {
+// ✅ LocalStorage key for persisting selected store (UI preference only - NOT data)
+const SELECTED_STORE_KEY = 'integrations_selected_store_id'
+
+interface IntegrationsContentProps {
+  accountId: string // ✅ Now guaranteed to be valid by withAuth
+}
+
+function IntegrationsContent({ accountId }: IntegrationsContentProps) {
   const searchParams = useSearchParams()
 
-  // Core integration state
-  const { settings, loading, updateIntegration, testIntegration, addIntegration, removeIntegration, accountId } = useIntegrations()
+  // Core integration state - ✅ accountId now comes from props
+  const {
+    integrations,
+    loading: integrationsLoading,
+    updateIntegration,
+    testIntegration,
+    addIntegration,
+    removeIntegration,
+    error: integrationsError
+  } = useIntegrations()
 
   // Store state
   const [stores, setStores] = useState<any[]>([])
+  const [storesLoading, setStoresLoading] = useState(true)
+  const [storesError, setStoresError] = useState<string | null>(null)
   const [selectedStoreId, setSelectedStoreId] = useState<string>('')
   const [hasWarehouses, setHasWarehouses] = useState<boolean>(true)
 
@@ -67,9 +85,11 @@ function IntegrationsContent() {
     handleConfigureClick
   } = useIntegrationModals()
 
+  // ✅ No more accountId validation needed - withAuth guarantees it's valid
   // OAuth callbacks hook
   useOAuthCallbacks({
-    settings,
+    accountId, // ✅ No more non-null assertion needed
+    integrations,
     selectedStoreId,
     stores,
     updateIntegration,
@@ -80,7 +100,8 @@ function IntegrationsContent() {
 
   // Integration handlers hook
   const { handleSaveShopify, handleSaveUsps, handleSaveUps } = useIntegrationHandlers({
-    settings,
+    accountId, // ✅ No more non-null assertion needed
+    integrations,
     selectedStoreId,
     updateIntegration,
     addIntegration,
@@ -90,43 +111,90 @@ function IntegrationsContent() {
     setShowUpsModal
   })
 
-  // Load stores on mount
+  // Load stores from API on mount
   useEffect(() => {
-    const loadedStores = getStoresFromStorage()
-    setStores(loadedStores)
+    loadStores()
+  }, [])
 
-    // ✅ FIX: Check for store ID from OAuth callbacks
-    const storeParam = searchParams.get('store')
-    const upsStoreId = searchParams.get('ups_store_id')
-    const shopifyStoreId = searchParams.get('store_id')
+  /**
+   * Load stores from API
+   */
+  const loadStores = async () => {
+    try {
+      setStoresLoading(true)
+      setStoresError(null)
 
-    // Priority order: explicit store param > OAuth callback store > default to first store
-    const targetStoreId = storeParam || upsStoreId || shopifyStoreId
+      console.log('[Integrations Page] 🔄 Loading stores from API...')
+      const loadedStores = await storeApi.getStores()
 
-    if (targetStoreId && loadedStores.some(s => s.id === targetStoreId)) {
-      console.log('[Integrations Page] Setting selected store from URL:', targetStoreId)
-      setSelectedStoreId(targetStoreId)
-    } else if (loadedStores.length > 0 && !selectedStoreId) {
-      console.log('[Integrations Page] Defaulting to first store:', loadedStores[0].id)
-      setSelectedStoreId(loadedStores[0].id)
+      console.log('[Integrations Page] ✅ Loaded', loadedStores.length, 'stores')
+      setStores(loadedStores)
+
+      // Check for store ID from OAuth callbacks or localStorage
+      const storeParam = searchParams.get('store')
+      const upsStoreId = searchParams.get('ups_store_id')
+      const shopifyStoreId = searchParams.get('store_id')
+      const storedStoreId = localStorage.getItem(SELECTED_STORE_KEY) // UI preference only
+
+      // Priority order: explicit store param > OAuth callback store > localStorage > default to first store
+      const urlStoreId = storeParam || upsStoreId || shopifyStoreId
+      const targetStoreId = urlStoreId || storedStoreId
+
+      if (targetStoreId && loadedStores.some(s => s.id === targetStoreId)) {
+        console.log('[Integrations Page] Setting selected store:', targetStoreId,
+          urlStoreId ? '(from URL)' : storedStoreId ? '(from localStorage)' : '')
+        setSelectedStoreId(targetStoreId)
+      } else if (loadedStores.length > 0 && !selectedStoreId) {
+        console.log('[Integrations Page] Defaulting to first store:', loadedStores[0].id)
+        setSelectedStoreId(loadedStores[0].id)
+      }
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load stores'
+      console.error('[Integrations Page] ❌ Error loading stores:', errorMessage)
+      setStoresError(errorMessage)
+      setNotification({
+        show: true,
+        type: 'error',
+        title: 'Failed to load stores',
+        message: errorMessage
+      })
+    } finally {
+      setStoresLoading(false)
     }
-  }, [searchParams])
+  }
 
+  // ✅ Check warehouses when store changes (async call)
   useEffect(() => {
     if (selectedStoreId) {
       console.log('[Integrations Page] Checking warehouses for store:', selectedStoreId)
-      const check = checkStoreWarehouseById(selectedStoreId)
-      console.log('[Integrations Page] Warehouse check result:', {
-        storeId: selectedStoreId,
-        storeName: check.store?.storeName,
-        hasWarehouses: check.hasWarehouses,
-        hasRegionRouting: check.hasRegionRouting,
-        warehouseConfig: check.store?.warehouseConfig
+
+      // Make async call to check warehouses
+      // API automatically scopes to authenticated user's account
+      checkStoreWarehouseById(selectedStoreId).then(check => {
+        console.log('[Integrations Page] Warehouse check result:', {
+          storeId: selectedStoreId,
+          storeName: check.store?.storeName,
+          hasWarehouses: check.hasWarehouses,
+          hasRegionRouting: check.hasRegionRouting,
+          warehouseConfig: check.store?.warehouseConfig
+        })
+        setHasWarehouses(check.hasWarehouses)
+      }).catch(error => {
+        console.error('[Integrations Page] Error checking warehouses:', error)
+        setHasWarehouses(true) // Default to true on error
       })
-      setHasWarehouses(check.hasWarehouses)
     } else {
       console.log('[Integrations Page] No store selected, defaulting hasWarehouses to true')
       setHasWarehouses(true)
+    }
+  }, [selectedStoreId])
+
+  // Persist selected store to localStorage whenever it changes
+  useEffect(() => {
+    if (selectedStoreId) {
+      console.log('[Integrations Page] Persisting selected store to localStorage (UI preference):', selectedStoreId)
+      localStorage.setItem(SELECTED_STORE_KEY, selectedStoreId)
     }
   }, [selectedStoreId])
 
@@ -142,10 +210,10 @@ function IntegrationsContent() {
     return store?.name || store?.storeName || store?.companyName || ''
   }
 
-  // Filter integrations by selected store
+  // ✅ FIXED: Filter integrations by selected store using integrations from hook
   const filteredIntegrations = selectedStoreId
-    ? settings.integrations.filter((i: Integration) => i.storeId === selectedStoreId)
-    : settings.integrations
+    ? integrations.filter((i: Integration) => i.storeId === selectedStoreId)
+    : integrations
 
   // Separate integrations by type
   const shippingIntegrations = filteredIntegrations.filter((i: Integration) => i.type === 'shipping')
@@ -154,113 +222,190 @@ function IntegrationsContent() {
   // Calculate stats
   const connectedCount = filteredIntegrations.filter((i: Integration) => i.status === 'connected').length
   const disconnectedCount = filteredIntegrations.filter((i: Integration) => i.status === 'disconnected').length
-  const needsAttentionCount = filteredIntegrations.filter((i: Integration) => i.status === 'error').length
+  const errorCount = filteredIntegrations.filter((i: Integration) => i.status === 'error').length
+  const needsAttentionCount = disconnectedCount + errorCount
 
-  // Handle adding integration from browse modal
+  // Handler functions
   const handleAddIntegration = (integrationId: string) => {
-    if (!selectedStoreId) {
-      setNotification({
-        show: true,
-        type: 'warning',
-        title: 'Store Required',
-        message: 'Please select a store before adding an integration.'
-      })
-      return
-    }
+    console.log('[handleAddIntegration] Opening config for:', integrationId)
 
-    const comingSoonIntegrations = ['woocommerce', 'etsy', 'ebay', 'walmart', 'fedex', 'dhl']
-
-    if (comingSoonIntegrations.includes(integrationId)) {
-      setNotification({
-        show: true,
-        type: 'info',
-        title: 'Coming Soon',
-        message: 'This integration is coming soon!'
-      })
-      setShowBrowseModal(false)
-      return
+    // Open the appropriate configuration modal based on the integration ID
+    switch (integrationId.toLowerCase()) {
+      case 'shopify':
+        setShowShopifyModal(true)
+        break
+      case 'usps':
+        setShowUspsModal(true)
+        break
+      case 'ups':
+        setShowUpsModal(true)
+        break
+      case 'woocommerce':
+      case 'etsy':
+      case 'ebay':
+        // For integrations without modals yet, show info message
+        setNotification({
+          show: true,
+          type: 'info',
+          title: `${integrationId.charAt(0).toUpperCase() + integrationId.slice(1)} Integration`,
+          message: `${integrationId.charAt(0).toUpperCase() + integrationId.slice(1)} configuration modal coming soon!`
+        })
+        break
+      default:
+        setNotification({
+          show: true,
+          type: 'warning',
+          title: 'Unknown Integration',
+          message: `No configuration available for ${integrationId}`
+        })
     }
 
     setShowBrowseModal(false)
-    setTimeout(() => openConfigModal(integrationId), 200)
   }
 
-  // Handle toggle enabled
-  const handleToggleEnabled = (integration: Integration) => {
-    updateIntegration(integration.id, { enabled: !integration.enabled })
-
-    setNotification({
-      show: true,
-      type: 'info',
-      title: integration.enabled ? 'Integration Disabled' : 'Integration Enabled',
-      message: `${integration.name} has been ${integration.enabled ? 'disabled' : 'enabled'}.`
-    })
+  const handleToggleEnabled = async (integration: Integration) => {
+    try {
+      await updateIntegration(integration.id, {
+        enabled: !integration.enabled
+      })
+      setNotification({
+        show: true,
+        type: 'success',
+        title: integration.enabled ? 'Integration disabled' : 'Integration enabled',
+        message: `${integration.name} has been ${integration.enabled ? 'disabled' : 'enabled'}`
+      })
+    } catch (error) {
+      setNotification({
+        show: true,
+        type: 'error',
+        title: 'Failed to update integration',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
   }
 
-  // Handle disconnect
-  const handleDisconnect = (integration: Integration) => {
-    updateIntegration(integration.id, {
-      status: 'disconnected',
-      enabled: false,
-      config: integration.type === 'shipping' ? {
-        ...(integration.config as any),
-        accessToken: undefined,
-        tokenExpiry: undefined
-      } : integration.config
-    })
-
-    setNotification({
-      show: true,
-      type: 'info',
-      title: 'Integration Disconnected',
-      message: `${integration.name} has been disconnected.`
-    })
-  }
-
-  // Handle test
-  const handleTest = async (integration: Integration): Promise<boolean> => {
-    setTestingId(integration.id)
-    setTestResults(prev => ({ ...prev, [integration.id]: null }))
+  /**
+   * Handle disconnect integration
+   */
+  const handleDisconnect = async (integration: Integration) => {
+    if (!confirm(`Are you sure you want to disconnect ${integration.name}?`)) {
+      return
+    }
 
     try {
-      const result = await testIntegration(integration.id)
+      await updateIntegration(integration.id, {
+        status: 'disconnected',
+        enabled: false
+      })
+      setNotification({
+        show: true,
+        type: 'info',
+        title: 'Integration disconnected',
+        message: `${integration.name} has been disconnected`
+      })
+    } catch (error) {
+      setNotification({
+        show: true,
+        type: 'error',
+        title: 'Failed to disconnect integration',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+  }
+
+  const handleDelete = async (integration: Integration) => {
+    if (!confirm(`Are you sure you want to delete the ${integration.name} integration?`)) {
+      return
+    }
+
+    console.log('[Integrations Page] Deleting:', integration.id)
+
+    try {
+      await removeIntegration(integration.id, integration.storeId)
+      setNotification({
+        show: true,
+        type: 'success',
+        title: 'Integration deleted',
+        message: `${integration.name} has been deleted`
+      })
+    } catch (error) {
+      setNotification({
+        show: true,
+        type: 'error',
+        title: 'Failed to delete integration',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+  }
+
+  const handleTest = async (integration: Integration): Promise<boolean> => {
+    try {
+      setTestingId(integration.id)
+      setTestResults(prev => ({ ...prev, [integration.id]: null }))
+
+      const result = await testIntegration(integration)
+
       setTestResults(prev => ({
         ...prev,
-        [integration.id]: result
+        [integration.id]: {
+          success: result.success,
+          message: result.message || (result.success ? 'Connection successful' : 'Connection failed')
+        }
       }))
 
-      // Auto-dismiss after 5 seconds
+      // Auto-clear test results after 5 seconds
       setTimeout(() => {
-        setTestResults(prev => ({
-          ...prev,
-          [integration.id]: null
-        }))
+        setTestResults(prev => ({ ...prev, [integration.id]: null }))
       }, 5000)
-
       return result.success
     } catch (error) {
       setTestResults(prev => ({
         ...prev,
-        [integration.id]: { success: false, message: 'Test failed' }
+        [integration.id]: {
+          success: false,
+          message: error instanceof Error ? error.message : 'Test failed'
+        }
       }))
 
+      // Auto-clear test results after 5 seconds
       setTimeout(() => {
-        setTestResults(prev => ({
-          ...prev,
-          [integration.id]: null
-        }))
+        setTestResults(prev => ({ ...prev, [integration.id]: null }))
       }, 5000)
-
       return false
     } finally {
       setTestingId(null)
     }
   }
 
-  // ✅ Simplified - no need for fresh reads
-  const handleShopifySync = async (onProgress?: (stage: 'starting' | 'products' | 'orders' | 'complete') => void) => {
-    const shopifyIntegration = settings.integrations.find(
-      (i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId
+  // Helper to create test handler for modals (returns the object type they expect)
+  const createModalTestHandler = (integration: Integration) => {
+    return async (): Promise<{ success: boolean; message: string }> => {
+      try {
+        setTestingId(integration.id)
+        const result = await testIntegration(integration)
+
+        return {
+          success: result.success,
+          message: result.message || (result.success ? 'Connection successful' : 'Connection failed')
+        }
+      } catch (error) {
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : 'Test failed'
+        }
+      } finally {
+        setTestingId(null)
+      }
+    }
+  }
+
+  // ✅ Shopify sync handler with progress stages
+  const handleShopifySync = async (
+    integrationId: string,
+    onProgress?: (stage: 'starting' | 'products' | 'orders' | 'complete') => void
+  ) => {
+    const shopifyIntegration = integrations.find(
+      (i: Integration) => i.id === integrationId
     )
 
     if (!shopifyIntegration) {
@@ -306,17 +451,19 @@ function IntegrationsContent() {
       onProgress?.('orders')
 
       // Trigger sync with the integration we already have
+      // Note: accountId is handled automatically by API via JWT token
+      // If ShopifyService.autoSyncOnConnection needs accountId, pass it from useIntegrations hook
       await ShopifyService.autoSyncOnConnection(
         shopifyIntegration as any,
         warehouseId,
-        accountId,
+        accountId, // From useIntegrations hook - API automatically scopes via JWT
         (message) => {
           console.log('[Shopify Sync]', message)
         }
       )
 
-      // Update integration
-      updateIntegration(shopifyIntegration.id, {
+      // Update integration with last sync time
+      await updateIntegration(shopifyIntegration.id, {
         lastSyncAt: new Date().toISOString()
       })
 
@@ -346,44 +493,35 @@ function IntegrationsContent() {
     }
   }
 
-  const createModalTestHandler = (integration: Integration) => {
-    return async (): Promise<{ success: boolean; message: string }> => {
-      try {
-        const result = await testIntegration(integration.id)
-        return {
-          success: result.success,
-          message: result.success
-            ? ` ${integration.name} connection test successful!`
-            : ` ${integration.name} connection test failed. Please check your credentials.`
-        }
-      } catch (error) {
-        console.error('Test connection error:', error)
-        return {
-          success: false,
-          message: `❌ Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-        }
-      }
-    }
-  }
-
-  // Handle delete
-  const handleDelete = (integration: Integration) => {
-    removeIntegration(integration.id)
-
-    setNotification({
-      show: true,
-      type: 'success',
-      title: 'Integration Deleted',
-      message: `${integration.name} has been removed.`
-    })
-  }
-
-  if (loading) {
+  // Loading state
+  if (integrationsLoading || storesLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading integrations...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (integrationsError || storesError) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center max-w-md">
+          <div className="text-red-600 text-5xl mb-4">⚠️</div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Data</h3>
+          <p className="text-gray-600 mb-4">{integrationsError || storesError}</p>
+          <button
+            onClick={() => {
+              loadStores()
+              window.location.reload()
+            }}
+            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
     )
@@ -396,7 +534,7 @@ function IntegrationsContent() {
         <div className="sm:flex-auto">
           <h1 className="text-2xl font-semibold leading-6 text-gray-900">Integrations</h1>
           <p className="mt-2 text-sm text-gray-700">
-            Connect your tools and services to streamline your workflow
+            Connect your e-commerce platforms and shipping carriers
           </p>
         </div>
         {selectedStoreId && (
@@ -641,7 +779,7 @@ function IntegrationsContent() {
         isOpen={showUspsModal}
         onClose={() => setShowUspsModal(false)}
         integration={
-          settings.integrations.find((i: Integration) => i.name === 'USPS' && i.storeId === selectedStoreId) || {
+          integrations.find((i: Integration) => i.name === 'USPS' && i.storeId === selectedStoreId) || {
             id: `usps-${selectedStoreId}-new`,
             name: 'USPS',
             type: 'shipping',
@@ -658,8 +796,8 @@ function IntegrationsContent() {
         }
         onSave={(id, config) => handleSaveUsps({ config })}
         selectedStoreId={selectedStoreId}
-        onTest={() => createModalTestHandler(settings.integrations.find((i: Integration) => i.name === 'USPS' && i.storeId === selectedStoreId)!)()}
-        isTesting={testingId === settings.integrations.find((i: Integration) => i.name === 'USPS' && i.storeId === selectedStoreId)?.id}
+        onTest={() => createModalTestHandler(integrations.find((i: Integration) => i.name === 'USPS' && i.storeId === selectedStoreId)!)()}
+        isTesting={testingId === integrations.find((i: Integration) => i.name === 'USPS' && i.storeId === selectedStoreId)?.id}
       />
 
       {/* UPS Config Modal */}
@@ -667,7 +805,7 @@ function IntegrationsContent() {
         isOpen={showUpsModal}
         onClose={() => setShowUpsModal(false)}
         integration={
-          settings.integrations.find((i: Integration) => i.name === 'UPS' && i.storeId === selectedStoreId) || {
+          integrations.find((i: Integration) => i.name === 'UPS' && i.storeId === selectedStoreId) || {
             id: `ups-${selectedStoreId}-new`,
             name: 'UPS',
             type: 'shipping',
@@ -683,9 +821,9 @@ function IntegrationsContent() {
         }
         onSave={(id, config) => handleSaveUps({ config })}
         onTest={() => createModalTestHandler(
-          settings.integrations.find((i: Integration) => i.name === 'UPS' && i.storeId === selectedStoreId)!
+          integrations.find((i: Integration) => i.name === 'UPS' && i.storeId === selectedStoreId)!
         )()}
-        isTesting={testingId === settings.integrations.find((i: Integration) => i.name === 'UPS' && i.storeId === selectedStoreId)?.id}
+        isTesting={testingId === integrations.find((i: Integration) => i.name === 'UPS' && i.storeId === selectedStoreId)?.id}
       />
 
       {/* Shopify Config Modal */}
@@ -694,15 +832,20 @@ function IntegrationsContent() {
         onClose={() => setShowShopifyModal(false)}
         onSave={handleSaveShopify}
         existingIntegration={
-          settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId) as any
+          integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId) as any
         }
         selectedStoreId={selectedStoreId}
         onTest={() => createModalTestHandler(
-          settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)!
+          integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)!
         )()}
-        isTesting={testingId === settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)?.id}
-        onSync={handleShopifySync}
-        isSyncing={syncingId === settings.integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)?.id}
+        isTesting={testingId === integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)?.id}
+        onSync={async (progressCallback) => {
+          const shopifyIntegration = integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)
+          if (shopifyIntegration) {
+            await handleShopifySync(shopifyIntegration.id, progressCallback)
+          }
+        }}
+        isSyncing={syncingId === integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)?.id}
       />
 
       {/* Notification */}
@@ -717,10 +860,18 @@ function IntegrationsContent() {
   )
 }
 
-export default function IntegrationsPage() {
+// ✅ Wrap with Suspense first, then with withAuth
+function IntegrationsPageWithSuspense({ accountId }: IntegrationsContentProps) {
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-      <IntegrationsContent />
+      <IntegrationsContent accountId={accountId} />
     </Suspense>
   )
 }
+
+// ✅ Export the wrapped component with withAuth HOC
+export default withAuth(IntegrationsPageWithSuspense, {
+  loadingMessage: "Loading integrations...",
+  errorTitle: "Unable to load integrations",
+  errorMessage: "Please check your authentication and try again."
+})

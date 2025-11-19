@@ -1,20 +1,19 @@
 //file path: src/lib/integrations/ecommerce/shopifyIntegration.ts
 // UPDATED: Now uses API routes for sync operations to avoid CORS errors
 
-import { EcommerceIntegration, IntegrationConfig, SyncResult, TestConnectionResult } from '../base/baseIntegration'
+import { EcommerceIntegrationService, IntegrationConfig, SyncResult, TestConnectionResult } from '../base/baseIntegration'
 import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient'
-import { saveProductsToStorage } from '@/lib/storage/productStorage'
-import { saveOrdersToStorage } from '@/lib/storage/orderStorage'
+
 /**
  * Shopify Integration Implementation
- * Extends EcommerceIntegration base class
+ * ✅ UPDATED: Extends EcommerceIntegrationService (renamed class)
  *
  * UPDATED: Uses API routes for sync operations (no CORS!)
  * - testConnection: Uses client directly (only for testing)
  * - syncProducts: Calls /api/integrations/shopify/sync
  * - syncOrders: Calls /api/integrations/shopify/sync
  */
-export class ShopifyIntegration extends EcommerceIntegration {
+export class ShopifyIntegration extends EcommerceIntegrationService  {
   private client: ShopifyGraphQLClient | null = null
 
   constructor(config: IntegrationConfig) {
@@ -96,9 +95,8 @@ export class ShopifyIntegration extends EcommerceIntegration {
 
        console.log(`[ShopifyIntegration] ✅ Synced ${result.productCount} products via API route`)
 
-       // Save
+       // API route handles saving to storage
       if (result.data?.products && result.data.products.length > 0) {
-        saveProductsToStorage(result.data.products, this.config.accountId)
         console.log(`[ShopifyIntegration] ✅ Saved ${result.data.products.length} products`)
       }
 

@@ -3,6 +3,8 @@
 
 import { useState, useEffect } from 'react'
 import { AppSettings } from './types'
+import { withAuth } from '@/app/dashboard/shared/components/withAuth'
+import { settingsApi } from '@/app/services/settingsApi'
 
 // Components
 import SettingsHeader from './components/shared/SettingsHeader'
@@ -23,19 +25,35 @@ const DEFAULT_SETTINGS: AppSettings = {
   }
 }
 
-export default function SettingsPage() {
+interface SettingsPageContentProps {
+  accountId: string // ✅ Guaranteed to be valid by withAuth
+}
+
+function SettingsPageContent({ accountId }: SettingsPageContentProps) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   const [activeTab, setActiveTab] = useState('fulfillment')
   const [hasChanges, setHasChanges] = useState(false)
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  // Load settings from localStorage on mount
+  // ✅ Load settings from backend on mount
   useEffect(() => {
-    const savedSettings = localStorage.getItem('appSettings')
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings))
+    loadSettings()
+  }, [accountId])
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true)
+      const loadedSettings = await settingsApi.getSettings()
+      setSettings(loadedSettings)
+    } catch (error) {
+      console.error('[Settings Page] Error loading settings:', error)
+      // Keep default settings on error
+    } finally {
+      setLoading(false)
     }
-  }, [])
+  }
 
   const handleSettingChange = (section: keyof AppSettings, updates: any) => {
     const newSettings = {
@@ -49,11 +67,22 @@ export default function SettingsPage() {
     setHasChanges(true)
   }
 
-  const handleSaveSettings = () => {
-    localStorage.setItem('appSettings', JSON.stringify(settings))
-    setHasChanges(false)
-    setShowSuccessMessage(true)
-    setTimeout(() => setShowSuccessMessage(false), 3000)
+  const handleSaveSettings = async () => {
+    try {
+      setSaving(true)
+
+      // ✅ Save to backend
+      await settingsApi.updateSettings(settings)
+
+      setHasChanges(false)
+      setShowSuccessMessage(true)
+      setTimeout(() => setShowSuccessMessage(false), 3000)
+    } catch (error) {
+      console.error('[Settings Page] Error saving settings:', error)
+      alert('Failed to save settings. Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleResetSection = (section: keyof AppSettings) => {
@@ -65,14 +94,26 @@ export default function SettingsPage() {
     setHasChanges(true)
   }
 
-  const handleResetAll = () => {
+  const handleResetAll = async () => {
     if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
-      setSettings(DEFAULT_SETTINGS)
-      localStorage.removeItem('appSettings')
-      localStorage.removeItem('fulfillmentStatuses')
-      setHasChanges(false)
-      setShowSuccessMessage(true)
-      setTimeout(() => setShowSuccessMessage(false), 3000)
+      try {
+        setSaving(true)
+
+        // ✅ Reset on backend
+        await settingsApi.resetSettings()
+
+        // Reload settings from backend to get fresh defaults
+        await loadSettings()
+
+        setHasChanges(false)
+        setShowSuccessMessage(true)
+        setTimeout(() => setShowSuccessMessage(false), 3000)
+      } catch (error) {
+        console.error('[Settings Page] Error resetting settings:', error)
+        alert('Failed to reset settings. Please try again.')
+      } finally {
+        setSaving(false)
+      }
     }
   }
 
@@ -95,6 +136,18 @@ export default function SettingsPage() {
 
   // Only show save button for non-auto-save tabs
   const showSaveButton = activeTab !== 'fulfillment' && hasChanges
+
+  // ✅ Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading settings...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -133,3 +186,10 @@ export default function SettingsPage() {
     </div>
   )
 }
+
+// ✅ Export the wrapped component with withAuth HOC
+export default withAuth(SettingsPageContent, {
+  loadingMessage: "Loading settings...",
+  errorTitle: "Unable to load settings",
+  errorMessage: "Please check your authentication and try again."
+})

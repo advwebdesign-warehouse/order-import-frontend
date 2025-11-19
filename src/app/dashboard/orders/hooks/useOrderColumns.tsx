@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Order, ColumnConfig, SortState } from '../utils/orderTypes'
 import { DEFAULT_COLUMNS, WAREHOUSE_ORDER_COLUMNS, DEFAULT_SORT } from '../constants/orderConstants'
 import { getCurrentUserId } from '@/lib/storage/userStorage'
-import { getStoresFromStorage } from '@/app/dashboard/stores/utils/storeStorage'
+import { useStores } from '@/app/dashboard/stores/hooks/useStores'
 import { getStoreName, getWarehouseName } from '../utils/warehouseUtils'
 import { useWarehouses } from '@/app/dashboard/warehouses/context/WarehouseContext'
 
@@ -17,7 +17,7 @@ export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
   const [initialized, setInitialized] = useState(false)
 
   // Load stores and warehouses for name resolution during sorting
-  const [stores, setStores] = useState<any[]>([])
+  const { stores } = useStores()
   const { warehouses } = useWarehouses()
 
   const userId = getCurrentUserId()
@@ -25,14 +25,6 @@ export function useOrderColumns(orders: Order[], useWarehouseColumns = false) {
     columns: `orderColumns_${userId}${useWarehouseColumns ? '_warehouse' : ''}`,
     sortConfig: `orderSort_${userId}${useWarehouseColumns ? '_warehouse' : ''}`
   }
-
-  // Load stores from storage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const loadedStores = getStoresFromStorage()
-      setStores(loadedStores)
-    }
-  }, [])
 
   // Load saved settings on mount
   useEffect(() => {

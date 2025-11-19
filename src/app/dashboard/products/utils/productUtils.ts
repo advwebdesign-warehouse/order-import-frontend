@@ -46,11 +46,6 @@ export function isOutOfStock(product: Product): boolean {
   return product.stockQuantity === 0
 }
 
-// Fixed getUserId function with client-side check
-export function getUserId(): string {
-  return getCurrentUserId()
-}
-
 export function generateStorageKeys(userId: string) {
   return {
     sortConfig: `products_sort_${userId}`,

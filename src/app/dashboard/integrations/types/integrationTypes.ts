@@ -15,8 +15,8 @@ export interface BaseIntegration {
   connectedAt?: string
   lastSyncAt?: string
   lastUpdated?: string
-  accountId?: string
-  storeId?: string
+  accountId: string
+  storeId: string //required
 }
 
 export interface USPSIntegration extends BaseIntegration {
@@ -62,7 +62,6 @@ export interface UPSIntegration extends BaseIntegration {
 export interface ShopifyIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'Shopify'
-  storeId: string
   config: {
     storeUrl: string
     accessToken: string
@@ -78,7 +77,6 @@ export interface ShopifyIntegration extends BaseIntegration {
 export interface WooCommerceIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'WooCommerce'
-  storeId: string  // ✅ Required - which store owns this integration
   config: {
     storeUrl: string
     consumerKey: string
@@ -89,18 +87,15 @@ export interface WooCommerceIntegration extends BaseIntegration {
 export interface EtsyIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'Etsy'
-  storeId: string
   config: {
     apiKey: string
     sharedSecret: string
-    storeId: string
   }
 }
 
 export interface EbayIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'eBay'
-  storeId: string
   config: {
     appId: string
     certId: string
@@ -120,35 +115,7 @@ export type Integration =
 export interface IntegrationSettings {
   integrations: Integration[]
   lastUpdated: string
-  accountId?: string
-}
-
-// ✅ Keep only USPS by default - most commonly used
-export const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
-  integrations: [
-    {
-      id: 'usps',
-      name: 'USPS',
-      type: 'shipping',
-      status: 'disconnected',
-      enabled: false,
-      description: 'Generate shipping labels, calculate rates, and track packages with USPS',
-      icon: '/logos/usps-logo.svg',
-      config: {
-        consumerKey: '',
-        consumerSecret: '',
-        environment: 'sandbox',
-        apiUrl: 'https://apis-tem.usps.com'
-      },
-      features: {
-        labelGeneration: true,
-        rateCalculation: true,
-        addressValidation: true,
-        tracking: true
-      }
-    }
-  ],
-  lastUpdated: new Date().toISOString()
+  accountId: string // ✅ Required
 }
 
 // Helper type guards
