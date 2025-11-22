@@ -5,7 +5,8 @@
 import { useState, useEffect } from 'react'
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { ShippingPreset, CarrierPreference, CarrierService } from '../utils/shippingTypes'
-import { getEnabledShippingCarriers } from '@/lib/storage/integrationStorage'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
+import { ShippingAPI } from '@/lib/api/shippingApi'
 
 interface AddPresetModalProps {
   isOpen: boolean
@@ -49,62 +50,90 @@ export default function AddPresetModal({
     services: string[]
   }[]>([])
 
-  // Load enabled carriers
+  // Load enabled carriers from API
   useEffect(() => {
-    const carriers = getEnabledShippingCarriers()
-    setEnabledCarriers(carriers)
+    const loadCarriers = async () => {
+      try {
+        // Get all shipping integrations from API
+        const integrations = await IntegrationAPI.getAccountIntegrations({
+          type: 'shipping'
+        })
+
+        // Extract carrier names from connected/enabled integrations
+        const carriers = integrations
+          .filter((int: any) => int.status === 'connected' || int.enabled)
+          .map((int: any) => int.name) // e.g., 'USPS', 'UPS', 'FedEx'
+
+        setEnabledCarriers(carriers)
+      } catch (error) {
+        console.error('[AddPresetModal] Error loading carriers:', error)
+        setEnabledCarriers([])
+      }
+    }
+    loadCarriers()
   }, [])
 
-  // Load available services for all enabled carriers - ONLY ACTIVE SERVICES
+  // Load available services from API for all enabled carriers - ONLY ACTIVE SERVICES
   useEffect(() => {
     if (enabledCarriers.length === 0) return
 
-    const servicesMap: Record<string, CarrierService[]> = {}
+    const loadServices = async () => {
+      try {
+        const servicesMap: Record<string, CarrierService[]> = {}
 
-    enabledCarriers.forEach(carrier => {
-      if (selectedWarehouseId === '') {
-        // "All Warehouses" mode - merge services from all warehouses
-        const serviceMap = new Map<string, CarrierService>()
+        for (const carrier of enabledCarriers) {
+          if (selectedWarehouseId === '') {
+            // "All Warehouses" mode - merge services from all warehouses
+            const serviceMap = new Map<string, CarrierService>()
 
-        allWarehouses.forEach(warehouse => {
-          const storageKey = `shipping_services_${warehouse.id}`
-          const savedServices = localStorage.getItem(storageKey)
+            for (const warehouse of allWarehouses) {
+              try {
+                // ✅ Use ShippingAPI to get services
+                const warehouseServices = await ShippingAPI.getServices(warehouse.id)
 
-          if (savedServices) {
-            const warehouseServices: CarrierService[] = JSON.parse(savedServices)
-            warehouseServices.forEach(service => {
-              // Only active services for this carrier
-              if (service.carrier.toUpperCase() === carrier.toUpperCase() && service.isActive) {
-                const serviceKey = `${service.carrier}-${service.serviceCode}`
-                if (!serviceMap.has(serviceKey)) {
-                  serviceMap.set(serviceKey, service)
-                }
+                warehouseServices.forEach((service: CarrierService) => {
+                  // Only active services for this carrier
+                  if (service.carrier.toUpperCase() === carrier.toUpperCase() && service.isActive) {
+                    const serviceKey = `${service.carrier}-${service.serviceCode}`
+                    if (!serviceMap.has(serviceKey)) {
+                      serviceMap.set(serviceKey, service)
+                    }
+                  }
+                })
+              } catch (error) {
+                console.error(`[AddPresetModal] Error loading services for warehouse ${warehouse.id}:`, error)
               }
-            })
+            }
+
+            servicesMap[carrier] = Array.from(serviceMap.values())
+          } else {
+            // Specific warehouse - load from API
+            try {
+              // ✅ Use ShippingAPI to get services
+              const allServices = await ShippingAPI.getServices(selectedWarehouseId)
+
+              // Filter to only show ACTIVE services for this carrier
+              const carrierServices = allServices.filter(
+                (service: CarrierService) =>
+                  service.carrier.toUpperCase() === carrier.toUpperCase() &&
+                  service.isActive === true
+              )
+              servicesMap[carrier] = carrierServices
+            } catch (error) {
+              console.error(`[AddPresetModal] Error loading services for warehouse ${selectedWarehouseId}:`, error)
+              servicesMap[carrier] = []
+            }
           }
-        })
-
-        servicesMap[carrier] = Array.from(serviceMap.values())
-      } else {
-        // Specific warehouse - load from that warehouse only
-        const storageKey = `shipping_services_${selectedWarehouseId}`
-        const savedServices = localStorage.getItem(storageKey)
-
-        if (savedServices) {
-          const allServices: CarrierService[] = JSON.parse(savedServices)
-          // Filter to only show ACTIVE services for this carrier
-          const carrierServices = allServices.filter(
-            service => service.carrier.toUpperCase() === carrier.toUpperCase() &&
-                      service.isActive === true
-          )
-          servicesMap[carrier] = carrierServices
-        } else {
-          servicesMap[carrier] = []
         }
-      }
-    })
 
-    setAvailableServices(servicesMap)
+        setAvailableServices(servicesMap)
+      } catch (error) {
+        console.error('[AddPresetModal] Error loading services:', error)
+        setAvailableServices({})
+      }
+    }
+
+    loadServices()
   }, [enabledCarriers, selectedWarehouseId, allWarehouses])
 
   // Re-check for disabled services when available services change

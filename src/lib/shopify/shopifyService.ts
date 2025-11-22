@@ -10,7 +10,7 @@ import { assignWarehousesToOrders } from '@/lib/warehouse/warehouseAssignment'
 export interface ShopifyServiceConfig {
   shop: string
   accessToken: string
-  accountId: string
+  accountId: string // ✅ Still stored in config for reference, but not passed to warehouse assignment (API uses JWT)
   storeId: string
   warehouseId?: string
 }
@@ -29,16 +29,16 @@ export class ShopifyService {
 
   /**
    * Sync orders from Shopify using GraphQL
-   * ✅ FIXED: Now assigns warehouses to orders before saving
-   * ✅ NEW: Now supports incremental sync - only fetches orders modified since last sync
+   * ✅ Now assigns warehouses to orders before saving
+   * ✅ Properly awaits async assignWarehousesToOrders function
+   * ✅ Now supports incremental sync - only fetches orders modified since last sync
    * Automatically called on connection and can be triggered periodically
    */
   async syncOrders(forceFullSync: boolean = false): Promise<{ success: boolean; count: number; error?: string; isIncremental?: boolean }> {
     try {
       console.log('[Shopify Service] 🔥 Starting order sync with GraphQL...')
 
-      // ✅ UPDATED: Get last sync date for incremental sync
-      // TODO: Implement API endpoint to get last sync date
+      // ✅ Get last sync date for incremental sync
       let updatedAtMin: string | null = null;
       let isIncremental = false;
 
@@ -88,17 +88,17 @@ export class ShopifyService {
         endCursor = response.pageInfo.endCursor
       }
 
-      // ✅ CRITICAL FIX: Assign warehouses to all orders BEFORE saving
+      // ✅ Assign warehouses to all orders BEFORE saving
+      // ✅ Properly await async function
       if (allOrders.length > 0) {
         console.log(`[Shopify Service] 🏭 Assigning warehouses to ${allOrders.length} orders...`)
-        allOrders = assignWarehousesToOrders(
+        allOrders = await assignWarehousesToOrders(
           allOrders,
-          this.config.storeId,
-          this.config.accountId
+          this.config.storeId
         )
         console.log('[Shopify Service] ✅ Warehouse assignment complete')
 
-        // ✅ UPDATED: Save all orders at once using API
+        // ✅ Save all orders at once using API
         console.log(`[Shopify Service] 💾 Saving ${allOrders.length} orders via API...`)
         await OrderAPI.saveOrders(allOrders)
         console.log('[Shopify Service] ✅ Orders saved')
@@ -156,7 +156,7 @@ export class ShopifyService {
         endCursor = response.pageInfo.endCursor
       }
 
-     // ✅ UPDATED: Save all products at once using API
+     // ✅Save all products at once using API
       if (allProducts.length > 0) {
         console.log(`[Shopify Service] 💾 Saving ${allProducts.length} products via API...`)
         await ProductAPI.saveProducts(allProducts)
@@ -255,20 +255,20 @@ export class ShopifyService {
       if (error instanceof ShopifyPermissionError) {
         return {
           success: false,
-          error: 'Permission error: ' + error.message
+          error: error.message
         }
       }
 
       return {
         success: false,
-        error: error.message || 'Unknown connection error'
+        error: error.message || 'Connection test failed'
       }
     }
   }
 
   /**
    * Static helper: Get last sync time for an integration
-   * ✅ UPDATED: This should be retrieved from backend via API
+   * This should be retrieved from backend via API
    * TODO: Implement API endpoint to get last sync time
    */
   static async getLastSyncTime(integrationId: string): Promise<Date | null> {
@@ -300,12 +300,12 @@ export class ShopifyService {
   static fromIntegration(
     integration: ShopifyIntegration,
     warehouseId: string | undefined,
-    accountId: string = 'default'
+    accountId: string
   ): ShopifyService {
     return new ShopifyService({
       shop: integration.config.storeUrl,
       accessToken: integration.config.accessToken,
-      accountId: accountId,
+      accountId: integration.accountId, // ✅ Get from integration, store in config
       storeId: integration.storeId,
       warehouseId: warehouseId,
     })
@@ -317,6 +317,7 @@ export class ShopifyService {
    * Uses your existing API route at /api/integrations/shopify/sync
    * Returns the data for the client to save
    * Added forceFullSync parameter
+   * ✅ accountId is passed to API for logging/tracking but warehouse assignment uses JWT
    */
   static async syncViaAPI(
     shop: string,
@@ -338,7 +339,7 @@ export class ShopifyService {
         body: JSON.stringify({
           shop,
           accessToken,
-          accountId,
+          accountId, // ✅ Passed for logging/tracking, but API will use JWT for data access
           storeId,
           warehouseId,
           syncType, // Using 'syncType' to match your API
@@ -439,7 +440,7 @@ export class ShopifyService {
   static async autoSyncOnConnection(
     integration: ShopifyIntegration,
     warehouseId: string | undefined,
-    accountId: string = 'default',
+    accountId: string,
     onProgress?: (message: string) => void
   ): Promise<void> {
     console.log('[Shopify Service] 🚀 Auto-sync triggered on connection (via API route)')
@@ -464,7 +465,7 @@ export class ShopifyService {
       const result = await ShopifyService.syncViaAPI(
         integration.config.storeUrl,
         integration.config.accessToken,
-        accountId,
+        accountId, // ✅ Pass accountId for logging/tracking
         integration.storeId,
         warehouseId,
         'all', // Sync both orders and products
@@ -483,10 +484,9 @@ export class ShopifyService {
         if (result.data.orders && Array.isArray(result.data.orders) && result.data.orders.length > 0) {
           console.log(`[Shopify Service] 🏭 Assigning warehouses to ${result.data.orders.length} orders...`)
 
-          const ordersWithWarehouses = assignWarehousesToOrders(
+          const ordersWithWarehouses = await assignWarehousesToOrders(
             result.data.orders,
-            integration.storeId,
-            accountId
+            integration.storeId
           )
 
           console.log('[Shopify Service] ✅ Warehouse assignment complete')

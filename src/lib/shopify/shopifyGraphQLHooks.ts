@@ -3,9 +3,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ShopifyGraphQLClient } from './shopifyGraphQLClient';
 import { transformGraphQLOrder, transformGraphQLProduct } from './shopifyGraphQLTransform';
-import { getShopifySyncStats } from './shopifyStorage';
-import { saveOrdersToStorage } from '@/lib/storage/orderStorage';
-import { saveProductsToStorage } from '@/lib/storage/productStorage';
+import { OrderAPI } from '@/lib/api/orderApi';
+import { ProductAPI } from '@/lib/api/productApi';
+import { IntegrationAPI } from '@/lib/api/integrationApi';
 import { Order } from '@/app/dashboard/orders/utils/orderTypes';
 import { Product } from '@/app/dashboard/products/utils/productTypes';
 
@@ -13,31 +13,36 @@ interface ShopifyConnection {
   shop: string;
   accessToken: string;
   isConnected: boolean;
+  storeId: string;
 }
 
 /**
  * Hook for managing Shopify connection
+ * ✅ UPDATED: Now fetches from API instead of localStorage
  */
 export function useShopifyConnection(accountId: string) {
   const [connection, setConnection] = useState<ShopifyConnection | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load connection from localStorage
-    const loadConnection = () => {
+    // Load connection from API
+    const loadConnection = async () => {
       try {
-        const integrations = localStorage.getItem(`integrations_${accountId}`);
-        if (integrations) {
-          const parsed = JSON.parse(integrations);
-          const shopifyConfig = parsed.find((i: any) => i.type === 'shopify');
+        const integrations = await IntegrationAPI.getAccountIntegrations({
+          type: 'ecommerce'
+        });
 
-          if (shopifyConfig?.config?.shop && shopifyConfig?.config?.accessToken) {
-            setConnection({
-              shop: shopifyConfig.config.shop,
-              accessToken: shopifyConfig.config.accessToken,
-              isConnected: true,
-            });
-          }
+        const shopifyIntegration = integrations.find(
+          (i: any) => i.name === 'Shopify' && i.enabled
+        );
+
+        if (shopifyIntegration?.config?.shop && shopifyIntegration?.config?.accessToken) {
+          setConnection({
+            shop: shopifyIntegration.config.shop,
+            accessToken: shopifyIntegration.config.accessToken,
+            storeId: shopifyIntegration.storeId,
+            isConnected: true,
+          });
         }
       } catch (error) {
         console.error('Error loading Shopify connection:', error);
@@ -49,20 +54,26 @@ export function useShopifyConnection(accountId: string) {
     loadConnection();
   }, [accountId]);
 
-  const disconnect = useCallback(() => {
-    setConnection(null);
-    // Remove from localStorage
+  const disconnect = useCallback(async () => {
     try {
-      const integrations = localStorage.getItem(`integrations_${accountId}`);
-      if (integrations) {
-        const parsed = JSON.parse(integrations);
-        const filtered = parsed.filter((i: any) => i.type !== 'shopify');
-        localStorage.setItem(`integrations_${accountId}`, JSON.stringify(filtered));
+      // Find Shopify integration
+      const integrations = await IntegrationAPI.getAccountIntegrations({
+        type: 'ecommerce'
+      });
+
+      const shopifyIntegration = integrations.find(
+        (i: any) => i.name === 'Shopify'
+      );
+
+      if (shopifyIntegration) {
+        await IntegrationAPI.deleteIntegration(shopifyIntegration.id);
       }
+
+      setConnection(null);
     } catch (error) {
       console.error('Error disconnecting Shopify:', error);
     }
-  }, [accountId]);
+  }, []);
 
   return {
     connection,
@@ -73,6 +84,7 @@ export function useShopifyConnection(accountId: string) {
 
 /**
  * Hook for syncing Shopify orders using GraphQL
+ * ✅ UPDATED: Now saves to backend API instead of localStorage
  */
 export function useShopifyOrderSync(accountId: string) {
   const [syncing, setSyncing] = useState(false);
@@ -96,9 +108,7 @@ export function useShopifyOrderSync(accountId: string) {
         accessToken: connection.accessToken,
       });
 
-      // Create store ID and name from shop
-      const storeName = connection.shop.replace('.myshopify.com', '');
-      const storeId = `shopify-${accountId}`;
+      const storeId = connection.storeId;
 
       // Fetch orders with pagination
       let allOrders: Order[] = [];
@@ -119,7 +129,7 @@ export function useShopifyOrderSync(accountId: string) {
 
         // Transform and save orders
         for (const graphqlOrder of response.orders) {
-          const order = transformGraphQLOrder(graphqlOrder, storeId, storeName);
+          const order = transformGraphQLOrder(graphqlOrder, storeId);
           allOrders.push(order);
         }
 
@@ -132,9 +142,9 @@ export function useShopifyOrderSync(accountId: string) {
         endCursor = response.pageInfo.endCursor;
       }
 
-      // ✅ FIXED: Save all orders at once
+      // ✅ Save all orders to backend via API
       if (allOrders.length > 0) {
-        saveOrdersToStorage(allOrders, accountId);
+        await OrderAPI.saveOrders(allOrders);
       }
 
       setProgress(100);
@@ -158,6 +168,7 @@ export function useShopifyOrderSync(accountId: string) {
 
 /**
  * Hook for syncing Shopify products using GraphQL
+ * ✅ UPDATED: Now saves to backend API instead of localStorage
  */
 export function useShopifyProductSync(accountId: string) {
   const [syncing, setSyncing] = useState(false);
@@ -181,8 +192,7 @@ export function useShopifyProductSync(accountId: string) {
         accessToken: connection.accessToken,
       });
 
-      // Create store ID from shop
-      const storeId = `shopify-${accountId}`;
+      const storeId = connection.storeId;
 
       // Fetch products with pagination
       let allProducts: Product[] = [];
@@ -216,9 +226,9 @@ export function useShopifyProductSync(accountId: string) {
         endCursor = response.pageInfo.endCursor;
       }
 
-      // ✅ FIXED: Save all products at once
+      // ✅ Save all products to backend via API
       if (allProducts.length > 0) {
-        saveProductsToStorage(allProducts, accountId);
+        await ProductAPI.saveProducts(allProducts);
       }
 
       setProgress(100);
@@ -242,6 +252,7 @@ export function useShopifyProductSync(accountId: string) {
 
 /**
  * Hook for Shopify sync statistics
+ * ✅ UPDATED: Now fetches from backend API instead of localStorage
  */
 export function useShopifySyncStats(accountId: string) {
   const [stats, setStats] = useState<{
@@ -255,9 +266,38 @@ export function useShopifySyncStats(accountId: string) {
   });
 
   useEffect(() => {
-    const updateStats = () => {
-      const syncStats = getShopifySyncStats(accountId);
-      setStats(syncStats);
+    const updateStats = async () => {
+      try {
+        // Fetch orders and products from API
+        const [orders, products] = await Promise.all([
+          OrderAPI.getOrders(),
+          ProductAPI.getProducts()
+        ]);
+
+        // Filter only Shopify data
+        const shopifyOrders = orders.filter((order: Order) => order.platform === 'Shopify');
+        const shopifyProducts = products.filter((product: Product) =>
+          product.id.startsWith('shopify-') || product.platform === 'Shopify'
+        );
+
+        // Find most recent date
+        const orderDates = shopifyOrders.map((o: Order) => new Date(o.orderDate)).filter(Boolean);
+        const productDates = shopifyProducts.map((p: Product) => new Date(p.updatedAt)).filter(Boolean);
+
+        const allDates = [...orderDates, ...productDates];
+
+        const lastSyncDate = allDates.length > 0
+          ? new Date(Math.max(...allDates.map(d => d.getTime())))
+          : undefined;
+
+        setStats({
+          totalOrders: shopifyOrders.length,
+          totalProducts: shopifyProducts.length,
+          lastSyncDate,
+        });
+      } catch (error) {
+        console.error('Error fetching Shopify stats:', error);
+      }
     };
 
     updateStats();
@@ -341,10 +381,10 @@ export function useShopifyFulfillment(accountId: string) {
       return { success: false };
     }
 
-    // Extract Shopify order ID from the order.id (format: "shopify-{id}")
-    const shopifyOrderId = order.id.replace('shopify-', '');
+    // Extract Shopify order ID from the order.externalId
+    const shopifyOrderId = order.externalId;
 
-    if (!shopifyOrderId || shopifyOrderId === order.id) {
+    if (!shopifyOrderId) {
       setError('Order does not have a valid Shopify order ID');
       return { success: false };
     }

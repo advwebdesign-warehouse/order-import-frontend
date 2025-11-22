@@ -41,6 +41,7 @@ import { CSS } from '@dnd-kit/utilities'
 
 interface PresetsTabProps {
   selectedWarehouseId: string
+  accountId: string
 }
 
 // ✅ SORTABLE PRESET CARD COMPONENT

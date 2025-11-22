@@ -13,21 +13,15 @@ import { storeApi } from '@/app/services/storeApi'
 import { useStoreFilters } from './hooks/useStoreFilters'
 import { useStoreSelection } from './hooks/useStoreSelection'
 import { useStoreColumns } from './hooks/useStoreColumns'
+import { withAuth } from '@/app/dashboard/shared/components/withAuth'
+import { AuthLoadingState } from '@/app/dashboard/shared/components/AuthLoadingState'
 
-// Loading component for Suspense fallback
-function StoresLoading() {
-  return (
-    <div className="flex items-center justify-center min-h-96">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Loading stores...</p>
-      </div>
-    </div>
-  )
+interface StoresContentProps {
+  accountId: string // ✅ Guaranteed to be valid by withAuth
 }
 
-// Main content component
-function StoresContent() {
+// ✅ Main content component that receives guaranteed valid accountId
+function StoresContent({ accountId }: StoresContentProps) {
   const searchParams = useSearchParams()
   const [stores, setStores] = useState<Store[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -63,7 +57,7 @@ function StoresContent() {
 
   useEffect(() => {
     loadStores()
-  }, [])
+  }, [accountId])
 
   // Check for URL parameters to reopen modal after returning from warehouse creation
   useEffect(() => {
@@ -153,7 +147,7 @@ function StoresContent() {
   }
 
   if (loading) {
-    return <StoresLoading />
+    return <AuthLoadingState message="Loading stores..." />
   }
 
   if (error) {
@@ -223,11 +217,18 @@ function StoresContent() {
   )
 }
 
-// Export the page wrapped in Suspense
+// ✅ Create the auth-wrapped component
+const StoresContentWithAuth = withAuth(StoresContent, {
+  loadingMessage: "Loading stores...",
+  errorTitle: "Unable to load stores",
+  errorMessage: "Please check your authentication and try again."
+})
+
+// ✅ Export the page wrapped in Suspense with the auth-wrapped component
 export default function StoresPage() {
   return (
-    <Suspense fallback={<StoresLoading />}>
-      <StoresContent />
+    <Suspense fallback={<AuthLoadingState message="Loading stores..." />}>
+      <StoresContentWithAuth />
     </Suspense>
   )
 }

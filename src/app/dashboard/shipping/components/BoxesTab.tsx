@@ -39,6 +39,13 @@ import Notification from '../../shared/components/Notification'
 import { useNotification } from '../../shared/hooks/useNotification'
 import { useWarehouses } from '../../warehouses/hooks/useWarehouses'
 import { IntegrationAPI } from '@/lib/api/integrationApi'
+import { ShippingAPI } from '@/lib/api/shippingApi'
+import {
+  CustomBoxWarehouseStatus,
+  CarrierBoxWarehouseStatus,
+  isEnabledInAnyWarehouse,
+  type WarehouseState
+} from '../../shared/utils/warehouseStateUtils'
 
 interface BoxesTabProps {
   selectedWarehouseId: string
@@ -57,6 +64,9 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   const [isSyncing, setIsSyncing] = useState(false)
   const [integrations, setIntegrations] = useState<any[]>([])
 
+  // Track warehouse states for each box (for "All Warehouses" view)
+  const [boxWarehouseStates, setBoxWarehouseStates] = useState<Map<string, WarehouseState[]>>(new Map())
+
   // Use the notification hook
   const { notification, showSuccess, showError, closeNotification } = useNotification()
 
@@ -68,9 +78,9 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
     const states: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
 
     for (const warehouse of warehouses) {
-      const warehouseBoxes = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
+      const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
 
-      const box = warehouseBoxes.find(b => {
+      const box = warehouseBoxes.find((b: ShippingBox) => {
         // Match by ID for custom boxes
         if (b.id === boxId) return true
 
@@ -101,21 +111,13 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
     const fetchIntegrations = async () => {
       try {
         setIsLoadingCarriers(true)
-        const response = await fetch(`/api/integrations?type=shipping`, {
-          headers: {
-            'Authorization': `Bearer ${accountId}` // Or however your auth is set up
-          }
-        })
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch integrations')
-        }
-
-        const data = await response.json()
-        setIntegrations(data.integrations || [])
+        // Use IntegrationAPI instead of fetch
+        const integrations = await IntegrationAPI.getAccountIntegrations({ type: 'shipping' })
+        setIntegrations(integrations)
 
         // Extract enabled carrier names
-        const carriers = data.integrations
+        const carriers = integrations
           .filter((i: any) => i.type === 'shipping' && i.status === 'connected' && i.enabled)
           .map((i: any) => i.name)
 
@@ -147,8 +149,30 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
     }
   }, [enabledCarriers, isLoadingCarriers, selectedWarehouseId, warehouses])
 
+  // NEW: Compute warehouse states for each box when in "All Warehouses" view
+  useEffect(() => {
+    if (selectedWarehouseId !== '' || boxes.length === 0) {
+      // Only compute for "All Warehouses" view
+      setBoxWarehouseStates(new Map())
+      return
+    }
+
+    const computeWarehouseStates = async () => {
+      const statesMap = new Map<string, { warehouseId: string; warehouseName: string; isActive: boolean }[]>()
+
+      for (const box of boxes) {
+        const states = await getBoxStateAcrossWarehouses(box.id)
+        statesMap.set(box.id, states)
+      }
+
+      setBoxWarehouseStates(statesMap)
+    }
+
+    computeWarehouseStates()
+  }, [boxes, selectedWarehouseId, warehouses])
+
   const loadWarehouseBoxes = async (warehouseId: string) => {
-    const boxesFromAPI = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxesFromAPI: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
 
     // Filter boxes to only show those for enabled carriers
     const filtered = boxesFromAPI.filter((box: ShippingBox) => {
@@ -168,7 +192,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
     let hasAnyBoxes = false
 
     for (const warehouse of warehouses) {
-      const warehouseBoxes = await fetchBoxesFromAPI(warehouse.id)
+      const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
 
       if (warehouseBoxes.length > 0) {
         hasAnyBoxes = true
@@ -255,30 +279,25 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
 
       console.log('[BoxesTab] Starting sync...')
 
-      const response = await fetch('/api/shipping/boxes/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          carriers: enabledCarriers,
-          credentials: allCredentials
-        })
+      // Use ShippingAPI instead of fetch
+      const data = await ShippingAPI.syncBoxesFromCarriers({
+        carriers: enabledCarriers,
+        credentials: allCredentials
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const apiBoxes = data.boxes || []
+      const apiBoxes = data.boxes || []
 
-        console.log('[BoxesTab] Sync response:', apiBoxes.length, 'boxes')
+      console.log('[BoxesTab] Sync response:', apiBoxes.length, 'boxes')
 
-        // Separate variable/editable boxes from regular boxes
-        const variableBoxes = apiBoxes.filter((box: any) => box.isEditable || box.needsDimensions)
-        const regularBoxes = apiBoxes.filter((box: any) => !box.isEditable && !box.needsDimensions)
+      // Separate variable/editable boxes from regular boxes
+      const variableBoxes = apiBoxes.filter((box: any) => box.isEditable || box.needsDimensions)
+      const regularBoxes = apiBoxes.filter((box: any) => !box.isEditable && !box.needsDimensions)
 
-        console.log('[BoxesTab] Variable boxes:', variableBoxes.length)
-        console.log('[BoxesTab] Regular boxes:', regularBoxes.length)
+      console.log('[BoxesTab] Variable boxes:', variableBoxes.length)
+      console.log('[BoxesTab] Regular boxes:', regularBoxes.length)
 
-        // Apply sync to current warehouse or all warehouses
-        if (selectedWarehouseId === '') {
+      // Apply sync to current warehouse or all warehouses
+      if (selectedWarehouseId === '') {
           // Sync all warehouses
           console.log('[BoxesTab] Syncing to all warehouses')
           for (const warehouse of warehouses) {
@@ -307,11 +326,6 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
           }
           setIsSyncing(false)
         }, 100)
-      } else {
-        const error = await response.json()
-        showError('Sync Failed', error.error || 'Unknown error occurred')
-        setIsSyncing(false) // Stop loading on error
-      }
     } catch (error: any) {
       console.error('[BoxesTab] Sync error:', error)
       showError('Sync Failed', 'Failed to sync boxes. Check console for details.')
@@ -320,11 +334,11 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const syncWarehouseBoxes = async (warehouseId: string, apiBoxes: any[], variableBoxes: any[]) => {
-    const existingBoxes = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const existingBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
 
     // Smart merge with special handling for variable boxes
     const mergedBoxes = smartMergeBoxes(existingBoxes, apiBoxes, variableBoxes)
-    await saveBoxesToAPI(warehouseId, mergedBoxes)
+    await IntegrationAPI.saveWarehouseBoxes(warehouseId, mergedBoxes)
 
     console.log(`[BoxesTab] Synced ${mergedBoxes.length} boxes to warehouse ${warehouseId}`)
   }
@@ -500,7 +514,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const updateBoxInWarehouse = async (warehouseId: string, targetBox: ShippingBox, boxData: Partial<ShippingBox>) => {
-    const boxes = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
 
     const updatedBoxes = boxes.map(box => {
       let isMatch = false
@@ -546,7 +560,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const addBoxToWarehouse = async (warehouseId: string, box: ShippingBox) => {
-    const boxes = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
     boxes.push(box)
     await IntegrationAPI.saveWarehouseBoxes(warehouseId, boxes)
   }
@@ -611,7 +625,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const deleteBoxFromWarehouse = async (warehouseId: string, targetBox: ShippingBox) => {
-    const boxes = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
     if (boxes.length === 0) return
 
     const updatedBoxes = boxes.filter(box => {
@@ -650,7 +664,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
         console.log('[Delete] Grouped duplicate - deleting from all warehouses')
 
         for (const warehouse of warehouses) {
-          const warehouseBoxes = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
+          const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
 
           // Find and remove boxes with matching duplicateGroupId
           const updatedBoxes = warehouseBoxes.filter(box => {
@@ -682,7 +696,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const handleToggleActive = async (id: string) => {
-    const box = boxes.find(b => b.id === id)
+    const box = boxes.find((b: ShippingBox) => b.id === id)
     if (!box) return
 
     if (selectedWarehouseId === '') {
@@ -696,8 +710,8 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
           // Find all states across warehouses for this group
           let allStates: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
           for (const warehouse of warehouses) {
-            const warehouseBoxes = await fetchBoxesFromAPI(warehouse.id)
-            const matchingBox = warehouseBoxes.find(b =>
+            const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
+            const matchingBox = warehouseBoxes.find((b: ShippingBox) =>
               b.isDuplicate && b.duplicateGroupId === box.duplicateGroupId
             )
             if (matchingBox) {
@@ -730,7 +744,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
         }
 
         // Box is in all warehouses - toggle all
-        const states = getBoxStateAcrossWarehouses(id)
+        const states = await getBoxStateAcrossWarehouses(id)
         const enabledCount = states.filter(s => s.isActive).length
         const allDisabled = enabledCount === 0
         const newState = allDisabled
@@ -744,7 +758,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
       }
 
       // For CARRIER boxes - Enable/Disable ALL
-      const states = getBoxStateAcrossWarehouses(id)
+      const states = await getBoxStateAcrossWarehouses(id)
       const enabledCount = states.filter(s => s.isActive).length
       const allDisabled = enabledCount === 0
       const newState = allDisabled
@@ -762,7 +776,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const toggleBoxInWarehouse = async (warehouseId: string, targetBox: ShippingBox, forceState?: boolean) => {
-    const boxes = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
 
     let matchFound = false
     const updatedBoxes = boxes.map(box => {
@@ -1079,28 +1093,10 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
                       const boxWarehouse = box.warehouse
 
                       // For duplicates created from "All Warehouses", show multi-warehouse status
-                      if (box.isDuplicate && box.duplicateGroupId && boxWarehouse && boxWarehouse !== 'all') { // Changed
-                        // Note: getBoxStateAcrossWarehouses is now async, but we can't await in render
-                        // This will be resolved by loading the states when boxes are loaded
-                        // For now, we'll use the existing states or show a loading indicator
-                        const states: any[] = [] // This should be pre-loaded in state
-
-                        const enabledCount = allStates.filter(s => s.isActive).length
-                        const totalCount = allStates.length
-                        const allEnabled = enabledCount === totalCount
-                        const allDisabled = enabledCount === 0
-
-                        return (
-                          <span className={`text-xs font-medium mt-0.5 ${
-                            allEnabled ? 'text-green-600' :
-                            allDisabled ? 'text-gray-500' :
-                            'text-amber-600'
-                          }`}>
-                            {allEnabled && 'Enabled in all'}
-                            {allDisabled && 'Disabled in all'}
-                            {!allEnabled && !allDisabled && `Enabled in ${enabledCount}/${totalCount} warehouses`}
-                          </span>
-                        )
+                      if (box.isDuplicate && box.duplicateGroupId && boxWarehouse && boxWarehouse !== 'all') {
+                        // Use pre-computed warehouse states
+                        const states = boxWarehouseStates.get(box.id) || []
+                        return <CarrierBoxWarehouseStatus states={states} />
                       }
 
                       // For single-warehouse custom boxes
@@ -1108,59 +1104,26 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
                         const warehouse = warehouses.find(w => w.id === boxWarehouse)
                         const warehouseName = warehouse?.name || 'Unknown'
 
-                        return (
-                          <span className={`text-xs font-medium mt-0.5 ${
-                            box.isActive ? 'text-green-600' : 'text-gray-500'
-                          }`}>
-                            {box.isActive ? 'Enabled' : 'Disabled'} in: {warehouseName}
-                          </span>
-                        )
+                        // Create a single-state array to use the utility
+                        const singleWarehouseState: WarehouseState[] = [{
+                          warehouseId: boxWarehouse,
+                          warehouseName: warehouseName,
+                          isActive: box.isActive
+                        }]
+
+                        return <CustomBoxWarehouseStatus states={singleWarehouseState} />
                       }
 
                       // For custom boxes in all warehouses (warehouse === 'all' or not set)
-                      const states = getBoxStateAcrossWarehouses(box.id)
-                      const enabledWarehouses = states.filter(s => s.isActive).map(s => s.warehouseName)
-                      const disabledWarehouses = states.filter(s => !s.isActive).map(s => s.warehouseName)
-
-                      if (states.length === 1) {
-                        return (
-                          <span className="text-xs font-medium mt-0.5 text-gray-600">
-                            {states[0].warehouseName} only
-                          </span>
-                        )
-                      } else if (enabledWarehouses.length > 0) {
-                        return (
-                          <span className="text-xs font-medium mt-0.5 text-green-600">
-                            Enabled in: {enabledWarehouses.join(', ')}
-                          </span>
-                        )
-                      } else {
-                        return (
-                          <span className="text-xs font-medium mt-0.5 text-gray-500">
-                            Disabled in: {disabledWarehouses.join(', ')}
-                          </span>
-                        )
-                      }
+                      // Use pre-computed warehouse states from state
+                      const states = boxWarehouseStates.get(box.id) || []
+                      return <CustomBoxWarehouseStatus states={states} />
                     }
 
                     // For CARRIER boxes - show multi-warehouse toggle logic
-                    const states = getBoxStateAcrossWarehouses(box.id)
-                    const enabledCount = states.filter(s => s.isActive).length
-                    const totalCount = states.length
-                    const allEnabled = enabledCount === totalCount
-                    const allDisabled = enabledCount === 0
-
-                    return (
-                      <span className={`text-xs font-medium mt-0.5 ${
-                        allEnabled ? 'text-green-600' :      // Changed to green for enabled
-                        allDisabled ? 'text-gray-500' :      // Changed to gray for disabled
-                        'text-amber-600'
-                      }`}>
-                        {allEnabled && 'Enabled in all'}     {/* STATE not action */}
-                        {allDisabled && 'Disabled in all'}   {/* STATE not action */}
-                        {!allEnabled && !allDisabled && `Enabled in ${enabledCount}/${totalCount} warehouses`}
-                      </span>
-                    )
+                    // Use pre-computed warehouse states from state
+                    const states = boxWarehouseStates.get(box.id) || []
+                    return <CarrierBoxWarehouseStatus states={states} />
                   })()}
                 </div>
 
@@ -1180,10 +1143,9 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
                             return box.isActive
                           }
 
-                          // For other boxes - check across all warehouses
-                          const states = getBoxStateAcrossWarehouses(box.id)
-                          const enabledCount = states.filter(s => s.isActive).length
-                          return enabledCount > 0
+                          // For other boxes - check if enabled in ANY warehouse using utility
+                          const states = boxWarehouseStates.get(box.id) || []
+                          return isEnabledInAnyWarehouse(states)
                         }
                         return box.isActive
                       })()}

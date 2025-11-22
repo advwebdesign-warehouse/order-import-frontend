@@ -4,10 +4,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient';
 import { transformGraphQLOrder, transformGraphQLProduct } from '@/lib/shopify/shopifyGraphQLTransform';
 import { getLastShopifyOrderUpdateDate } from '@/lib/shopify/shopifyStorage';
+import { OrderAPI } from '@/lib/api/orderApi';
+import { ProductAPI } from '@/lib/api/productApi';
 
 /**
  * Shopify Sync API Route
  * ✅ UPDATED: Now supports incremental order sync using updatedAtMin parameter
+ * ✅ FIXED: Properly awaits async storage functions
+ * ✅ UPDATED: Saves data to backend API instead of returning it
  */
 export async function POST(request: NextRequest) {
   console.log('=================================');
@@ -23,7 +27,7 @@ export async function POST(request: NextRequest) {
       syncType,
       warehouseId,
       storeId: providedStoreId,
-      forceFullSync = false // ✅ NEW: Optional parameter to force full sync
+      forceFullSync = false // Optional parameter to force full sync
     } = body;
 
     console.log('[Shopify Sync] Sync Type:', syncType);
@@ -58,7 +62,7 @@ export async function POST(request: NextRequest) {
       let isIncremental = false;
 
       if (!forceFullSync) {
-        updatedAtMin = getLastShopifyOrderUpdateDate(accountId, storeId);
+        updatedAtMin = await getLastShopifyOrderUpdateDate(accountId, storeId);
 
         if (updatedAtMin) {
           isIncremental = true;
@@ -79,7 +83,7 @@ export async function POST(request: NextRequest) {
         const response = await client.getOrders({
           first: 50,
           after: endCursor || undefined,
-          updatedAtMin: updatedAtMin || undefined, // ✅ NEW: Pass date filter for incremental sync
+          updatedAtMin: updatedAtMin || undefined, // Pass date filter for incremental sync
         });
 
         if (response.orders.length === 0) {
@@ -104,13 +108,27 @@ export async function POST(request: NextRequest) {
       const syncTypeMsg = isIncremental ? 'Incremental sync' : 'Full sync';
       console.log(`[Shopify Sync] ✅ ${syncTypeMsg} complete: ${orders.length} orders ${isIncremental ? 'updated' : 'synced'}`);
 
+      // ✅ Save orders to backend database via API
+      if (orders.length > 0) {
+        try {
+          await OrderAPI.saveOrders(orders);
+          console.log(`[Shopify Sync] ✅ Saved ${orders.length} orders to database`);
+        } catch (saveError) {
+          console.error('[Shopify Sync] ❌ Error saving orders:', saveError);
+          return NextResponse.json({
+            success: false,
+            error: 'Failed to save orders to database',
+            orderCount: orders.length,
+            isIncremental
+          }, { status: 500 });
+        }
+      }
+
       return NextResponse.json({
         success: true,
         orderCount: orders.length,
         isIncremental,
-        data: {
-          orders: orders,
-        },
+        message: `${syncTypeMsg}: ${orders.length} orders synced successfully`
       });
     }
 
@@ -120,7 +138,6 @@ export async function POST(request: NextRequest) {
     else if (syncType === 'products') {
       console.log('[Shopify Sync] 🔥 Starting product sync...');
 
-      // ✅ FIXED: Sync products, not orders!
       const products = [];
       let hasNextPage = true;
       let endCursor: string | null = null;
@@ -148,12 +165,25 @@ export async function POST(request: NextRequest) {
 
       console.log(`[Shopify Sync] ✅ Fetched ${products.length} products`);
 
+      // ✅ Save products to backend database via API
+      if (products.length > 0) {
+        try {
+          await ProductAPI.saveProducts(products);
+          console.log(`[Shopify Sync] ✅ Saved ${products.length} products to database`);
+        } catch (saveError) {
+          console.error('[Shopify Sync] ❌ Error saving products:', saveError);
+          return NextResponse.json({
+            success: false,
+            error: 'Failed to save products to database',
+            productCount: products.length
+          }, { status: 500 });
+        }
+      }
+
       return NextResponse.json({
         success: true,
         productCount: products.length,
-        data: {
-          products: products,
-        },
+        message: `${products.length} products synced successfully`
       });
     }
 
@@ -168,7 +198,8 @@ export async function POST(request: NextRequest) {
       let isIncremental = false;
 
       if (!forceFullSync) {
-        updatedAtMin = getLastShopifyOrderUpdateDate(accountId, storeId);
+        // ✅ FIXED: Properly await async function
+        updatedAtMin = await getLastShopifyOrderUpdateDate(accountId, storeId);
 
         if (updatedAtMin) {
           isIncremental = true;
@@ -211,6 +242,17 @@ export async function POST(request: NextRequest) {
       const syncTypeMsg = isIncremental ? 'Incremental sync' : 'Full sync';
       console.log(`[Shopify Sync] ✅ ${syncTypeMsg} complete: ${orders.length} orders`);
 
+      // ✅ Save orders to database
+      if (orders.length > 0) {
+        try {
+          await OrderAPI.saveOrders(orders);
+          console.log(`[Shopify Sync] ✅ Saved ${orders.length} orders to database`);
+        } catch (saveError) {
+          console.error('[Shopify Sync] ❌ Error saving orders:', saveError);
+          // Continue with product sync even if order save fails
+        }
+      }
+
       // ✅ STEP 2: Sync products
       console.log('[Shopify Sync] 🔥 Starting product sync...');
 
@@ -239,15 +281,23 @@ export async function POST(request: NextRequest) {
 
       console.log(`[Shopify Sync] ✅ Synced ${products.length} products`);
 
+      // ✅ Save products to database
+      if (products.length > 0) {
+        try {
+          await ProductAPI.saveProducts(products);
+          console.log(`[Shopify Sync] ✅ Saved ${products.length} products to database`);
+        } catch (saveError) {
+          console.error('[Shopify Sync] ❌ Error saving products:', saveError);
+          // Return partial success
+        }
+      }
+
       return NextResponse.json({
         success: true,
         orderCount: orders.length,
         productCount: products.length,
-        isIncremental, // ✅ NEW: Indicate if order sync was incremental
-        data: {
-          orders: orders,
-          products: products,
-        },
+        isIncremental,
+        message: `${syncTypeMsg}: ${orders.length} orders and ${products.length} products synced successfully`
       });
     }
 

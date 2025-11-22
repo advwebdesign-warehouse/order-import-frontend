@@ -3,15 +3,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient';
 import { transformGraphQLOrder, transformGraphQLProduct } from '@/lib/shopify/shopifyGraphQLTransform';
-import {
-  getConnectedShopifyStores,
-  updateIntegrationConfig
-} from '@/lib/storage/shopifyIntegrationHelpers';
 import { Product } from '@/app/dashboard/products/utils/productTypes';
 
 /**
  * Cron Job for Shopify Sync
  * This should be called periodically (e.g., every 15 minutes) by a cron service
+ *
+ * ✅ UPDATED: Now uses backend API instead of localStorage
  *
  * Setup options:
  * 1. Vercel Cron Jobs: Add to vercel.json
@@ -45,8 +43,8 @@ export async function GET(request: NextRequest) {
   const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://advorderflow.com';
 
   try {
-    // Get all connected Shopify stores
-    const shopifyIntegrations = await getConnectedShopifyStores();
+    // ✅ Get all connected Shopify stores from backend API
+    const shopifyIntegrations = await getConnectedShopifyStores(API_BASE_URL);
 
     console.log(`[Shopify Cron] Found ${shopifyIntegrations.length} connected Shopify stores`);
 
@@ -64,8 +62,8 @@ export async function GET(request: NextRequest) {
       const config = integration.config as any;
 
       // Ensure storeId and accountId exist
-      const storeId = integration.storeId || integration.id || 'unknown';
-      const accountId = integration.accountId || 'default';
+      const storeId = integration.storeId;
+      const accountId = integration.accountId;
       const integrationId = integration.id;
 
       const storeResult = {
@@ -189,7 +187,7 @@ export async function GET(request: NextRequest) {
         console.log(`[Shopify Cron] ✅ Synced ${productsToSave.length} products for ${shop}`);
 
         // Update last sync time
-        await updateIntegrationConfig(integration.id, {
+        await updateIntegrationConfig(API_BASE_URL, integration.id, {
           ...config,
           lastSyncTime: new Date().toISOString(),
         });
@@ -294,6 +292,76 @@ function transformToSimpleProduct(graphqlProduct: any, integrationId: string): P
     // Multi-warehouse stock - will be populated later when warehouse assignment happens
     warehouseStock: [],
   };
+}
+
+// ============================================================================
+// ✅ HELPER FUNCTIONS - UPDATED TO USE BACKEND API
+// ============================================================================
+
+/**
+ * Get all connected Shopify stores from backend API
+ * Replaces localStorage-based getConnectedShopifyStores
+ */
+async function getConnectedShopifyStores(apiBaseUrl: string) {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/integrations?type=shopify`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch integrations: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    // Filter for connected Shopify integrations
+    const shopifyIntegrations = (data.integrations || []).filter((integration: any) => {
+      return (
+        integration.type === 'shopify' &&
+        integration.status === 'connected' &&
+        integration.enabled !== false
+      );
+    });
+
+    return shopifyIntegrations;
+  } catch (error) {
+    console.error('[Shopify Cron] Error fetching connected stores:', error);
+    return [];
+  }
+}
+
+/**
+ * Update integration config via backend API
+ * Replaces localStorage-based updateIntegrationConfig
+ */
+async function updateIntegrationConfig(
+  apiBaseUrl: string,
+  integrationId: string,
+  config: any
+) {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/integrations/${integrationId}/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update integration config: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log(`[Shopify Cron] ✅ Updated config for integration ${integrationId}`);
+    return data;
+  } catch (error) {
+    console.error('[Shopify Cron] Error updating integration config:', error);
+    throw error;
+  }
 }
 
 /**

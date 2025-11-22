@@ -14,9 +14,9 @@ class ProductApiService {
   private async fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     const token = this.getAuthToken()
 
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     }
 
     // Add auth token if available

@@ -5,6 +5,8 @@
 import { useState, useMemo, useEffect  } from 'react'
 import { useParams } from 'next/navigation'
 import { useWarehouses } from '../../context/WarehouseContext'
+import { withAuth } from '@/app/dashboard/shared/components/withAuth'
+import { AuthLoadingState } from '@/app/dashboard/shared/components/AuthLoadingState'
 import OrderDetailsModal from '../../../orders/OrderDetailsModal'
 import PackingSlip from '../../../orders/PackingSlip'
 import PickingListModal from '../../../orders/components/PickingListModal'
@@ -16,7 +18,8 @@ import PackingSlipModal from '../../../orders/components/PackingSlipModal'
 import ShippingModal from '../../../orders/components/ShippingModal'
 
 // Custom hooks
-import { useWarehouseOrders } from './hooks/useWarehouseOrders'
+import { useOrders } from '../../../orders/hooks/useOrders'
+import { useWarehouseOrders } from '@/hooks/useWarehouseOrders'
 import { useOrderFilters } from '../../../orders/hooks/useOrderFilters'
 import { useOrderSelection } from '../../../orders/hooks/useOrderSelection'
 import { useOrderColumns } from '../../../orders/hooks/useOrderColumns'
@@ -29,6 +32,7 @@ import { transformToDetailedOrder } from '../../../orders/utils/orderUtils'
 import { exportToCSV, ExportableItem } from '../../../shared/utils/csvExporter'
 import { printMultiplePackingSlips } from '../../../orders/utils/packingSlipGenerator'
 import { orderNeedsPicking, orderNeedsShippingDynamic } from '../../../orders/utils/orderConstants'
+import { WarehouseAPI } from '@/lib/api/warehouseApi'
 
 // Types
 import { Order, OrderWithDetails, ColumnConfig } from '../../../orders/utils/orderTypes'
@@ -37,6 +41,10 @@ import { ITEMS_PER_PAGE, STATUS_COLORS, FULFILLMENT_COLORS } from '../../../orde
 // Settings
 import { useSettings } from '../../../shared/hooks/useSettings'
 import { useFulfillmentStatuses } from '../../../settings/hooks/useFulfillmentStatuses'
+
+interface WarehouseOrdersPageProps {
+  accountId: string  // ✅ Guaranteed valid by withAuth
+}
 
 // Helper function to export orders as CSV
 const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
@@ -91,11 +99,30 @@ const exportOrdersToCSV = (orders: Order[], columns: ColumnConfig[]) => {
   exportToCSV(orders, exportColumns, filename)
 }
 
-export default function WarehouseOrdersPage() {
+function WarehouseOrdersPageContent({ accountId }: WarehouseOrdersPageProps) {
   const params = useParams()
   const warehouseId = params.id as string
-  const { warehouses } = useWarehouses()
+  const { warehouses, loading: warehousesLoading } = useWarehouses()
   const warehouse = warehouses.find(w => w.id === warehouseId)
+
+  // Get orders data
+  const { orders, loading, error, refreshOrders, updateOrdersFulfillmentStatus, updateStatus, updateFulfillmentStatus } = useOrders()
+
+  // Get fulfillment state
+  const {
+    pickedItems: pickedItemsArray,
+    pickedOrders: pickedOrdersArray,
+    packedOrders: packedOrdersArray,
+    settings: warehouseSettings,
+    addPickedItem,
+    removePickedItem,
+    addPickedOrder,
+    removePickedOrder,
+    addPackedOrder,
+    removePackedOrder,
+    updateSettings,
+    clearAllStates
+  } = useWarehouseOrders(warehouseId)
 
   // Load fulfillment statuses from settings
   const { statuses: fulfillmentStatuses, loading: fulfillmentLoading } = useFulfillmentStatuses()
@@ -115,99 +142,18 @@ export default function WarehouseOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showPackingSlipModal, setShowPackingSlipModal] = useState(false)
-  const [packedOrders, setPackedOrders] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`packed_orders_warehouse_${warehouseId}`)
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    }
-    return new Set()
-  })
 
   // Checkbox states
   const [showOrdersToShip, setShowOrdersToShip] = useState(false)
   const [showItemsToShip, setShowItemsToShip] = useState(false)
 
-  // Max picking orders setting
-  const [maxPickingOrders, setMaxPickingOrders] = useState<string>(() => {
-    // Load from localStorage on initialization, using warehouseId for unique keys
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`maxPickingOrders_${warehouseId}`)
-      return saved || 'all'
-    }
-    return 'all'
-  })
-
-  // Persistent picking state - keyed by warehouse
-  const getPickingStateKey = (type: 'items' | 'orders') => {
-    return `picking_${type}_warehouse_${warehouseId}`
-  }
-
-  const [pickedItems, setPickedItems] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(getPickingStateKey('items'))
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    }
-    return new Set()
-  })
-
-  const [pickedOrders, setPickedOrders] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(getPickingStateKey('orders'))
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    }
-    return new Set()
-  })
-
-  // Save picking state to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(getPickingStateKey('items'), JSON.stringify(Array.from(pickedItems)))
-    }
-  }, [pickedItems, warehouseId])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(getPickingStateKey('orders'), JSON.stringify(Array.from(pickedOrders)))
-    }
-  }, [pickedOrders, warehouseId])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`packed_orders_warehouse_${warehouseId}`, JSON.stringify(Array.from(packedOrders)))
-    }
-  }, [packedOrders, warehouseId])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && warehouseId) {
-      localStorage.setItem(`maxPickingOrders_${warehouseId}`, maxPickingOrders)
-    }
-  }, [maxPickingOrders, warehouseId])
 
 
-
-  // Custom hooks for state management
-  const {
-    orders,
-    loading,
-    updateOrdersFulfillmentStatus,
-    updateStatus,
-    updateFulfillmentStatus,
-    refreshOrders
-  } = useWarehouseOrders(warehouseId)
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && pickedOrders.size > 0) {
-      const currentOrderIds = new Set(orders.map(o => o.id))
-      const validPickedOrders = new Set(
-        Array.from(pickedOrders).filter(id => currentOrderIds.has(id))
-      )
-
-      // Only update if there are invalid IDs
-      if (validPickedOrders.size !== pickedOrders.size) {
-        setPickedOrders(validPickedOrders)
-      }
-    }
-  }, [orders, pickedOrders])
+  // ✅ ADD THIS - Convert hook arrays to Sets for compatibility
+  const pickedItems = useMemo(() => new Set(pickedItemsArray), [pickedItemsArray])
+  const pickedOrders = useMemo(() => new Set(pickedOrdersArray), [pickedOrdersArray])
+  const packedOrders = useMemo(() => new Set(packedOrdersArray), [packedOrdersArray])
+  const maxPickingOrders = String(warehouseSettings.maxPickingOrders || 'all')
 
   const {
     searchTerm,
@@ -466,29 +412,31 @@ export default function WarehouseOrdersPage() {
   const endIndex = startIndex + (ordersPerPage || 20)
   const currentOrders = sortedOrders.slice(startIndex, endIndex)
 
-  // Picking state handlers
-  const handleItemPicked = (sku: string) => {
-    setPickedItems(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(sku)) {
-        newSet.delete(sku)
+  // ✅ NEW - Use hook methods
+  const handleItemPicked = async (itemId: string) => {
+    try {
+      if (pickedItems.has(itemId)) {
+        // Item is currently picked, unpick it
+        await removePickedItem(itemId)
       } else {
-        newSet.add(sku)
+        // Item is not picked, pick it
+        await addPickedItem(itemId)
       }
-      return newSet
-    })
+    } catch (error) {
+      console.error('Error updating picked item:', error)
+    }
   }
 
-  const handleOrderPicked = (orderId: string) => {
-    setPickedOrders(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(orderId)) {
-        newSet.delete(orderId)
+  const handleOrderPicked = async (orderId: string) => {
+    try {
+      if (pickedOrders.has(orderId)) {
+        await removePickedOrder(orderId)
       } else {
-        newSet.add(orderId)
+        await addPickedOrder(orderId)
       }
-      return newSet
-    })
+    } catch (error) {
+      console.error('Error updating picked order:', error)
+    }
   }
 
   // Event handlers
@@ -575,16 +523,16 @@ export default function WarehouseOrdersPage() {
     setCurrentPage(1)
   }
 
-  const handleOrderPacked = (orderId: string) => {
-    setPackedOrders(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(orderId)) {
-        newSet.delete(orderId)
+  const handleOrderPacked = async (orderId: string) => {
+    try {
+      if (packedOrders.has(orderId)) {
+        await removePackedOrder(orderId)
       } else {
-        newSet.add(orderId)
+        await addPackedOrder(orderId)
       }
-      return newSet
-    })
+    } catch (error) {
+      console.error('Error updating packed order:', error)
+    }
   }
 
   const handleItemsToShipChange = (checked: boolean) => {
@@ -614,12 +562,30 @@ export default function WarehouseOrdersPage() {
     setShowPickingList(true)
   }
 
-  const handleClearPickingState = () => {
-    setPickedItems(new Set())
-    setPickedOrders(new Set())
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(getPickingStateKey('items'))
-      localStorage.removeItem(getPickingStateKey('orders'))
+  const handleClearPickingState = async () => {
+    try {
+      await clearAllStates()
+      console.log('✅ Cleared picking state')
+    } catch (error) {
+      console.error('Error clearing picking state:', error)
+    }
+  }
+
+  const handleMaxPickingOrdersChange = async (value: string) => {
+    try {
+      let parsedValue: number | 'all'
+
+      if (value === 'all') {
+        parsedValue = 'all'
+      } else if (value.startsWith('custom:')) {
+        parsedValue = parseInt(value.replace('custom:', ''))
+      } else {
+        parsedValue = parseInt(value)
+      }
+
+      await updateSettings({ maxPickingOrders: parsedValue })
+    } catch (error) {
+      console.error('Error updating max picking orders:', error)
     }
   }
 
@@ -637,6 +603,10 @@ export default function WarehouseOrdersPage() {
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
       </div>
     )
+  }
+
+  if (warehousesLoading) {
+    return <AuthLoadingState message="Loading warehouse orders..." />
   }
 
   if (!warehouse) {
@@ -729,7 +699,7 @@ export default function WarehouseOrdersPage() {
         itemsPerPage={ordersPerPage || 20}
         onItemsPerPageChange={handleItemsPerPageChange}
         maxPickingOrders={maxPickingOrders}
-        onMaxPickingOrdersChange={setMaxPickingOrders}
+        onMaxPickingOrdersChange={handleMaxPickingOrdersChange}
         showItemsToShip={showItemsToShip}
         onShowPickingList={handleShowPickingList}
         itemsToShipCount={itemsInLimitedPickingOrders}
@@ -857,28 +827,7 @@ export default function WarehouseOrdersPage() {
 
       {showShippingModal && orderToShip && (
         <ShippingModal
-          order={{
-            id: orderToShip.id,
-            orderNumber: orderToShip.orderNumber,
-            customer: {
-              name: orderToShip.customerName || '',
-              email: orderToShip.customerEmail || ''
-            },
-            shippingAddress: {
-              streetAddress: orderToShip.shippingAddress1 || '',
-              secondaryAddress: orderToShip.shippingAddress2,
-              city: orderToShip.shippingCity || '',
-              state: orderToShip.shippingProvince || '',
-              zipCode: orderToShip.shippingZip || ''
-            },
-            items: orderToShip.lineItems ? JSON.parse(orderToShip.lineItems).map((item: any) => ({
-              name: item.name || '',
-              quantity: item.quantity || 0,
-              sku: item.sku || ''
-            })) : [],
-            total: orderToShip.totalAmount || 0,
-            weight: orderToShip.totalWeight
-          }}
+          order={transformToDetailedOrder(orderToShip)}
           isOpen={showShippingModal}
           onClose={() => {
             setShowShippingModal(false)
@@ -893,3 +842,10 @@ export default function WarehouseOrdersPage() {
     </div>
   )
 }
+
+// ✅ Export with auth protection
+export default withAuth(WarehouseOrdersPageContent, {
+  loadingMessage: "Loading warehouse orders...",
+  errorTitle: "Unable to load warehouse orders",
+  errorMessage: "Please check your authentication and try again."
+})

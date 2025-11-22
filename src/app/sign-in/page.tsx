@@ -5,7 +5,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AccountAPI } from '@/lib/api/accountApi'
-import { setAuthToken } from '@/lib/auth/token'
 
 export default function SignIn() {
   const [email, setEmail] = useState('')
@@ -30,9 +29,6 @@ export default function SignIn() {
         accountId: response.user.accountId,
         email: response.user.email
       })
-
-      // ✅ Store token in cookies (not localStorage)
-      setAuthToken(response.token)
 
       console.log('[Sign In] ✅ Token saved, redirecting to dashboard...')
 

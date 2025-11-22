@@ -19,7 +19,7 @@ import { useAccountInitialization } from '@/hooks/useAccountInitialization'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import DashboardProviders from './providers'
-import { hasShippingIntegration } from '@/lib/storage/integrationStorage'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
 
 // Navigation item interface - simplified
 interface NavigationItem {
@@ -40,12 +40,26 @@ function DashboardLayoutContent({
 
   useAccountInitialization()
 
-  // ✅ FIXED: Check for shipping integration on mount and when pathname changes
+  // ✅ UPDATED: Check for shipping integration using API
   useEffect(() => {
     const checkShippingIntegration = async () => {
-      if (typeof window !== 'undefined') {
-        const hasShipping = await hasShippingIntegration()
+      try {
+        // Get shipping integrations from API
+        const integrations = await IntegrationAPI.getAccountIntegrations({
+          type: 'shipping'
+        })
+
+        // Check if any shipping integration is connected
+        const hasShipping = integrations.some(
+          (integration: any) =>
+            integration.status === 'connected' || integration.enabled
+        )
+
         setShowShipping(hasShipping)
+      } catch (error) {
+        console.error('[Layout] Error checking shipping integrations:', error)
+        // Default to false on error
+        setShowShipping(false)
       }
     }
 

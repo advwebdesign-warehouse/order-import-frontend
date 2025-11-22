@@ -44,9 +44,10 @@ export function transformGraphQLOrder(
   });
 
   // Calculate total weight in ounces
-  const totalWeightOz = lineItems.reduce((sum: number, item: LineItemWithWeight) =>
-    sum + (item.weight * item.quantity), 0
-  )
+  const totalWeightOz = lineItems.reduce((sum: number, item: LineItemWithWeight) => {
+    const itemWeight = item.weight ?? 0; // Use nullish coalescing to default to 0
+    return sum + (itemWeight * item.quantity);
+  }, 0);
 
   // Map fulfillment status
   const fulfillmentStatus = mapFulfillmentStatus(graphqlOrder.displayFulfillmentStatus);

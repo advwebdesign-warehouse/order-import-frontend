@@ -8,6 +8,7 @@ import ReactCountryFlag from "react-country-flag"
 
 interface AddressesTabProps {
   selectedWarehouseId: string
+  accountId: string
 }
 
 export default function AddressesTab({ selectedWarehouseId }: AddressesTabProps) {

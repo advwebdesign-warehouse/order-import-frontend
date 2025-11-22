@@ -4,8 +4,13 @@ import { useParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useWarehouses } from '../hooks/useWarehouses'
 import { Warehouse } from '../utils/warehouseTypes'
+import { withAuth } from '@/app/dashboard/shared/components/withAuth'
+import { AuthLoadingState } from '@/app/dashboard/shared/components/AuthLoadingState'
 
-export default function WarehousePage() {
+interface WarehousePageProps {
+  accountId: string  // ✅ Guaranteed to be valid by withAuth HOC
+}
+function WarehousePageContent({ accountId }: WarehousePageProps) {
   const params = useParams()
   const warehouseId = params.id as string
   const { warehouses, loading } = useWarehouses()
@@ -19,7 +24,7 @@ export default function WarehousePage() {
   }, [warehouses, warehouseId])
 
   if (loading) {
-    return <div className="flex justify-center items-center h-64">Loading...</div>
+    return <AuthLoadingState message="Loading warehouse details..." />
   }
 
   if (!warehouse) {
@@ -101,3 +106,10 @@ export default function WarehousePage() {
     </div>
   )
 }
+
+// ✅ Export with auth protection
+export default withAuth(WarehousePageContent, {
+  loadingMessage: "Loading warehouse details...",
+  errorTitle: "Unable to load warehouse",
+  errorMessage: "Please check your authentication and try again."
+})

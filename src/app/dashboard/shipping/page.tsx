@@ -19,6 +19,7 @@ import AddressesTab from './components/AddressesTab'
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
+import { withAuth } from '../shared/components/withAuth'
 
 const tabs = [
   {
@@ -43,45 +44,23 @@ const tabs = [
   }
 ]
 
-export default function ShippingPage() {
+function ShippingPageContent({ accountId }: { accountId: string }) {
   const [selectedTab, setSelectedTab] = useState(0)
-  const [accountId, setAccountId] = useState<string>('')
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('selectedWarehouseId_shipping')
-      return saved || ''
+      const params = new URLSearchParams(window.location.search)
+      return params.get('warehouse') || ''
     }
     return ''
   })
 
   const { warehouses, loading: warehousesLoading } = useWarehouses()
 
-  // Fetch account ID
-  useEffect(() => {
-    const fetchAccount = async () => {
-      try {
-        const response = await fetch('/api/accounts/current')
-        if (response.ok) {
-          const data = await response.json()
-          setAccountId(data.accountId || data.id || '')
-        }
-      } catch (error) {
-        console.error('Error fetching account:', error)
-      }
-    }
-    fetchAccount()
-  }, [])
-
   const handleWarehouseChange = (warehouseId: string) => {
     setSelectedWarehouseId(warehouseId)
 
-    // Save to localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedWarehouseId_shipping', warehouseId)
-    }
-
-    // Update URL to reflect warehouse selection
+    // ✅ Only update URL (no localStorage)
     const url = new URL(window.location.href)
     if (warehouseId) {
       url.searchParams.set('warehouse', warehouseId)
@@ -196,13 +175,16 @@ export default function ShippingPage() {
             />
             </Tab.Panel>
             <Tab.Panel>
-              <ServicesTab selectedWarehouseId={selectedWarehouseId} />
+              <ServicesTab selectedWarehouseId={selectedWarehouseId}
+              accountId={accountId}/>
             </Tab.Panel>
             <Tab.Panel>
-              <PresetsTab selectedWarehouseId={selectedWarehouseId} />
+              <PresetsTab selectedWarehouseId={selectedWarehouseId}
+              accountId={accountId}/>
             </Tab.Panel>
             <Tab.Panel>
-              <AddressesTab selectedWarehouseId={selectedWarehouseId} />
+              <AddressesTab selectedWarehouseId={selectedWarehouseId}
+              accountId={accountId}/>
             </Tab.Panel>
           </Tab.Panels>
         </Tab.Group>
@@ -210,3 +192,10 @@ export default function ShippingPage() {
     </div>
   )
 }
+
+// ✅ Export with withAuth HOC - provides automatic loading/error states
+export default withAuth(ShippingPageContent, {
+  loadingMessage: "Loading shipping settings...",
+  errorTitle: "Unable to load shipping settings",
+  errorMessage: "Please try refreshing the page or contact support if the issue persists."
+})

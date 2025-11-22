@@ -1,6 +1,8 @@
 //file path: lib/shopify/shopifyWebhooks.ts
 
 import crypto from 'crypto';
+import { OrderAPI } from '@/lib/api/orderApi';
+import { ProductAPI } from '@/lib/api/productApi';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com';
 
@@ -23,7 +25,7 @@ export class ShopifyWebhooks {
 
   /**
    * Process order created/updated webhook
-   * Note: Shopify sends REST format even with GraphQL API
+   * ✅ UPDATED: Uses API to save orders
    */
   static async processOrderWebhook(
     order: any,
@@ -39,18 +41,7 @@ export class ShopifyWebhooks {
       const transformedOrder = transformGraphQLOrder(order, storeId, warehouseId);
 
       // ✅ Save to backend via API
-      const response = await fetch(`${API_BASE_URL}/api/orders/bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orders: [transformedOrder],
-          accountId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save order: ${response.statusText}`);
-      }
+      await OrderAPI.saveOrders([transformedOrder]);
 
       console.log('[ShopifyWebhooks] Order saved successfully');
     } catch (error) {
@@ -61,6 +52,7 @@ export class ShopifyWebhooks {
 
   /**
    * Process product created/updated webhook
+   * ✅ UPDATED: Uses API to save products
    */
   static async processProductWebhook(product: any, storeId: string, accountId: string): Promise<void> {
     try {
@@ -71,18 +63,7 @@ export class ShopifyWebhooks {
       const transformedProduct = transformGraphQLProduct(product, storeId);
 
       // ✅ Save to backend via API
-      const response = await fetch(`${API_BASE_URL}/api/products/bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          products: [transformedProduct],
-          accountId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save product: ${response.statusText}`);
-      }
+      await ProductAPI.saveProducts([transformedProduct]);
 
       console.log('[ShopifyWebhooks] Product saved successfully');
     } catch (error) {
@@ -93,6 +74,7 @@ export class ShopifyWebhooks {
 
   /**
    * Process order cancellation webhook
+   * ✅ UPDATED: Uses API to update order
    */
   static async processOrderCancellation(
     order: any,
@@ -100,35 +82,18 @@ export class ShopifyWebhooks {
     storeId: string
   ): Promise<void> {
     try {
-      // ✅ Check if order exists
-      const checkResponse = await fetch(
-        `${API_BASE_URL}/api/orders/check?externalId=${order.id}&storeId=${storeId}`,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        }
+      // ✅ Find order by externalId
+      const orders = await OrderAPI.getOrders();
+      const existingOrder = orders.find(
+        (o: any) => o.externalId === order.id.toString() && o.storeId === storeId
       );
 
-      if (!checkResponse.ok) {
-        throw new Error('Failed to check order existence');
-      }
-
-      const { exists, orderId } = await checkResponse.json();
-
-      if (exists && orderId) {
+      if (existingOrder) {
         // ✅ Update order status to cancelled
-        const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: 'CANCELLED',
-            fulfillmentStatus: 'CANCELLED'
-          })
+        await OrderAPI.updateOrder(existingOrder.id, {
+          status: 'CANCELLED',
+          fulfillmentStatus: 'CANCELLED'
         });
-
-        if (!response.ok) {
-          throw new Error(`Failed to cancel order: ${response.statusText}`);
-        }
 
         console.log('[ShopifyWebhooks] Order cancelled successfully');
       } else {
@@ -142,6 +107,7 @@ export class ShopifyWebhooks {
 
   /**
    * Process fulfillment webhook
+   * ✅ UPDATED: Uses API to update order
    */
   static async processFulfillmentWebhook(
     fulfillment: any,
@@ -149,39 +115,22 @@ export class ShopifyWebhooks {
     storeId: string
   ): Promise<void> {
     try {
-      // ✅ Check if order exists
-      const checkResponse = await fetch(
-        `${API_BASE_URL}/api/orders/check?externalId=${fulfillment.order_id}&storeId=${storeId}`,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        }
+      // ✅ Find order by externalId
+      const orders = await OrderAPI.getOrders();
+      const existingOrder = orders.find(
+        (o: any) => o.externalId === fulfillment.order_id.toString() && o.storeId === storeId
       );
 
-      if (!checkResponse.ok) {
-        throw new Error('Failed to check order existence');
-      }
-
-      const { exists, orderId } = await checkResponse.json();
-
-      if (exists && orderId) {
+      if (existingOrder) {
         // ✅ Update order with fulfillment info
-        const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: 'SHIPPED',
-            fulfillmentStatus: 'SHIPPED',
-            fulfillmentId: fulfillment.id?.toString(),
-            trackingNumber: fulfillment.tracking_number,
-            trackingCompany: fulfillment.tracking_company,
-            trackingUrl: fulfillment.tracking_url
-          })
+        await OrderAPI.updateOrder(existingOrder.id, {
+          status: 'SHIPPED',
+          fulfillmentStatus: 'SHIPPED',
+          fulfillmentId: fulfillment.id?.toString(),
+          trackingNumber: fulfillment.tracking_number,
+          trackingCompany: fulfillment.tracking_company,
+          trackingUrl: fulfillment.tracking_url
         });
-
-        if (!response.ok) {
-          throw new Error(`Failed to update fulfillment: ${response.statusText}`);
-        }
 
         console.log('[ShopifyWebhooks] Order fulfillment updated successfully');
       } else {

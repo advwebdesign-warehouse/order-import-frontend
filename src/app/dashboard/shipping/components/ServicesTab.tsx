@@ -20,6 +20,7 @@ import Notification from '../../shared/components/Notification'
 import { useNotification } from '../../shared/hooks/useNotification'
 import { useWarehouses } from '../../warehouses/hooks/useWarehouses'
 import { IntegrationAPI } from '@/lib/api/integrationApi'
+import { ShippingAPI } from '@/lib/api/shippingApi'
 
 interface ServicesTabProps {
   selectedWarehouseId: string
@@ -36,6 +37,10 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
   const [isLoadingCarriers, setIsLoadingCarriers] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [integrations, setIntegrations] = useState<any[]>([])
+
+  // Track warehouse states for each service (for "All Warehouses" view)
+  const [serviceWarehouseStates, setServiceWarehouseStates] = useState<Map<string, { warehouseId: string; warehouseName: string; isActive: boolean }[]>>(new Map())
+
   const { notification, showSuccess, showError, closeNotification } = useNotification()
   const { warehouses } = useWarehouses()
 
@@ -44,20 +49,12 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
     const fetchIntegrations = async () => {
       try {
         setIsLoadingCarriers(true)
-        const response = await fetch(`/api/integrations?type=shipping`, {
-          headers: {
-            'Authorization': `Bearer ${accountId}`
-          }
-        })
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch integrations')
-        }
+        // Use IntegrationAPI instead of fetch
+        const integrations = await IntegrationAPI.getAccountIntegrations({ type: 'shipping' })
+        setIntegrations(integrations)
 
-        const data = await response.json()
-        setIntegrations(data.integrations || [])
-
-        const carriers = data.integrations
+        const carriers = integrations
           .filter((i: any) => i.type === 'shipping' && i.status === 'connected' && i.enabled)
           .map((i: any) => i.name)
 
@@ -87,7 +84,7 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
   }, [enabledCarriers, isLoadingCarriers, selectedWarehouseId, warehouses])
 
   const loadWarehouseServices = async (warehouseId: string) => {
-    const servicesFromAPI = await IntegrationAPI.getWarehouseServices(warehouseId)
+    const servicesFromAPI: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouseId)
       .then(data => data.services || [])
 
       const filtered = servicesFromAPI.filter((service: CarrierService) => {
@@ -106,7 +103,7 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
     let hasAnyServices = false
 
     for (const warehouse of warehouses) {
-      const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
+      const warehouseServices: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouse.id)
         .then(data => data.services || [])
 
       if (warehouseServices.length > 0) {
@@ -133,6 +130,34 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
     })
 
     setServices(filtered)
+
+    // Compute warehouse states for each service (for "All Warehouses" view)
+    const statesMap = new Map<string, { warehouseId: string; warehouseName: string; isActive: boolean }[]>()
+
+    for (const service of filtered) {
+      const states: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
+
+      for (const warehouse of warehouses) {
+        const warehouseServices: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouse.id)
+          .then(data => data.services || [])
+
+        const matchingService = warehouseServices.find((s: CarrierService) =>
+          s.carrier === service.carrier && s.serviceCode === service.serviceCode
+        )
+
+        if (matchingService) {
+          states.push({
+            warehouseId: warehouse.id,
+            warehouseName: warehouse.name,
+            isActive: matchingService.isActive
+          })
+        }
+      }
+
+      statesMap.set(service.id, states)
+    }
+
+    setServiceWarehouseStates(statesMap)
   }
 
   // Sync services from carrier APIs
@@ -175,47 +200,37 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
       console.log('[ServicesTab] Starting sync...')
 
-      const response = await fetch('/api/shipping/services/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          carriers: enabledCarriers,
-          credentials: allCredentials
-        })
+      // Use ShippingAPI instead of fetch
+      const data = await ShippingAPI.syncServicesFromCarriers({
+        carriers: enabledCarriers,
+        credentials: allCredentials
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const apiServices = data.services || []
+      const apiServices = data.services || []
 
-        console.log('[ServicesTab] Sync response:', apiServices.length, 'services')
+      console.log('[ServicesTab] Sync response:', apiServices.length, 'services')
 
-        if (selectedWarehouseId === '') {
-          for (const warehouse of warehouses) {
-            await syncWarehouseServices(warehouse.id, apiServices)
-          }
-        } else {
-          await syncWarehouseServices(selectedWarehouseId, apiServices)
+      if (selectedWarehouseId === '') {
+        for (const warehouse of warehouses) {
+          await syncWarehouseServices(warehouse.id, apiServices)
         }
-
-        showSuccess(
-          'Sync Successful',
-          `Synced ${apiServices.length} services`
-        )
-
-        setTimeout(() => {
-          if (selectedWarehouseId === '') {
-            loadAllWarehousesServices()
-          } else {
-            loadWarehouseServices(selectedWarehouseId)
-          }
-          setSyncing(false)
-        }, 100)
       } else {
-        const error = await response.json()
-        showError('Sync Failed', error.error || 'Unknown error occurred')
-        setSyncing(false)
+        await syncWarehouseServices(selectedWarehouseId, apiServices)
       }
+
+      showSuccess(
+        'Sync Successful',
+        `Synced ${apiServices.length} services`
+      )
+
+      setTimeout(() => {
+        if (selectedWarehouseId === '') {
+          loadAllWarehousesServices()
+        } else {
+          loadWarehouseServices(selectedWarehouseId)
+        }
+        setSyncing(false)
+      }, 100)
     } catch (error: any) {
       console.error('[ServicesTab] Sync error:', error)
       showError('Sync Failed', 'Failed to sync services. Check console for details.')
@@ -237,7 +252,7 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
     const merged: CarrierService[] = []
 
     apiServices.forEach(apiService => {
-      const existing = existingServices.find(service =>
+      const existing = existingServices.find((service: CarrierService) =>
         service.carrier === apiService.carrier &&
         service.serviceCode === apiService.serviceCode
       )
@@ -255,7 +270,7 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
       }
     })
 
-    const existingCarrierServices = existingServices.filter(service =>
+    const existingCarrierServices = existingServices.filter((service: CarrierService) =>
       !merged.some(m => m.carrier === service.carrier && m.serviceCode === service.serviceCode)
     )
 
@@ -264,29 +279,6 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
     })
 
     return merged
-  }
-
-  const getServiceStateAcrossWarehouses = async (service: CarrierService) => {
-    const states: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
-
-    for (const warehouse of warehouses) {
-      const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
-        .then(data => data.services || [])
-
-      const matchingService = warehouseServices.find(s =>
-        s.carrier === service.carrier && s.serviceCode === service.serviceCode
-      )
-
-      if (matchingService) {
-        states.push({
-          warehouseId: warehouse.id,
-          warehouseName: warehouse.name,
-          isActive: matchingService.isActive
-        })
-      }
-    }
-
-    return states
   }
 
   // Filter services
@@ -299,7 +291,7 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
     // Type filter
     if (selectedType !== 'all') {
-      filtered = filtered.filter(service =>
+      filtered = filtered.filter((service: CarrierService) =>
         service.serviceType === selectedType || service.serviceType === 'both'
       )
     }
@@ -307,7 +299,7 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
-      filtered = filtered.filter(service => {
+      filtered = filtered.filter((service: CarrierService) => {
         const nameMatch = service.displayName.toLowerCase().includes(searchLower)
         const descMatch = service.description?.toLowerCase().includes(searchLower)
         const carrierMatch = service.carrier.toLowerCase().includes(searchLower)
@@ -322,16 +314,16 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
   }, [services, selectedCarrier, selectedType, searchTerm])
 
   const handleToggleActive = async (id: string) => {
-    const service = services.find(s => s.id === id)
+    const service = services.find((s: CarrierService) => s.id === id)
     if (!service) return
 
     if (selectedWarehouseId === '') {
       const  anyEnabled = false
       for (const warehouse of warehouses) {
-        const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
+        const warehouseServices: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouse.id)
           .then(data => data.services || [])
 
-        const matchingService = warehouseServices.find(s =>
+        const matchingService = warehouseServices.find((s: CarrierService) =>
           s.carrier === service.carrier && s.serviceCode === service.serviceCode
         )
         if (matchingService?.isActive) {
@@ -355,7 +347,7 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
     const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouseId)
       .then(data => data.services || [])
 
-    const updatedServices = warehouseServices.map(service => {
+    const updatedServices = warehouseServices.map((service: CarrierService) => {
       const isMatch = service.carrier === targetService.carrier &&
                       service.serviceCode === targetService.serviceCode
 
@@ -657,8 +649,8 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
                       {/* All Warehouses View - Show status text */}
                       {selectedWarehouseId === '' && (() => {
-                        const states = getServiceStateAcrossWarehouses(service)
-                        const enabledCount = states.filter(s => s.isActive).length
+                        const states = serviceWarehouseStates.get(service.id) || []
+                        const enabledCount = states.filter((s: { warehouseId: string; warehouseName: string; isActive: boolean }) => s.isActive).length
                         const totalCount = states.length
                         const allEnabled = enabledCount === totalCount
                         const allDisabled = enabledCount === 0
@@ -682,8 +674,8 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
                         type="checkbox"
                         checked={(() => {
                           if (selectedWarehouseId === '') {
-                            const states = getServiceStateAcrossWarehouses(service)
-                            const enabledCount = states.filter(s => s.isActive).length
+                            const states = serviceWarehouseStates.get(service.id) || []
+                            const enabledCount = states.filter((s: { warehouseId: string; warehouseName: string; isActive: boolean }) => s.isActive).length
                             return enabledCount > 0
                           }
                           return service.isActive
