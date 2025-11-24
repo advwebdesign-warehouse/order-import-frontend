@@ -2,7 +2,7 @@
 'use client'
 
 import { Fragment, useState, useEffect } from 'react'
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog, Transition, Menu } from '@headlessui/react'
 import {
   Bars3Icon,
   HomeIcon,
@@ -13,13 +13,16 @@ import {
   Cog6ToothIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
-  TruckIcon, // NEW: Import shipping icon
+  TruckIcon,
+  UserCircleIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline'
 import { useAccountInitialization } from '@/hooks/useAccountInitialization'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import DashboardProviders from './providers'
 import { IntegrationAPI } from '@/lib/api/integrationApi'
+import { logout } from '@/lib/auth/authUtils'
 
 // Navigation item interface - simplified
 interface NavigationItem {
@@ -37,8 +40,10 @@ function DashboardLayoutContent({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showShipping, setShowShipping] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
 
-  useAccountInitialization()
+  // ✅ Get user and account info from initialization hook
+  const { user, account, isValidating } = useAccountInitialization()
 
   // ✅ UPDATED: Check for shipping integration using API
   useEffect(() => {
@@ -73,7 +78,13 @@ function DashboardLayoutContent({
     return pathname.startsWith(href)
   }
 
-  // Simple flat navigation - no expandable items or submenus
+  // ✅ Handle logout
+  const handleLogout = async () => {
+    if (confirm('Are you sure you want to logout?')) {
+      await logout()
+    }
+  }
+
   const navigationItems: NavigationItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Products', href: '/dashboard/products', icon: CubeIcon },
@@ -173,7 +184,9 @@ function DashboardLayoutContent({
         </div>
       </div>
 
+      {/* Main content area */}
       <div className="lg:pl-72">
+        {/* ✅ NEW: Header with user menu and logout */}
         <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
           <button
             type="button"
@@ -182,8 +195,94 @@ function DashboardLayoutContent({
           >
             <Bars3Icon className="h-6 w-6" aria-hidden="true" />
           </button>
+
+          {/* Spacer */}
+          <div className="flex flex-1" />
+
+          {/* ✅ User menu dropdown */}
+          <Menu as="div" className="relative">
+            <Menu.Button className="flex items-center gap-x-2 text-sm font-semibold leading-6 text-gray-900 hover:bg-gray-50 px-3 py-2 rounded-md">
+              <UserCircleIcon className="h-6 w-6 text-gray-400" />
+              <span className="hidden sm:block">
+                {isValidating ? 'Loading...' : user?.name || user?.email || 'User'}
+              </span>
+              <ChevronDownIcon className="h-4 w-4 text-gray-400" />
+            </Menu.Button>
+
+            <Transition
+              as={Fragment}
+              enter="transition ease-out duration-100"
+              enterFrom="transform opacity-0 scale-95"
+              enterTo="transform opacity-100 scale-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="transform opacity-100 scale-100"
+              leaveTo="transform opacity-0 scale-95"
+            >
+              <Menu.Items className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-white py-2 shadow-lg ring-1 ring-gray-900/5 focus:outline-none">
+                {/* User info section */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-medium text-gray-900">
+                    {user?.name || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {user?.email}
+                  </p>
+                  {account?.companyName && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {account.companyName}
+                    </p>
+                  )}
+                </div>
+
+                {/* Account settings */}
+                <Menu.Item>
+                  {({ active }) => (
+                    <Link
+                      href="/dashboard/settings/account"
+                      className={`${
+                        active ? 'bg-gray-50' : ''
+                      } block px-4 py-2 text-sm text-gray-700`}
+                    >
+                      Account Settings
+                    </Link>
+                  )}
+                </Menu.Item>
+
+                <Menu.Item>
+                  {({ active }) => (
+                    <Link
+                      href="/dashboard/settings/profile"
+                      className={`${
+                        active ? 'bg-gray-50' : ''
+                      } block px-4 py-2 text-sm text-gray-700`}
+                    >
+                      Profile Settings
+                    </Link>
+                  )}
+                </Menu.Item>
+
+                {/* Divider */}
+                <div className="border-t border-gray-100 my-1" />
+
+                {/* Logout button */}
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={handleLogout}
+                      className={`${
+                        active ? 'bg-gray-50' : ''
+                      } block w-full text-left px-4 py-2 text-sm text-red-600`}
+                    >
+                      Sign Out
+                    </button>
+                  )}
+                </Menu.Item>
+              </Menu.Items>
+            </Transition>
+          </Menu>
         </div>
 
+        {/* Page content */}
         <main className="py-10">
           <div className="px-4 sm:px-6 lg:px-8">
             {children}

@@ -94,13 +94,6 @@ export default function SignIn() {
             </button>
           </div>
         </form>
-
-        <div className="mt-4 text-center text-sm text-gray-600">
-          <p>Demo Credentials:</p>
-          <p className="font-mono text-xs mt-1">
-            Check your database or use the create-account script
-          </p>
-        </div>
       </div>
     </div>
   )
