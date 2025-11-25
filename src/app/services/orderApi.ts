@@ -2,7 +2,7 @@
 
 import { Order } from '@/app/dashboard/orders/utils/orderTypes'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co'
 
 class OrderApiService {
   private getAuthToken(): string | null {
