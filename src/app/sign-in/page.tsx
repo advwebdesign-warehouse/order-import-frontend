@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { AccountAPI } from '@/lib/api/accountApi'
 
 export default function SignIn() {
@@ -27,17 +28,26 @@ export default function SignIn() {
       console.log('[Sign In] ✅ Login successful:', {
         userId: response.user.id,
         accountId: response.user.accountId,
-        email: response.user.email
+        email: response.user.email,
+        isPlatformAdmin: response.user.isPlatformAdmin
       })
 
-      console.log('[Sign In] ✅ Token saved, redirecting to dashboard...')
-
-      // ✅ Redirect to dashboard
+      // ✅ Redirect to dashboard (cookie is already set by backend)
       router.push('/dashboard')
 
     } catch (error: any) {
       console.error('[Sign In] ❌ Login failed:', error)
-      setError(error.message || 'Login failed. Please check your credentials.')
+
+      // Parse error message
+      let errorMessage = 'Login failed. Please check your credentials.'
+      try {
+        const parsed = JSON.parse(error.message)
+        errorMessage = parsed.error || errorMessage
+      } catch {
+        errorMessage = error.message || errorMessage
+      }
+
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -50,12 +60,20 @@ export default function SignIn() {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Sign in to your account
           </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Or{' '}
+            <Link href="/sign-up" className="font-medium text-indigo-600 hover:text-indigo-500">
+              create a new account
+            </Link>
+          </p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
+              <label htmlFor="email" className="sr-only">Email address</label>
               <input
+                id="email"
                 type="email"
                 required
                 placeholder="Email address"
@@ -66,7 +84,9 @@ export default function SignIn() {
               />
             </div>
             <div>
+              <label htmlFor="password" className="sr-only">Password</label>
               <input
+                id="password"
                 type="password"
                 required
                 placeholder="Password"
@@ -92,6 +112,14 @@ export default function SignIn() {
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <a href="#" className="font-medium text-indigo-600 hover:text-indigo-500">
+                Forgot your password?
+              </a>
+            </div>
           </div>
         </form>
       </div>

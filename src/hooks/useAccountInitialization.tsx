@@ -6,28 +6,27 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { AccountAPI } from '@/lib/api/accountApi'
 
+// ✅ Public routes that don't require authentication
+const PUBLIC_ROUTES = [
+  '/sign-in',
+  '/sign-up',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/',  // Landing page (if you have one)
+]
+
 /**
- * Hook to validate account session on app load
- * Updated for httpOnly cookie authentication
- *
- * Usage: Call this in your dashboard layout
- *
- * Features:
- * - Validates session with backend (httpOnly cookies)
- * - Verifies token with backend
- * - Redirects to login if invalid
- * - Stores user/account info in state
- *
- * Example:
- *
- * // In app/dashboard/layout.tsx
- * import { useAccountInitialization } from '@/hooks/useAccountInitialization'
- *
- * export default function DashboardLayout({ children }) {
- *   useAccountInitialization()
- *   return <div>{children}</div>
- * }
+ * Check if current path is a public route
  */
+function isPublicRoute(pathname: string | null): boolean {
+  if (!pathname) return false
+  return PUBLIC_ROUTES.some(route =>
+    pathname === route || pathname.startsWith(`${route}/`)
+  )
+}
+
 export function useAccountInitialization() {
   const router = useRouter()
   const pathname = usePathname()
@@ -39,6 +38,13 @@ export function useAccountInitialization() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+
+    // ✅ Skip auth check for public routes
+    if (isPublicRoute(pathname)) {
+      console.log('[Account Init] 📖 Public route, skipping auth check:', pathname)
+      setIsValidating(false)
+      return
+    }
 
     async function validateSession() {
       console.log('[Account Init] 🚀 Validating session...')
@@ -65,8 +71,8 @@ export function useAccountInitialization() {
       setIsValidating(false)
       setSessionData(null)
 
-      // Redirect to login (unless already there)
-      if (!pathname?.includes('/sign-in') && !pathname?.includes('/login')) {
+      // ✅ Only redirect if NOT already on a public route
+      if (!isPublicRoute(pathname)) {
         console.log('[Account Init] Redirecting to login...')
         router.push('/sign-in')
       }
@@ -86,18 +92,6 @@ export function useAccountInitialization() {
  * Hook to check if user is authenticated
  * Returns boolean - use for conditional rendering
  * Updated for httpOnly cookies
- *
- * Example:
- *
- * function MyComponent() {
- *   const isAuth = useIsAuthenticated()
- *
- *   if (!isAuth) {
- *     return <div>Please login</div>
- *   }
- *
- *   return <div>Welcome!</div>
- * }
  */
 export function useIsAuthenticated(): boolean {
   const [isAuth, setIsAuth] = useState(false)
