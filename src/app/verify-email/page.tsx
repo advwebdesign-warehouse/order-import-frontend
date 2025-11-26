@@ -6,78 +6,102 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com/api'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api'
 
 function VerifyEmailContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
-  const email = searchParams.get('email')
+  const emailParam = searchParams.get('email')
 
-  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'code-entry'>('loading')
+  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'token-used' | 'code-entry'>('loading')
   const [message, setMessage] = useState('')
   const [code, setCode] = useState('')
-  const [codeEmail, setCodeEmail] = useState(email || '')
+  const [email, setEmail] = useState(emailParam || '')
   const [loading, setLoading] = useState(false)
 
   // Auto-verify if token is present in URL
   useEffect(() => {
     if (token) {
       verifyWithToken(token)
-    } else if (email) {
+    } else if (emailParam) {
       setStatus('code-entry')
     } else {
       setStatus('code-entry')
     }
-  }, [token, email])
+  }, [token, emailParam])
 
   async function verifyWithToken(verificationToken: string) {
+    console.log('[Verify] Starting verification with token:', verificationToken.substring(0, 10) + '...')
+
     try {
       const response = await fetch(`${API_URL}/auth/verify-email?token=${verificationToken}`, {
         method: 'GET',
         credentials: 'include'
       })
 
+      console.log('[Verify] Response status:', response.status)
       const data = await response.json()
+      console.log('[Verify] Response data:', data)
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         setStatus('success')
         setMessage(data.message || 'Email verified successfully!')
 
-        // Redirect to sign-in after 3 seconds
         setTimeout(() => {
-          router.push('/sign-in')
+          router.push('/sign-in?verified=true')
         }, 3000)
       } else {
-        setStatus('error')
-        setMessage(data.error || 'Verification failed')
+        if (data.code === 'TOKEN_USED') {
+          setStatus('token-used')
+          setMessage('This verification link has already been used.')
+        } else if (data.code === 'INVALID_TOKEN') {
+          setStatus('error')
+          setMessage('This verification link is invalid or has expired.')
+        } else {
+          setStatus('error')
+          setMessage(data.error || 'Verification failed')
+        }
       }
     } catch (error) {
+      console.error('[Verify] Fetch error:', error)
       setStatus('error')
-      setMessage('An error occurred during verification')
+      setMessage('An error occurred during verification. Please try again.')
     }
   }
 
   async function verifyWithCode(e: React.FormEvent) {
     e.preventDefault()
+
+    if (!email) {
+      setMessage('Please enter your email address')
+      return
+    }
+
+    if (code.length !== 6) {
+      setMessage('Please enter the 6-digit verification code')
+      return
+    }
+
     setLoading(true)
+    setMessage('')
 
     try {
       const response = await fetch(`${API_URL}/auth/verify-email-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email: codeEmail, code })
+        body: JSON.stringify({ email, code })
       })
 
       const data = await response.json()
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         setStatus('success')
         setMessage(data.message || 'Email verified successfully!')
 
         setTimeout(() => {
-          router.push('/sign-in')
+          router.push('/sign-in?verified=true')
         }, 3000)
       } else {
         setMessage(data.error || 'Invalid verification code')
@@ -89,23 +113,31 @@ function VerifyEmailContent() {
     }
   }
 
-  async function resendCode() {
-    if (!codeEmail) {
+  async function resendVerification() {
+    if (!email) {
       setMessage('Please enter your email address')
       return
     }
 
     setLoading(true)
+    setMessage('')
+
     try {
       const response = await fetch(`${API_URL}/auth/resend-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email: codeEmail })
+        body: JSON.stringify({ email })
       })
 
       const data = await response.json()
-      setMessage(data.message || 'Verification email sent!')
+
+      if (response.ok) {
+        setMessage('Verification email sent! Please check your inbox.')
+        setStatus('code-entry')
+      } else {
+        setMessage(data.error || 'Failed to send verification email')
+      }
     } catch (error) {
       setMessage('Failed to resend verification email')
     } finally {
@@ -113,7 +145,7 @@ function VerifyEmailContent() {
     }
   }
 
-  // Loading state (verifying token)
+  // Loading state
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -152,6 +184,68 @@ function VerifyEmailContent() {
     )
   }
 
+  // Token already used state
+  if (status === 'token-used') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-6">
+              <svg className="h-8 w-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Link Already Used</h2>
+            <p className="text-gray-600 mb-6">
+              This verification link has already been used. Your email may already be verified.
+            </p>
+
+            <div className="space-y-3">
+              <Link
+                href="/sign-in"
+                className="block w-full bg-indigo-600 text-white px-6 py-2 rounded-md font-medium hover:bg-indigo-700 text-center"
+              >
+                Try Signing In
+              </Link>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">or</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <button
+                  onClick={resendVerification}
+                  disabled={loading || !email}
+                  className="w-full bg-gray-100 text-gray-700 px-6 py-2 rounded-md font-medium hover:bg-gray-200 disabled:opacity-50"
+                >
+                  {loading ? 'Sending...' : 'Resend Verification Email'}
+                </button>
+              </div>
+
+              {message && message !== 'This verification link has already been used.' && (
+                <p className={`text-sm ${message.includes('sent') ? 'text-green-600' : 'text-red-600'}`}>
+                  {message}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Error state
   if (status === 'error') {
     return (
@@ -165,6 +259,7 @@ function VerifyEmailContent() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Verification Failed</h2>
             <p className="text-gray-600 mb-6">{message}</p>
+
             <div className="space-y-3">
               <button
                 onClick={() => setStatus('code-entry')}
@@ -172,6 +267,24 @@ function VerifyEmailContent() {
               >
                 Enter Code Manually
               </button>
+
+              <div className="space-y-2">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <button
+                  onClick={resendVerification}
+                  disabled={loading || !email}
+                  className="w-full bg-gray-100 text-gray-700 px-6 py-2 rounded-md font-medium hover:bg-gray-200 disabled:opacity-50"
+                >
+                  {loading ? 'Sending...' : 'Request New Verification Email'}
+                </button>
+              </div>
+
               <Link
                 href="/sign-in"
                 className="block text-indigo-600 hover:text-indigo-500 font-medium"
@@ -201,7 +314,7 @@ function VerifyEmailContent() {
           </div>
 
           <form onSubmit={verifyWithCode} className="space-y-6">
-            {!email && (
+            {!emailParam && (
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                   Email Address
@@ -210,11 +323,19 @@ function VerifyEmailContent() {
                   id="email"
                   type="email"
                   required
-                  value={codeEmail}
-                  onChange={(e) => setCodeEmail(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="you@example.com"
+                  disabled={loading}
                 />
+              </div>
+            )}
+
+            {emailParam && (
+              <div className="text-center">
+                <p className="text-sm text-gray-500">Verifying:</p>
+                <p className="font-medium text-indigo-600">{emailParam}</p>
               </div>
             )}
 
@@ -231,6 +352,7 @@ function VerifyEmailContent() {
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                 className="mt-1 block w-full px-3 py-3 border border-gray-300 rounded-md shadow-sm text-center text-2xl tracking-widest font-mono focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="000000"
+                disabled={loading}
               />
             </div>
 
@@ -251,7 +373,7 @@ function VerifyEmailContent() {
 
           <div className="mt-6 text-center">
             <button
-              onClick={resendCode}
+              onClick={resendVerification}
               disabled={loading}
               className="text-sm text-indigo-600 hover:text-indigo-500 font-medium disabled:opacity-50"
             >
@@ -261,7 +383,7 @@ function VerifyEmailContent() {
 
           <div className="mt-4 text-center">
             <Link href="/sign-in" className="text-sm text-gray-600 hover:text-gray-900">
-              ← Back to Sign In
+              Back to Sign In
             </Link>
           </div>
         </div>

@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com/api'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api'
 
 export default function SignUp() {
   const [formData, setFormData] = useState({

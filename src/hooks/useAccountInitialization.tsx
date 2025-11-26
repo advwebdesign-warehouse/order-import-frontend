@@ -11,6 +11,7 @@ const PUBLIC_ROUTES = [
   '/sign-in',
   '/sign-up',
   '/login',
+  '/verify-email',
   '/register',
   '/forgot-password',
   '/reset-password',
@@ -38,6 +39,12 @@ export function useAccountInitialization() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+
+    // ✅ FIX: Wait for pathname to be available before doing anything
+    if (!pathname) {
+      console.log('[Account Init] ⏳ Waiting for pathname...')
+      return
+    }
 
     // ✅ Skip auth check for public routes
     if (isPublicRoute(pathname)) {
