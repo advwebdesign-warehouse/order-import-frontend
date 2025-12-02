@@ -11,6 +11,8 @@ import {
   PlusIcon,
   PencilIcon
 } from '@heroicons/react/24/outline'
+import { useAccountInitialization } from '@/hooks/useAccountInitialization'  // ✅ Added import
+import { AccountAPI } from '@/lib/api/accountApi'  // ✅ Added import
 
 interface OptimizationItem {
   id: string
@@ -107,34 +109,31 @@ const OPTIMIZATION_ITEMS: OptimizationItem[] = [
 ]
 
 export default function Dashboard() {
-  const [user, setUser] = useState<any>(null)
+  const router = useRouter()
+
+  // ✅ Use new httpOnly cookie auth via hook
+  const { isValidating, user, account } = useAccountInitialization()
+
   const [optimizationItems, setOptimizationItems] = useState<OptimizationItem[]>(OPTIMIZATION_ITEMS)
   const [selectedItem, setSelectedItem] = useState<OptimizationItem | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
-  const router = useRouter()
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    const userData = localStorage.getItem('user')
-
-    if (!token || !userData) {
-      router.push('/auth/signin')
-      return
-    }
-
-    setUser(JSON.parse(userData))
-
-    // Load saved optimization progress
+    // Load saved optimization progress from localStorage
     const savedItems = localStorage.getItem('warehouseOptimization')
     if (savedItems) {
       setOptimizationItems(JSON.parse(savedItems))
     }
-  }, [router])
+  }, [])
 
-  const handleSignOut = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    router.push('/auth/signin')
+  // ✅ Sign out using httpOnly cookie API
+  const handleSignOut = async () => {
+    try {
+      await AccountAPI.logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+    router.push('/sign-in')  // ✅ Correct path
   }
 
   const updateItem = (id: string, updates: Partial<OptimizationItem>) => {
@@ -182,8 +181,21 @@ export default function Dashboard() {
   const totalItems = optimizationItems.length
   const progressPercentage = Math.round((completedItems / totalItems) * 100)
 
+  // ✅ Show loading while validating session
+  if (isValidating) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ✅ Hook handles redirect if not authenticated
   if (!user) {
-    return <div>Loading...</div>
+    return null
   }
 
   return (

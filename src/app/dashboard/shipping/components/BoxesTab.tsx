@@ -78,7 +78,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
     const states: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
 
     for (const warehouse of warehouses) {
-      const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
+      const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id)
 
       const box = warehouseBoxes.find((b: ShippingBox) => {
         // Match by ID for custom boxes
@@ -172,7 +172,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }, [boxes, selectedWarehouseId, warehouses])
 
   const loadWarehouseBoxes = async (warehouseId: string) => {
-    const boxesFromAPI: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxesFromAPI: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId)
 
     // Filter boxes to only show those for enabled carriers
     const filtered = boxesFromAPI.filter((box: ShippingBox) => {
@@ -192,7 +192,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
     let hasAnyBoxes = false
 
     for (const warehouse of warehouses) {
-      const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
+      const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id)
 
       if (warehouseBoxes.length > 0) {
         hasAnyBoxes = true
@@ -334,7 +334,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const syncWarehouseBoxes = async (warehouseId: string, apiBoxes: any[], variableBoxes: any[]) => {
-    const existingBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const existingBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId)
 
     // Smart merge with special handling for variable boxes
     const mergedBoxes = smartMergeBoxes(existingBoxes, apiBoxes, variableBoxes)
@@ -514,7 +514,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const updateBoxInWarehouse = async (warehouseId: string, targetBox: ShippingBox, boxData: Partial<ShippingBox>) => {
-    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId)
 
     const updatedBoxes = boxes.map(box => {
       let isMatch = false
@@ -560,7 +560,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const addBoxToWarehouse = async (warehouseId: string, box: ShippingBox) => {
-    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId)
     boxes.push(box)
     await IntegrationAPI.saveWarehouseBoxes(warehouseId, boxes)
   }
@@ -625,7 +625,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const deleteBoxFromWarehouse = async (warehouseId: string, targetBox: ShippingBox) => {
-    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId)
     if (boxes.length === 0) return
 
     const updatedBoxes = boxes.filter(box => {
@@ -664,7 +664,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
         console.log('[Delete] Grouped duplicate - deleting from all warehouses')
 
         for (const warehouse of warehouses) {
-          const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
+          const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id)
 
           // Find and remove boxes with matching duplicateGroupId
           const updatedBoxes = warehouseBoxes.filter(box => {
@@ -710,7 +710,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
           // Find all states across warehouses for this group
           let allStates: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
           for (const warehouse of warehouses) {
-            const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id).then(data => data.boxes || [])
+            const warehouseBoxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouse.id)
             const matchingBox = warehouseBoxes.find((b: ShippingBox) =>
               b.isDuplicate && b.duplicateGroupId === box.duplicateGroupId
             )
@@ -776,7 +776,7 @@ export default function BoxesTab({ selectedWarehouseId, accountId }: BoxesTabPro
   }
 
   const toggleBoxInWarehouse = async (warehouseId: string, targetBox: ShippingBox, forceState?: boolean) => {
-    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId).then(data => data.boxes || [])
+    const boxes: ShippingBox[] = await IntegrationAPI.getWarehouseBoxes(warehouseId)
 
     let matchFound = false
     const updatedBoxes = boxes.map(box => {

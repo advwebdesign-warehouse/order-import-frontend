@@ -85,7 +85,6 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
   const loadWarehouseServices = async (warehouseId: string) => {
     const servicesFromAPI: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouseId)
-      .then(data => data.services || [])
 
       const filtered = servicesFromAPI.filter((service: CarrierService) => {
         return enabledCarriers.some(carrier => carrier === service.carrier.toUpperCase())
@@ -104,7 +103,6 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
     for (const warehouse of warehouses) {
       const warehouseServices: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouse.id)
-        .then(data => data.services || [])
 
       if (warehouseServices.length > 0) {
         hasAnyServices = true
@@ -139,7 +137,6 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
       for (const warehouse of warehouses) {
         const warehouseServices: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouse.id)
-          .then(data => data.services || [])
 
         const matchingService = warehouseServices.find((s: CarrierService) =>
           s.carrier === service.carrier && s.serviceCode === service.serviceCode
@@ -240,7 +237,6 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
   const syncWarehouseServices = async (warehouseId: string, apiServices: any[]) => {
     const existingServices = await IntegrationAPI.getWarehouseServices(warehouseId)
-      .then(data => data.services || [])
 
     const mergedServices = smartMergeServices(existingServices, apiServices)
     await IntegrationAPI.saveWarehouseServices(warehouseId, mergedServices)
@@ -321,7 +317,6 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
       const  anyEnabled = false
       for (const warehouse of warehouses) {
         const warehouseServices: CarrierService[] = await IntegrationAPI.getWarehouseServices(warehouse.id)
-          .then(data => data.services || [])
 
         const matchingService = warehouseServices.find((s: CarrierService) =>
           s.carrier === service.carrier && s.serviceCode === service.serviceCode
@@ -345,7 +340,6 @@ export default function ServicesTab({ selectedWarehouseId, accountId }: Services
 
   const toggleServiceInWarehouse = async (warehouseId: string, targetService: CarrierService, forceState?: boolean) => {
     const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouseId)
-      .then(data => data.services || [])
 
     const updatedServices = warehouseServices.map((service: CarrierService) => {
       const isMatch = service.carrier === targetService.carrier &&

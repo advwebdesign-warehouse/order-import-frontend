@@ -1,17 +1,64 @@
 //file path: src/lib/api/integrationApi.ts
 
-import { apiRequest } from './baseApi'
+import { apiRequest, apiRequestOptional } from './baseApi'
+import type { CarrierService, ShippingBox, ShippingPreset } from '@/app/dashboard/shipping/utils/shippingTypes'
+import type { Integration } from '@/app/dashboard/integrations/types/integrationTypes'
+
+// Re-export Integration type for convenience
+export type { Integration } from '@/app/dashboard/integrations/types/integrationTypes'
+
+/**
+ * Warehouse type for integration-warehouse linking
+ * Matches the warehouse schema from the backend
+ */
+export interface Warehouse {
+  id: string
+  accountId: string
+  name: string
+  code: string
+  description?: string
+  type: 'PHYSICAL' | 'VIRTUAL' | 'DROPSHIP' | '3PL'
+  address: any
+  contactInfo: any
+  settings: any
+  layout?: any
+  status: 'ACTIVE' | 'INACTIVE'
+  isDefault: boolean
+  useDifferentReturnAddress: boolean
+  returnAddress?: any
+  servesRegions?: string[]
+  defaultForRegions?: string[]
+  createdAt: string
+  updatedAt: string
+  // Link config from integrationWarehouses junction table
+  linkConfig?: {
+    isDefault?: boolean
+    priority?: number
+    isActive?: boolean
+    fulfillmentMethod?: string
+    stockCheckRequired?: boolean
+    fallbackOnNoStock?: boolean
+    minStockThreshold?: number
+    servesRegions?: string[]
+    servesCountries?: string[]
+    servesStates?: string[]
+    servesZipCodes?: string[]
+    shippingCostFactor?: number
+    avgShippingDays?: number
+  }
+}
 
 /**
  * IntegrationAPI
  * Handles all API calls related to integrations
- * ✅ UPDATED: Now matches backend routes exactly
+ * ✅ Added proper type annotations using shippingTypes
+ * ✅ UPDATED: Added getIntegrationWarehouses for integration-based warehouse linking
  */
 export class IntegrationAPI {
   /**
    * Get all integrations for the current account
-   * Automatically filtered by account based on auth token
-   * Backend returns: { integrations: [...], lastUpdated: string }
+   * ✅ Uses apiRequestOptional - returns empty array on error instead of crashing
+   * This is intentional because integrations are optional and shouldn't block the dashboard
    */
   static async getAccountIntegrations(filters?: {
     type?: string
@@ -31,18 +78,92 @@ export class IntegrationAPI {
       endpoint += `?${params.toString()}`
     }
 
-    const response = await apiRequest(endpoint)
+    // ✅ Use apiRequestOptional - won't throw on error
+    const response = await apiRequestOptional<{ integrations: Integration[], lastUpdated: string | null }>(
+      endpoint,
+      { integrations: [], lastUpdated: null }
+    )
     return response.integrations || []
   }
 
-  /**
-   * Get a specific integration by ID
-   * Backend returns: { integration: {...}, lastUpdated: string }
-   */
   static async getIntegrationById(integrationId: string) {
     const response = await apiRequest(`/integrations/${integrationId}`)
     return response.integration
   }
+
+  // ============================================================================
+  // ✅ NEW: INTEGRATION-WAREHOUSE LINKING
+  // ============================================================================
+
+  /**
+   * ✅ NEW: Get warehouses linked to an integration
+   * Backend route: GET /integrations/:id/warehouses
+   * Returns warehouses with their linkConfig (isDefault, priority, isActive, etc.)
+   */
+   static async getIntegrationWarehouses(integrationId: string): Promise<Warehouse[]> {
+     return apiRequestOptional<Warehouse[]>(
+       `/integrations/${integrationId}/warehouses`,
+       [] as Warehouse[]
+     )
+   }
+
+  /**
+   * ✅ NEW: Link a warehouse to an integration
+   * Backend route: POST /integrations/:id/warehouses/:warehouseId
+   */
+   static async linkWarehouseToIntegration(
+     integrationId: string,
+     warehouseId: string,
+     config?: {
+       isDefault?: boolean
+       priority?: number
+       isActive?: boolean
+       fulfillmentMethod?: string
+       stockCheckRequired?: boolean
+       fallbackOnNoStock?: boolean
+       minStockThreshold?: number
+       servesRegions?: string[]
+       servesCountries?: string[]
+       servesStates?: string[]
+       servesZipCodes?: string[]
+       shippingCostFactor?: number
+       avgShippingDays?: number
+     }
+   ) {
+     return apiRequest(`/integrations/${integrationId}/warehouses/${warehouseId}`, {
+       method: 'POST',
+       body: JSON.stringify(config || {})
+     })
+   }
+
+   /**
+    * ✅ NEW: Update warehouse-integration link configuration
+    * Backend route: PUT /integrations/:id/warehouses/:warehouseId
+    */
+    static async updateIntegrationWarehouseLink(
+      integrationId: string,
+      warehouseId: string,
+      updates: any
+    ) {
+      return apiRequest(`/integrations/${integrationId}/warehouses/${warehouseId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates)
+      })
+    }
+
+    /**
+     * ✅ NEW: Unlink a warehouse from an integration
+     * Backend route: DELETE /integrations/:id/warehouses/:warehouseId
+     */
+    static async unlinkWarehouseFromIntegration(integrationId: string, warehouseId: string) {
+      return apiRequest(`/integrations/${integrationId}/warehouses/${warehouseId}`, {
+        method: 'DELETE'
+      })
+    }
+
+  // ============================================================================
+  // INTEGRATION CRUD
+  // ============================================================================
 
   /**
    * Save a new integration (create or update via upsert)
@@ -130,15 +251,19 @@ export class IntegrationAPI {
 
   /**
    * Get shipping services for a warehouse
+   * ✅ Explicit type annotation to prevent 'never' type inference
    */
-  static async getWarehouseServices(warehouseId: string) {
-    return apiRequest(`/warehouses/${warehouseId}/services`)
+  static async getWarehouseServices(warehouseId: string): Promise<CarrierService[]> {
+    return apiRequestOptional<CarrierService[]>(
+      `/warehouses/${warehouseId}/services`,
+      [] as CarrierService[]
+    )
   }
 
   /**
    * Save/update shipping services for a warehouse
    */
-  static async saveWarehouseServices(warehouseId: string, services: any[]) {
+  static async saveWarehouseServices(warehouseId: string, services: CarrierService[]) {
     return apiRequest(`/warehouses/${warehouseId}/services`, {
       method: 'POST',
       body: JSON.stringify({ services })
@@ -148,7 +273,7 @@ export class IntegrationAPI {
   /**
    * Update a single shipping service
    */
-  static async updateWarehouseService(warehouseId: string, serviceId: string, updates: any) {
+  static async updateWarehouseService(warehouseId: string, serviceId: string, updates: Partial<CarrierService>) {
     return apiRequest(`/warehouses/${warehouseId}/services/${serviceId}`, {
       method: 'PUT',
       body: JSON.stringify(updates)
@@ -170,22 +295,29 @@ export class IntegrationAPI {
 
   /**
    * Get shipping boxes for a warehouse
+   * ✅ Explicit type annotation to prevent 'never' type inference
    */
-  static async getWarehouseBoxes(warehouseId: string) {
-    return apiRequest(`/warehouses/${warehouseId}/boxes`)
-  }
+   static async getWarehouseBoxes(warehouseId: string): Promise<ShippingBox[]> {
+     return apiRequestOptional<ShippingBox[]>(
+       `/warehouses/${warehouseId}/boxes`,
+       [] as ShippingBox[]
+     )
+   }
 
-  /**
-   * Get all shipping boxes across all warehouses
-   */
-  static async getAllWarehouseBoxes() {
-    return apiRequest('/warehouses/boxes/all')
-  }
+   /**
+    * Get all shipping boxes across all warehouses
+    */
+   static async getAllWarehouseBoxes(): Promise<{ boxes: ShippingBox[] }> {
+     return apiRequestOptional<{ boxes: ShippingBox[] }>(
+       '/warehouses/boxes/all',
+       { boxes: [] as ShippingBox[] }
+     )
+   }
 
   /**
    * Save/update shipping boxes for a warehouse
    */
-  static async saveWarehouseBoxes(warehouseId: string, boxes: any[]) {
+  static async saveWarehouseBoxes(warehouseId: string, boxes: ShippingBox[]) {
     return apiRequest(`/warehouses/${warehouseId}/boxes`, {
       method: 'POST',
       body: JSON.stringify({ boxes })
@@ -195,7 +327,7 @@ export class IntegrationAPI {
   /**
    * Add a new shipping box
    */
-  static async addWarehouseBox(warehouseId: string, box: any) {
+  static async addWarehouseBox(warehouseId: string, box: Omit<ShippingBox, 'id'>) {
     return apiRequest(`/warehouses/${warehouseId}/boxes`, {
       method: 'POST',
       body: JSON.stringify(box)
@@ -205,7 +337,7 @@ export class IntegrationAPI {
   /**
    * Update a single shipping box
    */
-  static async updateWarehouseBox(warehouseId: string, boxId: string, updates: any) {
+  static async updateWarehouseBox(warehouseId: string, boxId: string, updates: Partial<ShippingBox>) {
     return apiRequest(`/warehouses/${warehouseId}/boxes/${boxId}`, {
       method: 'PUT',
       body: JSON.stringify(updates)
@@ -227,15 +359,19 @@ export class IntegrationAPI {
 
   /**
    * Get shipping presets for a warehouse
+   * ✅ Explicit type annotation to prevent 'never' type inference
    */
-  static async getWarehousePresets(warehouseId: string) {
-    return apiRequest(`/warehouses/${warehouseId}/presets`)
+  static async getWarehousePresets(warehouseId: string): Promise<ShippingPreset[]> {
+    return apiRequestOptional<ShippingPreset[]>(
+      `/warehouses/${warehouseId}/presets`,
+      [] as ShippingPreset[]
+    )
   }
 
   /**
    * Save/update shipping presets for a warehouse
    */
-  static async saveWarehousePresets(warehouseId: string, presets: any[]) {
+  static async saveWarehousePresets(warehouseId: string, presets: ShippingPreset[]) {
     return apiRequest(`/warehouses/${warehouseId}/presets`, {
       method: 'POST',
       body: JSON.stringify({ presets })
@@ -245,7 +381,7 @@ export class IntegrationAPI {
   /**
    * Add a new shipping preset
    */
-  static async addWarehousePreset(warehouseId: string, preset: any) {
+  static async addWarehousePreset(warehouseId: string, preset: Omit<ShippingPreset, 'id'>) {
     return apiRequest(`/warehouses/${warehouseId}/presets`, {
       method: 'POST',
       body: JSON.stringify(preset)
@@ -255,7 +391,7 @@ export class IntegrationAPI {
   /**
    * Update a single shipping preset
    */
-  static async updateWarehousePreset(warehouseId: string, presetId: string, updates: any) {
+  static async updateWarehousePreset(warehouseId: string, presetId: string, updates: Partial<ShippingPreset>) {
     return apiRequest(`/warehouses/${warehouseId}/presets/${presetId}`, {
       method: 'PUT',
       body: JSON.stringify(updates)
@@ -278,7 +414,6 @@ export class IntegrationAPI {
 
   /**
    * Complete Shopify OAuth callback
-   * Backend route: POST /integrations/shopify/callback
    */
   static async shopifyCallback(data: {
     code?: string
@@ -294,7 +429,6 @@ export class IntegrationAPI {
 
   /**
    * Test Shopify connection
-   * Backend route: POST /integrations/shopify/test
    */
   static async testShopify(data: {
     shopUrl: string
@@ -375,17 +509,23 @@ export class IntegrationAPI {
    * Get available services from a carrier
    * Backend route: GET /integrations/carriers/:carrier/services
    */
-  static async getCarrierServices(carrier: string, warehouseId?: string) {
+  static async getCarrierServices(carrier: string, warehouseId?: string): Promise<CarrierService[]> {
     const params = warehouseId ? `?warehouseId=${warehouseId}` : ''
-    return apiRequest(`/integrations/carriers/${carrier}/services${params}`)
+    return apiRequestOptional<CarrierService[]>(
+      `/integrations/carriers/${carrier}/services${params}`,
+      [] as CarrierService[]
+    )
   }
 
   /**
    * Get available boxes from a carrier
    * Backend route: GET /integrations/carriers/:carrier/boxes
    */
-  static async getCarrierBoxes(carrier: string, warehouseId?: string) {
+  static async getCarrierBoxes(carrier: string, warehouseId?: string): Promise<ShippingBox[]> {
     const params = warehouseId ? `?warehouseId=${warehouseId}` : ''
-    return apiRequest(`/integrations/carriers/${carrier}/boxes${params}`)
+    return apiRequestOptional<ShippingBox[]>(
+      `/integrations/carriers/${carrier}/boxes${params}`,
+      [] as ShippingBox[]
+    )
   }
 }

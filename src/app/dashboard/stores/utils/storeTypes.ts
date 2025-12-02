@@ -30,7 +30,7 @@ export interface Store {
   warehouseConfig?: WarehouseConfig
 }
 
-// âœ… NEW: Warehouse assignment configuration
+// Warehouse assignment configuration
 export interface WarehouseConfig {
   defaultWarehouseId: string  // Fallback warehouse
   enableRegionRouting: boolean  // Toggle region-based routing

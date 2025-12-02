@@ -8,6 +8,7 @@ import { ProductAPI } from '@/lib/api/productApi';
 import { IntegrationAPI } from '@/lib/api/integrationApi';
 import { Order } from '@/app/dashboard/orders/utils/orderTypes';
 import { Product } from '@/app/dashboard/products/utils/productTypes';
+import type { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes';
 
 interface ShopifyConnection {
   shop: string;
@@ -18,7 +19,7 @@ interface ShopifyConnection {
 
 /**
  * Hook for managing Shopify connection
- * ✅ UPDATED: Now fetches from API instead of localStorage
+ * ✅ Now fetches from API instead of localStorage
  */
 export function useShopifyConnection(accountId: string) {
   const [connection, setConnection] = useState<ShopifyConnection | null>(null);
@@ -33,12 +34,12 @@ export function useShopifyConnection(accountId: string) {
         });
 
         const shopifyIntegration = integrations.find(
-          (i: any) => i.name === 'Shopify' && i.enabled
-        );
+          (i) => i.name === 'Shopify' && i.enabled
+        ) as ShopifyIntegration | undefined;
 
-        if (shopifyIntegration?.config?.shop && shopifyIntegration?.config?.accessToken) {
+        if (shopifyIntegration?.config?.storeUrl && shopifyIntegration?.config?.accessToken) {
           setConnection({
-            shop: shopifyIntegration.config.shop,
+            shop: shopifyIntegration.config.storeUrl,
             accessToken: shopifyIntegration.config.accessToken,
             storeId: shopifyIntegration.storeId,
             isConnected: true,
@@ -62,7 +63,7 @@ export function useShopifyConnection(accountId: string) {
       });
 
       const shopifyIntegration = integrations.find(
-        (i: any) => i.name === 'Shopify'
+        (i) => i.name === 'Shopify'
       );
 
       if (shopifyIntegration) {
@@ -84,7 +85,7 @@ export function useShopifyConnection(accountId: string) {
 
 /**
  * Hook for syncing Shopify orders using GraphQL
- * ✅ UPDATED: Now saves to backend API instead of localStorage
+ * ✅ Now saves to backend API instead of localStorage
  */
 export function useShopifyOrderSync(accountId: string) {
   const [syncing, setSyncing] = useState(false);
@@ -168,7 +169,7 @@ export function useShopifyOrderSync(accountId: string) {
 
 /**
  * Hook for syncing Shopify products using GraphQL
- * ✅ UPDATED: Now saves to backend API instead of localStorage
+ * ✅ Now saves to backend API instead of localStorage
  */
 export function useShopifyProductSync(accountId: string) {
   const [syncing, setSyncing] = useState(false);

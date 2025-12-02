@@ -17,6 +17,8 @@ import AddPresetModal from './AddPresetModal'
 import Notification from '../../shared/components/Notification'
 import { useNotification } from '../../shared/hooks/useNotification'
 import { useWarehouses } from '../../warehouses/hooks/useWarehouses'
+import { ShippingAPI } from '@/lib/api/shippingApi'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
 
 // ✅ ADD DND-KIT IMPORTS
 import {
@@ -366,70 +368,65 @@ export default function PresetsTab({ selectedWarehouseId }: PresetsTabProps) {
   const [editingPreset, setEditingPreset] = useState<ShippingPreset | null>(null)
   const [availableServices, setAvailableServices] = useState<Record<string, any[]>>({})
   const [activePreset, setActivePreset] = useState<ShippingPreset | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   const { notification, showSuccess, showError, closeNotification } = useNotification()
   const { warehouses } = useWarehouses()
 
-  // Get the localStorage key for specific warehouse
-  const getStorageKey = (warehouseId: string) => {
-    return `shipping_presets_${warehouseId}`
-  }
-
-  // Load available services to check for disabled ones
+  // ✅ Load available services from API to check for disabled ones
   useEffect(() => {
-    const servicesMap: Record<string, any[]> = {}
+    const loadAvailableServices = async () => {
+      const servicesMap: Record<string, any[]> = {}
 
-    if (selectedWarehouseId === '') {
-      // "All Warehouses" mode - merge services from all warehouses
-      const allServicesMap = new Map<string, any>()
+      try {
+        if (selectedWarehouseId === '') {
+          // "All Warehouses" mode - merge services from all warehouses
+          const allServicesMap = new Map<string, any>()
 
-      warehouses.forEach(warehouse => {
-        const storageKey = `shipping_services_${warehouse.id}`
-        const savedServices = localStorage.getItem(storageKey)
+          for (const warehouse of warehouses) {
+            const warehouseServices = await IntegrationAPI.getWarehouseServices(warehouse.id)
 
-        if (savedServices) {
-          const warehouseServices = JSON.parse(savedServices)
-          warehouseServices.forEach((service: any) => {
+            warehouseServices.forEach((service: any) => {
+              // Only include active services
+              if (service.isActive) {
+                const serviceKey = `${service.carrier}-${service.serviceCode}`
+                if (!allServicesMap.has(serviceKey)) {
+                  allServicesMap.set(serviceKey, service)
+                }
+              }
+            })
+          }
+
+          // Group by carrier
+          allServicesMap.forEach((service) => {
+            if (!servicesMap[service.carrier]) {
+              servicesMap[service.carrier] = []
+            }
+            servicesMap[service.carrier].push(service)
+          })
+        } else {
+          // Specific warehouse - load from that warehouse only
+          const allServices = await IntegrationAPI.getWarehouseServices(selectedWarehouseId)
+
+          // Group by carrier
+          allServices.forEach((service: any) => {
+            if (!servicesMap[service.carrier]) {
+              servicesMap[service.carrier] = []
+            }
             // Only include active services
             if (service.isActive) {
-              const serviceKey = `${service.carrier}-${service.serviceCode}`
-              if (!allServicesMap.has(serviceKey)) {
-                allServicesMap.set(serviceKey, service)
-              }
+              servicesMap[service.carrier].push(service)
             }
           })
         }
-      })
 
-      // Group by carrier
-      allServicesMap.forEach((service) => {
-        if (!servicesMap[service.carrier]) {
-          servicesMap[service.carrier] = []
-        }
-        servicesMap[service.carrier].push(service)
-      })
-    } else {
-      // Specific warehouse - load from that warehouse only
-      const storageKey = `shipping_services_${selectedWarehouseId}`
-      const savedServices = localStorage.getItem(storageKey)
-
-      if (savedServices) {
-        const allServices = JSON.parse(savedServices)
-
-        // Group by carrier
-        allServices.forEach((service: any) => {
-          if (!servicesMap[service.carrier]) {
-            servicesMap[service.carrier] = []
-          }
-          // Only include active services
-          if (service.isActive) {
-            servicesMap[service.carrier].push(service)
-          }
-        })
+        setAvailableServices(servicesMap)
+      } catch (error) {
+        console.error('[PresetsTab] Error loading available services:', error)
       }
     }
 
-    setAvailableServices(servicesMap)
+    loadAvailableServices()
   }, [selectedWarehouseId, warehouses])
 
   // Check if a preset has disabled services
@@ -455,7 +452,7 @@ export default function PresetsTab({ selectedWarehouseId }: PresetsTabProps) {
     return warnings
   }
 
-  // Load presets from localStorage
+  // ✅ Load presets from API
   useEffect(() => {
     if (selectedWarehouseId === '') {
       // "All Warehouses" view - merge presets from all warehouses
@@ -466,63 +463,85 @@ export default function PresetsTab({ selectedWarehouseId }: PresetsTabProps) {
     }
   }, [selectedWarehouseId, warehouses])
 
-  const loadWarehousePresets = (warehouseId: string) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedPresets = localStorage.getItem(storageKey)
-
-    if (savedPresets) {
-      const parsed = JSON.parse(savedPresets)
-      setPresets(parsed)
-    } else {
+  const loadWarehousePresets = async (warehouseId: string) => {
+    setIsLoading(true)
+    try {
+      const response = await ShippingAPI.getPresets(warehouseId)
+      const loadedPresets = response.presets || []
+      setPresets(loadedPresets)
+    } catch (error) {
+      console.error('[PresetsTab] Error loading presets:', error)
       setPresets([])
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const loadAllWarehousesPresets = () => {
-    const presetMap = new Map<string, ShippingPreset>()
+  const loadAllWarehousesPresets = async () => {
+    setIsLoading(true)
+    try {
+      const presetMap = new Map<string, ShippingPreset>()
 
-    warehouses.forEach(warehouse => {
-      const storageKey = getStorageKey(warehouse.id)
-      const savedPresets = localStorage.getItem(storageKey)
+      for (const warehouse of warehouses) {
+        const response = await ShippingAPI.getPresets(warehouse.id)
+        const warehousePresets = response.presets || []
 
-      if (savedPresets) {
-        const parsed = JSON.parse(savedPresets) as ShippingPreset[]
-        parsed.forEach(preset => {
+        warehousePresets.forEach((preset: ShippingPreset) => {
           // Use preset ID as key to avoid duplicates
           if (!presetMap.has(preset.id)) {
-            presetMap.set(preset.id, preset)
+            presetMap.set(preset.id, { ...preset, warehouse: warehouse.id })
           }
         })
       }
-    })
 
-    const merged = Array.from(presetMap.values())
-    setPresets(merged)
+      const merged = Array.from(presetMap.values())
+      setPresets(merged)
+    } catch (error) {
+      console.error('[PresetsTab] Error loading all warehouse presets:', error)
+      setPresets([])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // Get preset state across all warehouses
-  const getPresetStateAcrossWarehouses = (preset: ShippingPreset) => {
-    const states: { warehouseId: string; warehouseName: string; isActive: boolean }[] = []
+  // ✅ Get preset state across all warehouses (async helper for UI)
+  // Note: This is used for the "All Warehouses" view to show status per warehouse
+  const [presetStatesCache, setPresetStatesCache] = useState<Map<string, { warehouseId: string; warehouseName: string; isActive: boolean }[]>>(new Map())
 
-    warehouses.forEach(warehouse => {
-      const storageKey = getStorageKey(warehouse.id)
-      const savedPresets = localStorage.getItem(storageKey)
+  // Load preset states for all warehouses when in "All Warehouses" view
+  useEffect(() => {
+    const loadPresetStates = async () => {
+      if (selectedWarehouseId !== '' || warehouses.length === 0) return
 
-      if (savedPresets) {
-        const warehousePresets: ShippingPreset[] = JSON.parse(savedPresets)
-        const matchingPreset = warehousePresets.find(p => p.id === preset.id)
+      const statesCache = new Map<string, { warehouseId: string; warehouseName: string; isActive: boolean }[]>()
 
-        if (matchingPreset) {
-          states.push({
-            warehouseId: warehouse.id,
-            warehouseName: warehouse.name,
-            isActive: matchingPreset.isActive
+      for (const warehouse of warehouses) {
+        try {
+          const response = await ShippingAPI.getPresets(warehouse.id)
+          const warehousePresets = response.presets || []
+
+          warehousePresets.forEach((preset: ShippingPreset) => {
+            const existingStates = statesCache.get(preset.id) || []
+            existingStates.push({
+              warehouseId: warehouse.id,
+              warehouseName: warehouse.name,
+              isActive: preset.isActive
+            })
+            statesCache.set(preset.id, existingStates)
           })
+        } catch (error) {
+          console.error(`[PresetsTab] Error loading presets for warehouse ${warehouse.id}:`, error)
         }
       }
-    })
 
-    return states
+      setPresetStatesCache(statesCache)
+    }
+
+    loadPresetStates()
+  }, [selectedWarehouseId, warehouses, presets])
+
+  const getPresetStateAcrossWarehouses = (preset: ShippingPreset) => {
+    return presetStatesCache.get(preset.id) || []
   }
 
   // Filter presets
@@ -544,152 +563,98 @@ export default function PresetsTab({ selectedWarehouseId }: PresetsTabProps) {
     setFilteredPresets(filtered)
   }, [presets, searchTerm])
 
-  const handleSavePreset = (presetData: Partial<ShippingPreset>) => {
-    if (editingPreset) {
-      // Editing existing preset
-      if (selectedWarehouseId === '') {
-        // Update in all warehouses
-        warehouses.forEach(warehouse => {
-          updatePresetInWarehouse(warehouse.id, editingPreset.id, presetData)
-        })
-        showSuccess('Preset Updated', `${presetData.name} has been updated in all warehouses.`)
+  const handleSavePreset = async (presetData: Partial<ShippingPreset>) => {
+    try {
+      if (editingPreset) {
+        // Editing existing preset
+        if (selectedWarehouseId === '') {
+          // Update in all warehouses
+          for (const warehouse of warehouses) {
+            await ShippingAPI.updatePreset(editingPreset.id, {
+              ...editingPreset,
+              ...presetData
+            })
+          }
+          showSuccess('Preset Updated', `${presetData.name} has been updated in all warehouses.`)
+        } else {
+          // Update only in current warehouse
+          await ShippingAPI.updatePreset(editingPreset.id, {
+            ...editingPreset,
+            ...presetData
+          })
+          showSuccess('Preset Updated', `${presetData.name} has been updated.`)
+        }
       } else {
-        // Update only in current warehouse
-        updatePresetInWarehouse(selectedWarehouseId, editingPreset.id, presetData)
-        showSuccess('Preset Updated', `${presetData.name} has been updated.`)
-      }
-    } else {
-      // Creating new preset - calculate next priority
-      const maxPriority = presets.length > 0
-        ? Math.max(...presets.map(p => p.priority || 0))
-        : 0
+        // Creating new preset
+        const newPresetData = {
+          ...presetData,
+          isActive: presetData.isActive ?? true
+        }
 
-      const newPreset: ShippingPreset = {
-        ...presetData as ShippingPreset,
-        id: `preset-${Date.now()}`,
-        priority: maxPriority + 1, // ✅ Assign next priority
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        if (selectedWarehouseId === '') {
+          // Add to all warehouses
+          for (const warehouse of warehouses) {
+            await ShippingAPI.createPreset(warehouse.id, newPresetData)
+          }
+          showSuccess('Preset Created', `${presetData.name} has been created in all warehouses.`)
+        } else {
+          // Add to current warehouse only
+          await ShippingAPI.createPreset(selectedWarehouseId, newPresetData)
+          showSuccess('Preset Created', `${presetData.name} has been created.`)
+        }
       }
 
+      setShowAddModal(false)
+      setEditingPreset(null)
+
+      // Reload presets
       if (selectedWarehouseId === '') {
-        // Add to all warehouses
-        warehouses.forEach(warehouse => {
-          addPresetToWarehouse(warehouse.id, newPreset)
-        })
-        showSuccess('Preset Created', `${presetData.name} has been created in all warehouses.`)
+        await loadAllWarehousesPresets()
       } else {
-        // Add to current warehouse only
-        addPresetToWarehouse(selectedWarehouseId, newPreset)
-        showSuccess('Preset Created', `${presetData.name} has been created.`)
+        await loadWarehousePresets(selectedWarehouseId)
       }
-    }
-
-    setShowAddModal(false)
-    setEditingPreset(null)
-
-    // Reload presets
-    if (selectedWarehouseId === '') {
-      loadAllWarehousesPresets()
-    } else {
-      loadWarehousePresets(selectedWarehouseId)
+    } catch (error) {
+      console.error('[PresetsTab] Error saving preset:', error)
+      showError('Error', 'Failed to save preset. Please try again.')
     }
   }
 
-  const updatePresetInWarehouse = (warehouseId: string, presetId: string, presetData: Partial<ShippingPreset>) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedPresets = localStorage.getItem(storageKey)
-    const presets: ShippingPreset[] = savedPresets ? JSON.parse(savedPresets) : []
-
-    const updatedPresets = presets.map(preset =>
-      preset.id === presetId
-        ? { ...preset, ...presetData, updatedAt: new Date().toISOString() }
-        : preset
-    )
-
-    localStorage.setItem(storageKey, JSON.stringify(updatedPresets))
-  }
-
-  const addPresetToWarehouse = (warehouseId: string, preset: ShippingPreset) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedPresets = localStorage.getItem(storageKey)
-    const presets: ShippingPreset[] = savedPresets ? JSON.parse(savedPresets) : []
-
-    presets.push(preset)
-    localStorage.setItem(storageKey, JSON.stringify(presets))
-  }
-
-  const handleDeletePreset = (id: string) => {
+  const handleDeletePreset = async (id: string) => {
     const presetToDelete = presets.find(preset => preset.id === id)
     if (!presetToDelete) return
 
-    if (selectedWarehouseId === '') {
-      // Delete from all warehouses
-      warehouses.forEach(warehouse => {
-        deletePresetFromWarehouse(warehouse.id, id)
-      })
-      showSuccess('Preset Deleted', `${presetToDelete.name} has been deleted from all warehouses.`)
-      loadAllWarehousesPresets()
-    } else {
-      // Delete from current warehouse only
-      deletePresetFromWarehouse(selectedWarehouseId, id)
-      showSuccess('Preset Deleted', `${presetToDelete.name} has been deleted.`)
-      loadWarehousePresets(selectedWarehouseId)
+    try {
+      await ShippingAPI.deletePreset(id)
+
+      if (selectedWarehouseId === '') {
+        showSuccess('Preset Deleted', `${presetToDelete.name} has been deleted from all warehouses.`)
+        await loadAllWarehousesPresets()
+      } else {
+        showSuccess('Preset Deleted', `${presetToDelete.name} has been deleted.`)
+        await loadWarehousePresets(selectedWarehouseId)
+      }
+    } catch (error) {
+      console.error('[PresetsTab] Error deleting preset:', error)
+      showError('Error', 'Failed to delete preset. Please try again.')
     }
   }
 
-  const deletePresetFromWarehouse = (warehouseId: string, presetId: string) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedPresets = localStorage.getItem(storageKey)
-    if (!savedPresets) return
-
-    const presets: ShippingPreset[] = JSON.parse(savedPresets)
-    const updatedPresets = presets.filter(preset => preset.id !== presetId)
-    localStorage.setItem(storageKey, JSON.stringify(updatedPresets))
-  }
-
-  const handleToggleActive = (id: string) => {
+  const handleToggleActive = async (id: string) => {
     const preset = presets.find(p => p.id === id)
     if (!preset) return
 
-    if (selectedWarehouseId === '') {
-      // All Warehouses View - check current state across all warehouses
-      const states = getPresetStateAcrossWarehouses(preset)
-      const enabledCount = states.filter(s => s.isActive).length
-      const anyEnabled = enabledCount > 0
+    try {
+      await ShippingAPI.togglePreset(id)
 
-      // Toggle to opposite state in all warehouses
-      const newState = !anyEnabled
-
-      warehouses.forEach(warehouse => {
-        togglePresetInWarehouse(warehouse.id, id, newState)
-      })
-
-      loadAllWarehousesPresets()
-    } else {
-      // Toggle in current warehouse only
-      togglePresetInWarehouse(selectedWarehouseId, id)
-      loadWarehousePresets(selectedWarehouseId)
+      if (selectedWarehouseId === '') {
+        await loadAllWarehousesPresets()
+      } else {
+        await loadWarehousePresets(selectedWarehouseId)
+      }
+    } catch (error) {
+      console.error('[PresetsTab] Error toggling preset:', error)
+      showError('Error', 'Failed to toggle preset. Please try again.')
     }
-  }
-
-  const togglePresetInWarehouse = (warehouseId: string, presetId: string, forceState?: boolean) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedPresets = localStorage.getItem(storageKey)
-    const presets: ShippingPreset[] = savedPresets ? JSON.parse(savedPresets) : []
-
-    const updatedPresets = presets.map(preset =>
-      preset.id === presetId
-        ? {
-            ...preset,
-            isActive: forceState !== undefined ? forceState : !preset.isActive,
-            updatedAt: new Date().toISOString()
-          }
-        : preset
-    )
-
-    localStorage.setItem(storageKey, JSON.stringify(updatedPresets))
-    console.log(`[Toggle] Updated preset in warehouse ${warehouseId}`)
   }
 
   const getWarehouseName = (warehouseId: string) => {
@@ -714,7 +679,7 @@ export default function PresetsTab({ selectedWarehouseId }: PresetsTabProps) {
   }, [filteredPresets])
 
   // ✅ DND-KIT DRAG END HANDLER - Wrapped in useCallback
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event
 
     setActivePreset(null)
@@ -726,53 +691,30 @@ export default function PresetsTab({ selectedWarehouseId }: PresetsTabProps) {
       // Reorder the presets array
       const reordered = arrayMove(filteredPresets, oldIndex, newIndex)
 
-      // Update priorities based on new order
-      const updatedPresets = reordered.map((preset, index) => ({
-        ...preset,
-        priority: index + 1,
-        updatedAt: new Date().toISOString()
-      }))
+      // Get the new order of preset IDs
+      const presetIds = reordered.map(p => p.id)
 
-      // Save to localStorage
-      if (selectedWarehouseId === '') {
-        // Update in all warehouses
-        warehouses.forEach(warehouse => {
-          updatePresetsOrderInWarehouse(warehouse.id, updatedPresets)
-        })
-        loadAllWarehousesPresets()
-      } else {
-        // Update in current warehouse
-        updatePresetsOrderInWarehouse(selectedWarehouseId, updatedPresets)
-        loadWarehousePresets(selectedWarehouseId)
+      try {
+        // Save to API
+        if (selectedWarehouseId === '') {
+          // Update in all warehouses
+          for (const warehouse of warehouses) {
+            await ShippingAPI.reorderPresets(warehouse.id, presetIds)
+          }
+          await loadAllWarehousesPresets()
+        } else {
+          // Update in current warehouse
+          await ShippingAPI.reorderPresets(selectedWarehouseId, presetIds)
+          await loadWarehousePresets(selectedWarehouseId)
+        }
+
+        showSuccess('Order Updated', 'Preset order has been updated.')
+      } catch (error) {
+        console.error('[PresetsTab] Error reordering presets:', error)
+        showError('Error', 'Failed to update preset order. Please try again.')
       }
-
-      showSuccess('Order Updated', 'Preset order has been updated.')
     }
-  }, [filteredPresets, selectedWarehouseId, warehouses, showSuccess])
-
-
-
-  const updatePresetsOrderInWarehouse = (warehouseId: string, updatedPresets: ShippingPreset[]) => {
-    const storageKey = getStorageKey(warehouseId)
-    const savedPresets = localStorage.getItem(storageKey)
-
-    if (!savedPresets) return
-
-    const allPresets: ShippingPreset[] = JSON.parse(savedPresets)
-
-    // Update priorities for the presets we reordered
-    const presetMap = new Map(updatedPresets.map(p => [p.id, p.priority]))
-
-    const updated = allPresets.map(preset => {
-      const newPriority = presetMap.get(preset.id)
-      if (newPriority !== undefined) {
-        return { ...preset, priority: newPriority, updatedAt: new Date().toISOString() }
-      }
-      return preset
-    })
-
-    localStorage.setItem(storageKey, JSON.stringify(updated))
-  }
+  }, [filteredPresets, selectedWarehouseId, warehouses, showSuccess, showError])
 
   return (
     <div className="space-y-6">

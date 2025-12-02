@@ -10,12 +10,12 @@ export interface Warehouse {
   isDefault: boolean
   contactInfo: WarehouseContact
   settings: WarehouseSettings
-  layout?: WarehouseLayout  // Layout configuration
+  layout?: WarehouseLayout
   createdAt: string
   updatedAt: string
   productCount?: number
 
-  // NEW: Return address fields
+  // Return address fields
   useDifferentReturnAddress?: boolean
   returnAddress?: WarehouseAddress
 }

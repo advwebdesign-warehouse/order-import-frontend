@@ -16,6 +16,7 @@ import {
   TruckIcon,
   UserCircleIcon,
   ChevronDownIcon,
+  UsersIcon,
 } from '@heroicons/react/24/outline'
 import { useAccountInitialization } from '@/hooks/useAccountInitialization'
 import { usePathname, useRouter } from 'next/navigation'
@@ -30,7 +31,100 @@ interface NavigationItem {
   href: string
   icon: any
   condition?: () => boolean
+  requiredPermission?: string
 }
+
+// ============================================================================
+// PERMISSION HELPER - Check if user has a specific permission
+// ============================================================================
+function hasPermission(user: any, permission: string): boolean {
+  if (!user) return false
+
+  // Admin has all permissions
+  if (user.role === 'ADMIN') return true
+
+  // Check base role permissions
+  const basePermissions = getBaseRolePermissions(user.role)
+  if (basePermissions[permission]) return true
+
+  // Check custom role permissions if exists
+  if (user.customRole?.permissions?.[permission]) return true
+
+  return false
+}
+
+// Base role permissions (same as backend)
+function getBaseRolePermissions(role: string): Record<string, boolean> {
+  const permissions: Record<string, Record<string, boolean>> = {
+    ADMIN: {
+      canManageUsers: true,
+      canManageRoles: true,
+      canManageStores: true,
+      canManageWarehouses: true,
+      canManageOrders: true,
+      canManageProducts: true,
+      canManageIntegrations: true,
+      canViewFinancials: true,
+      canEditFinancials: true,
+      canDeleteAnything: true,
+    },
+    USER: {
+      canViewOrders: true,
+      canCreateOrders: true,
+      canEditOrders: true,
+      canViewProducts: true,
+      canEditProducts: true,
+      canViewWarehouses: true,
+      canManageUsers: false,
+    },
+    VIEWER: {
+      canViewOrders: true,
+      canViewProducts: true,
+      canViewWarehouses: true,
+      canViewStores: true,
+      canManageUsers: false,
+    },
+    WAREHOUSE_MANAGER: {
+      canViewOrders: true,
+      canEditOrders: true,
+      canManageInventory: true,
+      canViewWarehouses: true,
+      canEditWarehouses: true,
+      canViewProducts: true,
+      canManageUsers: true,  // ✅ Can manage warehouse users
+      canManageWarehouseUsers: true,
+    },
+    WAREHOUSE_USER: {
+      canViewOrders: true,
+      canUpdateOrderStatus: true,
+      canPickOrders: true,
+      canPackOrders: true,
+      canViewInventory: true,
+      canManageUsers: false,
+    },
+    ACCOUNTANT: {
+      canViewOrders: true,
+      canViewFinancials: true,
+      canExportData: true,
+      canViewReports: true,
+      canViewProducts: true,
+      canManageUsers: false,
+    },
+    BUYER: {
+      canViewProducts: true,
+      canEditProducts: true,
+      canCreateProducts: true,
+      canManageSuppliers: true,
+      canViewOrders: true,
+      canManageUsers: false,
+    }
+  }
+
+  return permissions[role] || {}
+}
+
+// ✅ Export for use in other components
+export { hasPermission, getBaseRolePermissions }
 
 function DashboardLayoutContent({
   children,
@@ -44,6 +138,9 @@ function DashboardLayoutContent({
 
   // ✅ Get user and account info from initialization hook
   const { user, account, isValidating } = useAccountInitialization()
+
+  // ✅ Check permissions
+  const canManageUsers = hasPermission(user, 'canManageUsers')
 
   // ✅ UPDATED: Check for shipping integration using API
   useEffect(() => {
@@ -93,13 +190,23 @@ function DashboardLayoutContent({
     { name: 'Stores', href: '/dashboard/stores', icon: BuildingStorefrontIcon },
     { name: 'Shipping', href: '/dashboard/shipping', icon: TruckIcon, condition: () => showShipping },
     { name: 'Integrations', href: '/dashboard/integrations', icon: Cog6ToothIcon },
-    { name: 'Settings', href: '/dashboard/settings', icon: WrenchScrewdriverIcon }
+    { name: 'Settings', href: '/dashboard/settings', icon: WrenchScrewdriverIcon },
+    {
+      name: 'Users',
+      href: '/dashboard/users',
+      icon: UsersIcon,
+      requiredPermission: 'canManageUsers'  // ✅ Permission-based
+    }
   ]
 
-  // Filter navigation based on conditions
-  const navigation = navigationItems.filter(item =>
-    !item.condition || item.condition()
-  )
+  // Filter navigation based on conditions and admin status
+  const navigation = navigationItems.filter(item => {
+    // Check condition function if exists
+    if (item.condition && !item.condition()) return false
+    // Check admin-only items
+    if (item.requiredPermission && !hasPermission(user, item.requiredPermission)) return false
+    return true
+  })
 
   const renderNavigationItem = (item: NavigationItem) => {
     const isActive = isCurrentPage(item.href)
@@ -261,6 +368,22 @@ function DashboardLayoutContent({
                   )}
                 </Menu.Item>
 
+                {/* ✅ Manage Users quick link (Permission-based) */}
+                {canManageUsers && (
+                  <Menu.Item>
+                    {({ active }) => (
+                      <Link
+                        href="/dashboard/users"
+                        className={`${
+                          active ? 'bg-gray-50' : ''
+                        } block px-4 py-2 text-sm text-gray-700`}
+                      >
+                        Manage Users
+                      </Link>
+                    )}
+                  </Menu.Item>
+                )}
+                
                 {/* Divider */}
                 <div className="border-t border-gray-100 my-1" />
 
