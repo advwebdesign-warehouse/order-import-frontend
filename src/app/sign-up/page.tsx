@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api'
+const IS_DEV = process.env.NODE_ENV === 'development'
 
 // ✅ Eye icon component
 const EyeIcon = ({ show }: { show: boolean }) => (
@@ -35,6 +36,7 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState('')
+  const [errorDetails, setErrorDetails] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [showVerificationSent, setShowVerificationSent] = useState(false)
   const router = useRouter()
@@ -50,6 +52,7 @@ export default function SignUp() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setErrorDetails(null)
 
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
@@ -66,7 +69,8 @@ export default function SignUp() {
     }
 
     try {
-      console.log('[Sign Up] 📝 Creating account...')
+      console.log('[Sign Up] 🔷 Creating account...')
+      console.log('[Sign Up] API URL:', API_URL)
 
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
@@ -80,20 +84,69 @@ export default function SignUp() {
         })
       })
 
-      const data = await response.json()
+      console.log('[Sign Up] Response status:', response.status)
+
+      let data
+      try {
+        data = await response.json()
+        console.log('[Sign Up] Response data:', data)
+      } catch (parseError) {
+        console.error('[Sign Up] Failed to parse JSON response:', parseError)
+        const textResponse = await response.text()
+        console.error('[Sign Up] Raw response:', textResponse)
+        setError('Server returned invalid response')
+        setErrorDetails({
+          status: response.status,
+          rawResponse: textResponse.substring(0, 500)
+        })
+        setLoading(false)
+        return
+      }
 
       if (response.ok) {
         console.log('[Sign Up] ✅ Account created, verification email sent')
-
-        // ✅ Show verification required message
         setShowVerificationSent(true)
       } else {
+        console.error('[Sign Up] ❌ Registration failed:', data)
+
+        // Set user-friendly error message
         setError(data.error || 'Registration failed')
+
+        // ✅ In development, show detailed error info
+        if (IS_DEV && data.details) {
+          setErrorDetails({
+            message: data.error,
+            details: data.details,
+            step: data.step,
+            status: response.status
+          })
+        }
       }
 
     } catch (error: any) {
-      console.error('[Sign Up] ❌ Registration failed:', error)
-      setError('Registration failed. Please try again.')
+      console.error('[Sign Up] ❌ Network/Fetch error:', error)
+
+      // Check if it's a network error
+      if (error.message === 'Failed to fetch') {
+        setError('Cannot connect to server. Please check if the API is running.')
+        if (IS_DEV) {
+          setErrorDetails({
+            type: 'Network Error',
+            message: 'Failed to fetch',
+            apiUrl: API_URL,
+            hint: 'Make sure the backend server is running'
+          })
+        }
+      } else {
+        setError('Registration failed. Please try again.')
+        if (IS_DEV) {
+          setErrorDetails({
+            type: error.constructor.name,
+            message: error.message,
+            stack: error.stack
+          })
+        }
+      }
     } finally {
       setLoading(false)
     }
@@ -237,7 +290,7 @@ export default function SignUp() {
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="••••••••"
+                  placeholder=""
                   value={formData.password}
                   onChange={handleChange}
                   className="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
@@ -266,7 +319,7 @@ export default function SignUp() {
                 name="confirmPassword"
                 type={showConfirmPassword ? 'text' : 'password'}
                 required
-                placeholder="••••••••"
+                placeholder=""
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 className="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
@@ -284,9 +337,31 @@ export default function SignUp() {
             </div>
           </div>
 
+          {/* ✅ Enhanced error display */}
           {error && (
             <div className="rounded-md bg-red-50 p-4">
-              <div className="text-sm text-red-700">{error}</div>
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-sm font-medium text-red-800">{error}</h3>
+
+                  {/* ✅ Show detailed error info in development */}
+                  {IS_DEV && errorDetails && (
+                    <div className="mt-2 text-xs text-red-700">
+                      <details className="cursor-pointer">
+                        <summary className="font-semibold">Debug Information (Dev Only)</summary>
+                        <pre className="mt-2 p-2 bg-red-100 rounded overflow-auto max-h-64">
+                          {JSON.stringify(errorDetails, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
