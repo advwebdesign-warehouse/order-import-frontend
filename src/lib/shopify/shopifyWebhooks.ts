@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { OrderAPI } from '@/lib/api/orderApi';
 import { ProductAPI } from '@/lib/api/productApi';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co';
 
 export class ShopifyWebhooks {
   /**
@@ -30,15 +30,14 @@ export class ShopifyWebhooks {
   static async processOrderWebhook(
     order: any,
     accountId: string,
-    storeId: string,
-    warehouseId?: string
+    storeId: string
   ): Promise<void> {
     try {
       // Import GraphQL transformation functions
       const { transformGraphQLOrder } = await import('./shopifyGraphQLTransform');
 
       // Transform using the REST-format webhook data
-      const transformedOrder = transformGraphQLOrder(order, storeId, warehouseId);
+      const transformedOrder = transformGraphQLOrder(order, storeId);
 
       // ✅ Save to backend via API
       await OrderAPI.saveOrders([transformedOrder]);

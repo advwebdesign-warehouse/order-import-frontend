@@ -1,8 +1,57 @@
 //file path: src/app/dashboard/integrations/types/integrationTypes.ts
 
+import { US_STATES, US_REGIONS } from '@/app/dashboard/shared/utils/usStates'
+import type { USState, USRegion } from '@/app/dashboard/shared/utils/usStates'
+
+
 export type IntegrationStatus = 'connected' | 'disconnected' | 'error'
 export type IntegrationType = 'shipping' | 'ecommerce'
 export type Environment = 'sandbox' | 'production'
+export type WarehouseRoutingMode = 'simple' | 'advanced'
+
+// ============================================================================
+// WAREHOUSE CONFIGURATION FOR INTEGRATIONS
+// ============================================================================
+
+/**
+ * Region assignment for advanced routing
+ */
+export interface AssignedRegion {
+  country: string
+  countryCode: string
+  states: string[]  // State codes (e.g., ['CA', 'NY'])
+}
+
+/**
+ * Warehouse assignment with priority and regions
+ */
+export interface WarehouseAssignment {
+  id: string
+  warehouseId: string
+  warehouseName: string  // Cached for display
+  priority: number  // Lower number = higher priority
+  regions: AssignedRegion[]
+  isActive: boolean
+}
+
+/**
+ * E-commerce warehouse configuration (flexible routing)
+ */
+export interface EcommerceWarehouseConfig {
+  mode: WarehouseRoutingMode
+
+  // Simple Mode: Primary + Fallback
+  primaryWarehouseId?: string
+  fallbackWarehouseId?: string
+
+  // Advanced Mode: Region-based routing
+  enableRegionRouting: boolean
+  assignments: WarehouseAssignment[]
+}
+
+// ============================================================================
+// BASE INTEGRATION
+// ============================================================================
 
 export interface BaseIntegration {
   id: string
@@ -16,8 +65,12 @@ export interface BaseIntegration {
   lastSyncAt?: string
   lastUpdated?: string
   accountId: string
-  storeId: string //required
+  storeId: string
 }
+
+// ============================================================================
+// SHIPPING INTEGRATIONS (Simple: Single Warehouse)
+// ============================================================================
 
 export interface USPSIntegration extends BaseIntegration {
   type: 'shipping'
@@ -36,6 +89,8 @@ export interface USPSIntegration extends BaseIntegration {
     addressValidation: boolean
     tracking: boolean
   }
+  // ✅ Simple warehouse assignment for shipping
+  warehouseId?: string  // Single warehouse for label generation
 }
 
 export interface UPSIntegration extends BaseIntegration {
@@ -56,9 +111,14 @@ export interface UPSIntegration extends BaseIntegration {
     tracking: boolean
     pickupScheduling: boolean
   }
+  // ✅ Simple warehouse assignment for shipping
+  warehouseId?: string  // Single warehouse for label generation
 }
 
-// Ecommerce Integrations (with store and warehouse config)
+// ============================================================================
+// E-COMMERCE INTEGRATIONS (Flexible: Simple or Advanced Routing)
+// ============================================================================
+
 export interface ShopifyIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'Shopify'
@@ -72,6 +132,8 @@ export interface ShopifyIntegration extends BaseIntegration {
     inventorySync: boolean
     fulfillmentSync: boolean
   }
+  // ✅ Flexible warehouse routing for e-commerce
+  warehouseConfig?: EcommerceWarehouseConfig
 }
 
 export interface WooCommerceIntegration extends BaseIntegration {
@@ -82,6 +144,8 @@ export interface WooCommerceIntegration extends BaseIntegration {
     consumerKey: string
     consumerSecret: string
   }
+  // ✅ Flexible warehouse routing for e-commerce
+  warehouseConfig?: EcommerceWarehouseConfig
 }
 
 export interface EtsyIntegration extends BaseIntegration {
@@ -91,6 +155,8 @@ export interface EtsyIntegration extends BaseIntegration {
     apiKey: string
     sharedSecret: string
   }
+  // ✅ Flexible warehouse routing for e-commerce
+  warehouseConfig?: EcommerceWarehouseConfig
 }
 
 export interface EbayIntegration extends BaseIntegration {
@@ -102,7 +168,13 @@ export interface EbayIntegration extends BaseIntegration {
     devId: string
     token: string
   }
+  // ✅ Flexible warehouse routing for e-commerce
+  warehouseConfig?: EcommerceWarehouseConfig
 }
+
+// ============================================================================
+// UNION TYPE & SETTINGS
+// ============================================================================
 
 export type Integration =
   | USPSIntegration
@@ -115,10 +187,13 @@ export type Integration =
 export interface IntegrationSettings {
   integrations: Integration[]
   lastUpdated: string
-  accountId: string // ✅ Required
+  accountId: string
 }
 
-// Helper type guards
+// ============================================================================
+// TYPE GUARDS
+// ============================================================================
+
 export function isEcommerceIntegration(
   integration: Integration
 ): integration is ShopifyIntegration | WooCommerceIntegration | EtsyIntegration | EbayIntegration {
@@ -130,3 +205,13 @@ export function isShippingIntegration(
 ): integration is USPSIntegration | UPSIntegration {
   return integration.type === 'shipping'
 }
+
+// ============================================================================
+// RE-EXPORT US GEOGRAPHY DATA FOR CONVENIENCE
+// ============================================================================
+
+// Re-export constants from shared utils for backward compatibility
+export { US_STATES, US_REGIONS } from '@/app/dashboard/shared/utils/usStates'
+
+// Re-export types from shared utils for backward compatibility
+export type { USState, USRegion } from '@/app/dashboard/shared/utils/usStates'

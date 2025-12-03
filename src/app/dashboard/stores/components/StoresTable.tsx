@@ -8,8 +8,7 @@ import {
   TrashIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  BuildingStorefrontIcon,
-  BuildingOffice2Icon
+  BuildingStorefrontIcon
 } from '@heroicons/react/24/outline'
 import { Store, StoreColumnConfig, StoreSortState } from '../utils/storeTypes'
 import { storeApi } from '@/app/services/storeApi'
@@ -44,7 +43,7 @@ export default function StoresTable({
   const handleDelete = async (id: string) => {
     if (deleteConfirm === id) {
       try {
-        // ✅ UPDATED: Delete store via existing API service
+        // ✅ Delete store via existing API service
         await storeApi.deleteStore(id)
         setDeleteConfirm(null)
         onRefresh()
@@ -80,11 +79,6 @@ export default function StoresTable({
         />
       </div>
     )
-  }
-
-  const getAssignedWarehouses = (store: Store): string[] => {
-    if (!store.warehouseConfig?.assignments) return []
-    return store.warehouseConfig.assignments.map(a => a.warehouseName)
   }
 
   const renderCellContent = (column: StoreColumnConfig, store: Store) => {
@@ -136,37 +130,6 @@ export default function StoresTable({
               <div className="text-gray-500">
                 {store.address.city}, {store.address.state} {store.address.zip}
               </div>
-            </div>
-          )
-
-        case 'warehouses':
-          const assignedWarehouses = getAssignedWarehouses(store)
-
-          // If no warehouses assigned, show button
-          if (assignedWarehouses.length === 0) {
-            return (
-              <button
-                onClick={() => onEditStore(store)}
-                className="inline-flex items-center gap-x-1.5 rounded-md bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition-colors"
-              >
-                <BuildingOffice2Icon className="h-3.5 w-3.5" />
-                Assign Warehouse
-              </button>
-            )
-          }
-
-          // Show warehouse badges
-          return (
-            <div className="flex flex-wrap gap-1">
-              {assignedWarehouses.map((warehouseName, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center gap-x-1 rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700"
-                >
-                  <BuildingOffice2Icon className="h-3 w-3" />
-                  {warehouseName}
-                </span>
-              ))}
             </div>
           )
 

@@ -176,8 +176,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
           storeId: selectedStoreId,
           storeName: check.store?.storeName,
           hasWarehouses: check.hasWarehouses,
-          hasRegionRouting: check.hasRegionRouting,
-          warehouseConfig: check.store?.warehouseConfig
+          hasRegionRouting: check.hasRegionRouting
         })
         setHasWarehouses(check.hasWarehouses)
       }).catch(error => {
@@ -420,18 +419,11 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
       // Stage 1: Starting
       onProgress?.('starting')
 
-      // Get the store warehouse
-      const store = stores.find((s: any) => s.id === selectedStoreId)
-      const warehouseId = store?.warehouseConfig?.defaultWarehouseId
-
-      if (!warehouseId) {
-        throw new Error('No warehouse configured for this store')
-      }
-
       // Dynamically import ShopifyService
       const { ShopifyService } = await import('@/lib/shopify/shopifyService')
 
-      console.log('[handleShopifySync] Starting sync for store:', selectedStoreId, 'warehouse:', warehouseId)
+      console.log('[handleShopifySync] Starting sync for store:', selectedStoreId)
+      // warehouseId removed - warehouse assignment handled by backend via integration config
 
       // Show initial notification
       setNotification({
@@ -452,10 +444,10 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
 
       // Trigger sync with the integration we already have
       // Note: accountId is handled automatically by API via JWT token
-      // If ShopifyService.autoSyncOnConnection needs accountId, pass it from useIntegrations hook
+      // ✅ FIXED: autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
+      // Warehouse assignment is handled by backend based on integration's warehouseConfig
       await ShopifyService.autoSyncOnConnection(
         shopifyIntegration as any,
-        warehouseId,
         accountId, // From useIntegrations hook - API automatically scopes via JWT
         (message) => {
           console.log('[Shopify Sync]', message)

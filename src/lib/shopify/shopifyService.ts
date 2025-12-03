@@ -5,14 +5,13 @@ import { transformGraphQLOrder, transformGraphQLProduct } from './shopifyGraphQL
 import { OrderAPI } from '@/lib/api/orderApi'
 import { ProductAPI } from '@/lib/api/productApi'
 import { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
-import { assignWarehousesToOrders } from '@/lib/warehouse/warehouseAssignment'
+// assignWarehousesToOrders removed - warehouse assignment handled by backend API
 
 export interface ShopifyServiceConfig {
   shop: string
   accessToken: string
   accountId: string // ✅ Still stored in config for reference, but not passed to warehouse assignment (API uses JWT)
   storeId: string
-  warehouseId?: string
 }
 
 export class ShopifyService {
@@ -29,8 +28,7 @@ export class ShopifyService {
 
   /**
    * Sync orders from Shopify using GraphQL
-   * ✅ Now assigns warehouses to orders before saving
-   * ✅ Properly awaits async assignWarehousesToOrders function
+   * ✅ Warehouse assignment handled by backend API based on integration config
    * ✅ Now supports incremental sync - only fetches orders modified since last sync
    * Automatically called on connection and can be triggered periodically
    */
@@ -77,8 +75,7 @@ export class ShopifyService {
         for (const graphqlOrder of response.orders) {
           const order = transformGraphQLOrder(
             graphqlOrder,
-            this.config.storeId,
-            this.config.warehouseId
+            this.config.storeId
           )
           allOrders.push(order)
         }
@@ -91,14 +88,6 @@ export class ShopifyService {
       // ✅ Assign warehouses to all orders BEFORE saving
       // ✅ Properly await async function
       if (allOrders.length > 0) {
-        console.log(`[Shopify Service] 🏭 Assigning warehouses to ${allOrders.length} orders...`)
-        allOrders = await assignWarehousesToOrders(
-          allOrders,
-          this.config.storeId
-        )
-        console.log('[Shopify Service] ✅ Warehouse assignment complete')
-
-        // ✅ Save all orders at once using API
         console.log(`[Shopify Service] 💾 Saving ${allOrders.length} orders via API...`)
         await OrderAPI.saveOrders(allOrders)
         console.log('[Shopify Service] ✅ Orders saved')
@@ -292,24 +281,23 @@ export class ShopifyService {
      console.log('[Shopify Service] ✅ Sync time would be updated in database (TODO: implement API endpoint)')
    }
 
-  /**
-   * Static helper: Create service from integration
-   * Warehouse must be passed from the store, not from integration
-   * Caller should get warehouse from store.warehouseConfig.defaultWarehouseId
-   */
-  static fromIntegration(
-    integration: ShopifyIntegration,
-    warehouseId: string | undefined,
-    accountId: string
-  ): ShopifyService {
-    return new ShopifyService({
-      shop: integration.config.storeUrl,
-      accessToken: integration.config.accessToken,
-      accountId: integration.accountId, // ✅ Get from integration, store in config
-      storeId: integration.storeId,
-      warehouseId: warehouseId,
-    })
-  }
+   /**
+    * Static helper: Create service from integration
+    * Warehouse assignment is handled by integration's warehouseConfig
+    * (For e-commerce integrations with warehouse routing configured)
+    */
+    static fromIntegration(
+      integration: ShopifyIntegration,
+      accountId: string
+    ): ShopifyService {
+      return new ShopifyService({
+        shop: integration.config.storeUrl,
+        accessToken: integration.config.accessToken,
+        accountId: integration.accountId,
+        storeId: integration.storeId,
+        // warehouseId removed - handled by backend based on integration config
+      })
+    }
 
   /**
    * CLIENT-SAFE: Call API route to sync data via server-side proxy
@@ -324,7 +312,6 @@ export class ShopifyService {
     accessToken: string,
     accountId: string,
     storeId: string,
-    warehouseId: string | undefined,
     syncType: 'orders' | 'products' | 'all',
     forceFullSync: boolean = false
   ): Promise<any> {
@@ -341,7 +328,6 @@ export class ShopifyService {
           accessToken,
           accountId, // ✅ Passed for logging/tracking, but API will use JWT for data access
           storeId,
-          warehouseId,
           syncType, // Using 'syncType' to match your API
           forceFullSync, // Pass forceFullSync flag to API
         }),
@@ -432,14 +418,12 @@ export class ShopifyService {
    * ✅ FIXED: Now assigns warehouses to orders before saving
    * ✅ storeId comes from integration.storeId (no need for separate parameter)
    * @param integration - The Shopify integration config
-   * @param warehouseId - Optional warehouse ID
    * @param accountId - Account ID
    * @param onProgress - Optional callback for progress updates
    * @throws Error if sync fails (including permission errors)
    */
   static async autoSyncOnConnection(
     integration: ShopifyIntegration,
-    warehouseId: string | undefined,
     accountId: string,
     onProgress?: (message: string) => void
   ): Promise<void> {
@@ -467,7 +451,6 @@ export class ShopifyService {
         integration.config.accessToken,
         accountId, // ✅ Pass accountId for logging/tracking
         integration.storeId,
-        warehouseId,
         'all', // Sync both orders and products
         true // Force full sync on first connection
       )
@@ -480,21 +463,14 @@ export class ShopifyService {
       if (result.data) {
         console.log('[Shopify Service] 💾 Saving data via API...')
 
-        // ✅ CRITICAL FIX: Assign warehouses to orders BEFORE saving
+        // Save orders using API
+        // Warehouse assignment is handled by backend API based on integration's warehouseConfig
         if (result.data.orders && Array.isArray(result.data.orders) && result.data.orders.length > 0) {
-          console.log(`[Shopify Service] 🏭 Assigning warehouses to ${result.data.orders.length} orders...`)
-
-          const ordersWithWarehouses = await assignWarehousesToOrders(
-            result.data.orders,
-            integration.storeId
-          )
-
-          console.log('[Shopify Service] ✅ Warehouse assignment complete')
-          console.log(`[Shopify Service] 💾 Saving ${ordersWithWarehouses.length} orders via API...`)
+          console.log(`[Shopify Service] 💾 Saving ${result.data.orders.length} orders via API...`)
 
           // ✅ UPDATED: Save to database via API
-          await OrderAPI.saveOrders(ordersWithWarehouses)
-          console.log(`[Shopify Service] ✅ Saved ${ordersWithWarehouses.length} orders`)
+          await OrderAPI.saveOrders(result.data.orders)
+          console.log(`[Shopify Service] ✅ Saved ${result.data.orders.length} orders`)
         }
 
         // Save products using API

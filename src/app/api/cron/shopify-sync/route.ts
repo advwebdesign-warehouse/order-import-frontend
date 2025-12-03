@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     errors: [] as string[],
   };
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://advorderflow.com';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://gravityhub.co';
 
   try {
     // ✅ Get all connected Shopify stores from backend API
@@ -114,11 +114,12 @@ export async function GET(request: NextRequest) {
           if (response.orders.length === 0) break;
 
           // Transform and save orders
+          // ✅ FIXED: transformGraphQLOrder now only takes 2 parameters (graphqlOrder, storeId)
+          // Warehouse assignment is handled by backend based on integration's warehouseConfig
           for (const graphqlOrder of response.orders) {
             const order = transformGraphQLOrder(
               graphqlOrder,
-              storeId,
-              config?.defaultWarehouseId
+              storeId
             );
             ordersToSave.push(order);
           }

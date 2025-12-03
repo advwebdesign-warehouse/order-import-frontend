@@ -1,8 +1,20 @@
 //file path: src/lib/warehouse/warehouseAssignment.ts
 
-import { Store, WarehouseAssignment } from '@/app/dashboard/stores/utils/storeTypes'
+import { EcommerceWarehouseConfig, WarehouseAssignment } from '@/app/dashboard/integrations/types/integrationTypes'
 import { Order } from '@/app/dashboard/orders/utils/orderTypes'
-import { storeApi } from '@/app/services/storeApi'
+
+/**
+ * ✅ CORRECTED ARCHITECTURE
+ *
+ * Warehouse routing is configured on INTEGRATIONS, not stores.
+ * This utility accepts warehouse configuration directly from integrations.
+ *
+ * Typical usage:
+ * 1. Order comes from Shopify webhook
+ * 2. Get Shopify integration config (has warehouseConfig)
+ * 3. Call findBestWarehouse() with integration's warehouseConfig
+ * 4. Assign warehouse to order
+ */
 
 /**
  * Normalize state code to 2-letter uppercase format
@@ -37,45 +49,50 @@ function normalizeStateCode(state: string): string {
 }
 
 /**
- * Find the best warehouse for an order based on shipping address and store configuration
+ * Find the best warehouse for an order based on shipping address and integration configuration
  *
  * Logic:
- * 1. If region routing is disabled, use default warehouse
- * 2. If region routing is enabled:
+ * 1. If no warehouse config or mode is simple:
+ *    - Use primaryWarehouseId if order meets criteria
+ *    - Fall back to fallbackWarehouseId
+ * 2. If mode is advanced with region routing:
  *    a. Find warehouses assigned to the shipping state (sorted by priority)
  *    b. If multiple warehouses match, use highest priority (lowest number)
- *    c. If no warehouse matches the state, fall back to default warehouse
+ *    c. If no warehouse matches the state, fall back to primary warehouse
  *
  * @param shippingState - The state/province code from the shipping address
  * @param shippingCountryCode - The country code from the shipping address
- * @param store - The store configuration with warehouse assignments
+ * @param warehouseConfig - The warehouse configuration from the integration
+ * @param integrationName - Name of integration (for logging)
  * @returns The warehouse ID to assign, or undefined if no warehouse configured
  */
 export function findBestWarehouse(
   shippingState: string,
   shippingCountryCode: string,
-  store: Store
+  warehouseConfig?: EcommerceWarehouseConfig,
+  integrationName: string = 'Unknown'
 ): string | undefined {
   // No warehouse configuration
-  if (!store.warehouseConfig) {
-    console.warn(`[Warehouse Assignment] No warehouse config for store: ${store.storeName}`)
+  if (!warehouseConfig) {
+    console.warn(`[Warehouse Assignment] No warehouse config for integration: ${integrationName}`)
     return undefined
   }
 
-  const { defaultWarehouseId, enableRegionRouting, assignments } = store.warehouseConfig
+  const { mode, primaryWarehouseId, fallbackWarehouseId, enableRegionRouting, assignments } = warehouseConfig
 
-  // Region routing is disabled - use default warehouse
-  if (!enableRegionRouting || !assignments || assignments.length === 0) {
-    console.log(`[Warehouse Assignment] Region routing disabled, using default: ${defaultWarehouseId}`)
-    return defaultWarehouseId
+  // Simple mode or region routing is disabled
+  if (mode === 'simple' || !enableRegionRouting || !assignments || assignments.length === 0) {
+    console.log(`[Warehouse Assignment] Simple mode or no region routing - using primary: ${primaryWarehouseId}`)
+    return primaryWarehouseId || fallbackWarehouseId
   }
 
+  // Advanced mode with region routing
   // Normalize the shipping state code
   const normalizedState = normalizeStateCode(shippingState)
 
   if (!normalizedState) {
-    console.warn(`[Warehouse Assignment] No shipping state provided, using default: ${defaultWarehouseId}`)
-    return defaultWarehouseId
+    console.warn(`[Warehouse Assignment] No shipping state provided, using primary: ${primaryWarehouseId}`)
+    return primaryWarehouseId || fallbackWarehouseId
   }
 
   console.log(`[Warehouse Assignment] Looking for warehouse for state: ${normalizedState}, country: ${shippingCountryCode}`)
@@ -101,104 +118,127 @@ export function findBestWarehouse(
     return selectedWarehouse.warehouseId
   }
 
-  // No warehouse found for this region - use default
-  console.log(`[Warehouse Assignment] No warehouse found for ${normalizedState}, ${shippingCountryCode} - using default: ${defaultWarehouseId}`)
-  return defaultWarehouseId
+  // No warehouse found for this region - use primary or fallback
+  console.log(`[Warehouse Assignment] No warehouse found for ${normalizedState}, ${shippingCountryCode} - using primary: ${primaryWarehouseId}`)
+  return primaryWarehouseId || fallbackWarehouseId
 }
 
 /**
- * ✅ Assign warehouse to an order based on shipping address
+ * ✅ Assign warehouse to an order based on shipping address and integration config
  *
- * Account security: API automatically scopes to authenticated user's account via JWT token.
- * Backend ensures one account cannot access another account's stores.
+ * This function should be called from integration webhooks (Shopify, WooCommerce, etc.)
+ * with the integration's warehouse configuration.
  *
  * @param order - The order to assign warehouse to
- * @param storeId - The store ID (to fetch store configuration)
+ * @param warehouseConfig - The warehouse configuration from the integration
+ * @param integrationName - Name of the integration (for logging)
  * @returns The order with warehouseId assigned
  */
-export async function assignWarehouseToOrder(
+export function assignWarehouseToOrder(
   order: Order,
-  storeId: string
-): Promise<Order> {
+  warehouseConfig?: EcommerceWarehouseConfig,
+  integrationName: string = 'Unknown'
+): Order {
   console.log(`[Warehouse Assignment] Assigning warehouse for order ${order.id}`)
-  console.log(`[Warehouse Assignment] Store ID: ${storeId}`)
+  console.log(`[Warehouse Assignment] Integration: ${integrationName}`)
 
-  try {
-    // ✅ Fetch store configuration from API instead of localStorage
-    const store = await storeApi.getStoreById(storeId)
-
-    if (!store) {
-      console.error(`[Warehouse Assignment] ❌ Store not found: ${storeId}`)
-      console.warn(`[Warehouse Assignment] ⚠️ Order ${order.id} will have no warehouse assigned`)
-      return order
-    }
-
-    console.log(`[Warehouse Assignment] ✅ Found store: ${store.storeName}`)
-
-    // Extract shipping info from order
-    const shippingState = order.shippingProvince || order.shippingAddress1?.split(',')[1]?.trim() || ''
-    const shippingCountryCode = order.shippingCountryCode || 'US'
-
-    console.log(`[Warehouse Assignment] Shipping address: ${shippingState}, ${shippingCountryCode}`)
-
-    // Find best warehouse
-    const warehouseId = findBestWarehouse(shippingState, shippingCountryCode, store)
-
-    if (warehouseId) {
-      console.log(`[Warehouse Assignment] ✅ Assigned warehouse: ${warehouseId} to order ${order.id}`)
-    } else {
-      console.warn(`[Warehouse Assignment] ⚠️ No warehouse assigned to order ${order.id}`)
-    }
-
-    // Assign warehouse to order
-    return {
-      ...order,
-      warehouseId
-    }
-  } catch (error) {
-    console.error(`[Warehouse Assignment] ❌ Error fetching store or assigning warehouse:`, error)
+  if (!warehouseConfig) {
+    console.warn(`[Warehouse Assignment] ⚠️ No warehouse config provided for ${integrationName}`)
     console.warn(`[Warehouse Assignment] ⚠️ Order ${order.id} will have no warehouse assigned`)
     return order
   }
-}
 
-/**
- * ✅ UPDATED: Batch assign warehouses to multiple orders
- * Now async and uses API instead of localStorage
- *
- * @param orders - Array of orders to assign warehouses to
- * @param storeId - The store ID
- * @returns Array of orders with warehouses assigned
- */
-export async function assignWarehousesToOrders(
-  orders: Order[],
-  storeId: string
-): Promise<Order[]> {
-  console.log(`[Warehouse Assignment] Batch assigning warehouses for ${orders.length} orders`)
+  // Extract shipping info from order
+  const shippingState = order.shippingProvince || order.shippingAddress1?.split(',')[1]?.trim() || ''
+  const shippingCountryCode = order.shippingCountryCode || 'US'
 
-  // Process all orders in parallel for better performance
-  const ordersWithWarehouses = await Promise.all(
-    orders.map(order => assignWarehouseToOrder(order, storeId))
+  console.log(`[Warehouse Assignment] Shipping address: ${shippingState}, ${shippingCountryCode}`)
+
+  // Find best warehouse
+  const warehouseId = findBestWarehouse(
+    shippingState,
+    shippingCountryCode,
+    warehouseConfig,
+    integrationName
   )
 
-  return ordersWithWarehouses
+  if (warehouseId) {
+    console.log(`[Warehouse Assignment] ✅ Assigned warehouse: ${warehouseId} to order ${order.id}`)
+  } else {
+    console.warn(`[Warehouse Assignment] ⚠️ No warehouse assigned to order ${order.id}`)
+  }
+
+  // Assign warehouse to order
+  return {
+    ...order,
+    warehouseId
+  }
 }
 
 /**
- * ✅ Re-assign warehouse to existing order (useful when warehouse config changes)
+ * ✅ Batch assign warehouses to multiple orders
  *
- * Account security: API automatically scopes to authenticated user's account via JWT token.
+ * @param orders - Array of orders to assign warehouses to
+ * @param warehouseConfig - The warehouse configuration from the integration
+ * @param integrationName - Name of the integration (for logging)
+ * @returns Array of orders with warehouses assigned
+ */
+export function assignWarehousesToOrders(
+  orders: Order[],
+  warehouseConfig?: EcommerceWarehouseConfig,
+  integrationName: string = 'Unknown'
+): Order[] {
+  console.log(`[Warehouse Assignment] Batch assigning warehouses for ${orders.length} orders`)
+
+  return orders.map(order => assignWarehouseToOrder(order, warehouseConfig, integrationName))
+}
+
+/**
+ * ✅ Re-assign warehouse to existing order
+ * Useful when warehouse config changes or order shipping address is updated
  *
  * @param order - The order to re-assign
+ * @param warehouseConfig - The updated warehouse configuration
+ * @param integrationName - Name of the integration (for logging)
  * @returns The order with updated warehouseId
  */
-export async function reassignOrderWarehouse(
-  order: Order
-): Promise<Order> {
-  if (!order.storeId) {
-    console.error('[Warehouse Assignment] Order has no storeId')
-    return order
+export function reassignOrderWarehouse(
+  order: Order,
+  warehouseConfig?: EcommerceWarehouseConfig,
+  integrationName: string = 'Unknown'
+): Order {
+  return assignWarehouseToOrder(order, warehouseConfig, integrationName)
+}
+
+/**
+ * ✅ Helper: Get warehouse config from integration
+ * Use this in your webhook handlers to extract the config before calling assignment functions
+ *
+ * Example usage in Shopify webhook:
+ * ```typescript
+ * const shopifyIntegration = await getShopifyIntegration(storeId)
+ * const warehouseConfig = getWarehouseConfigFromIntegration(shopifyIntegration)
+ * const orderWithWarehouse = assignWarehouseToOrder(order, warehouseConfig, 'Shopify')
+ * ```
+ */
+export function getWarehouseConfigFromIntegration(integration: any): EcommerceWarehouseConfig | undefined {
+  if (!integration) return undefined
+
+  // E-commerce integrations have warehouseConfig
+  if (integration.type === 'ecommerce') {
+    return integration.warehouseConfig
   }
 
-  return assignWarehouseToOrder(order, order.storeId)
+  // Shipping integrations use single warehouse
+  if (integration.type === 'shipping' && integration.warehouseId) {
+    // Convert shipping integration's single warehouse to simple mode config
+    return {
+      mode: 'simple',
+      primaryWarehouseId: integration.warehouseId,
+      enableRegionRouting: false,
+      assignments: []
+    }
+  }
+
+  return undefined
 }

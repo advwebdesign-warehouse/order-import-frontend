@@ -7,7 +7,8 @@ import { transformGraphQLOrder, transformGraphQLProduct } from '@/lib/shopify/sh
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { shop, accessToken, accountId, syncType, warehouseId, storeId: providedStoreId } = body;
+    // warehouseId removed - warehouse assignment handled by backend via integration config
+    const { shop, accessToken, accountId, syncType, storeId: providedStoreId } = body;
 
     if (!shop || !accessToken || !accountId || !syncType) {
       return NextResponse.json(
@@ -42,11 +43,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Transform orders
+        // ✅ FIXED: transformGraphQLOrder now only takes 2 parameters (graphqlOrder, storeId)
+        // Warehouse assignment is handled by backend based on integration's warehouseConfig
         for (const graphqlOrder of response.orders) {
           const order = transformGraphQLOrder(
             graphqlOrder,
-            storeId,
-            warehouseId
+            storeId
           );
           orders.push(order);
         }

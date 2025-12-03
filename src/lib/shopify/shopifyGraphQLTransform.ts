@@ -7,12 +7,11 @@ import { LineItemWithWeight } from './shopifyTypes'
 /**
  * Transform GraphQL order to app Order format
  * ✅ UPDATED: Now properly maps updatedAt field for incremental sync
- * ✅ UPDATED: Warehouse assignment removed - now handled by orderStorage.saveOrdersToStorage()
+ * ✅ UPDATED: Warehouse assignment handled by backend via integration warehouseConfig
  */
 export function transformGraphQLOrder(
   graphqlOrder: any,
-  storeId: string,
-  warehouseId?: string
+  storeId: string
 ): Order {
   // Extract numeric ID from GraphQL global ID
   const orderId = graphqlOrder.id.split('/').pop();
@@ -105,8 +104,8 @@ export function transformGraphQLOrder(
     // Tracking info
     trackingNumber: trackingInfo?.number || undefined,
 
-    // ✅ CHANGED: Warehouse assignment removed - will be assigned by orderStorage.saveOrdersToStorage()
-    // based on shipping address and store's warehouse configuration
+    // ✅ Warehouse assignment handled by backend based on integration's warehouseConfig
+    // Orders route through integration warehouse routing (simple or advanced mode)
     warehouseId: undefined
   };
 
@@ -299,11 +298,10 @@ function mapProductStatus(status: string): 'active' | 'archived' | 'draft' | 'in
  */
 export function transformGraphQLOrders(
   graphqlOrders: any[],
-  storeId: string,
-  warehouseId?: string,
+  storeId: string
 ): Order[] {
   return graphqlOrders.map(order =>
-    transformGraphQLOrder(order, storeId, warehouseId)
+    transformGraphQLOrder(order, storeId)
   );
 }
 

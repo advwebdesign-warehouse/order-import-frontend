@@ -382,14 +382,14 @@ export function useOAuthCallbacks({
 
         // Get the store name
         const store = stores.find((s: any) => s.id === integrationStoreId)
-        const warehouseId = store?.warehouseConfig?.defaultWarehouseId
 
         console.log('[Auto-Sync] Starting sync for storeid:', integrationStoreId)
 
         // Trigger auto-sync
+        // ✅ FIXED: autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
+        // Warehouse assignment is handled by backend based on integration's warehouseConfig
         await ShopifyService.autoSyncOnConnection(
           integration as any,
-          warehouseId,
           accountId,
           (message) => {
             console.log('[Auto-Sync]', message)

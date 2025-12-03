@@ -12,6 +12,7 @@ import { ProductAPI } from '@/lib/api/productApi';
  * ✅ UPDATED: Now supports incremental order sync using updatedAtMin parameter
  * ✅ FIXED: Properly awaits async storage functions
  * ✅ UPDATED: Saves data to backend API instead of returning it
+ * ✅ FIXED: transformGraphQLOrder now uses 2-parameter signature (warehouse assignment via backend)
  */
 export async function POST(request: NextRequest) {
   console.log('=================================');
@@ -20,12 +21,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    // warehouseId removed - warehouse assignment handled by backend via integration config
     const {
       shop,
       accessToken,
       accountId,
       syncType,
-      warehouseId,
       storeId: providedStoreId,
       forceFullSync = false // Optional parameter to force full sync
     } = body;
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     if (syncType === 'orders') {
       console.log('[Shopify Sync] 🔥 Starting order sync...');
 
-      // ✅ NEW: Get last sync date for incremental sync (unless force full sync)
+      // ✅ Get last sync date for incremental sync (unless force full sync)
       let updatedAtMin: string | null = null;
       let isIncremental = false;
 
@@ -91,11 +92,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Transform orders
+        // ✅ FIXED: transformGraphQLOrder now only takes 2 parameters (graphqlOrder, storeId)
+        // Warehouse assignment is handled by backend based on integration's warehouseConfig
         for (const graphqlOrder of response.orders) {
           const order = transformGraphQLOrder(
             graphqlOrder,
-            storeId,
-            warehouseId
+            storeId
           );
           orders.push(order);
         }
@@ -198,7 +200,7 @@ export async function POST(request: NextRequest) {
       let isIncremental = false;
 
       if (!forceFullSync) {
-        // ✅ FIXED: Properly await async function
+        // ✅ Properly await async function
         updatedAtMin = await getLastShopifyOrderUpdateDate(accountId, storeId);
 
         if (updatedAtMin) {
@@ -226,11 +228,12 @@ export async function POST(request: NextRequest) {
           break;
         }
 
+        // ✅ FIXED: transformGraphQLOrder now only takes 2 parameters
+        // Warehouse assignment is handled by backend based on integration's warehouseConfig
         for (const graphqlOrder of response.orders) {
           const order = transformGraphQLOrder(
             graphqlOrder,
-            storeId,
-            warehouseId
+            storeId
           );
           orders.push(order);
         }

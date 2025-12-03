@@ -5,10 +5,8 @@
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import { Store, StoreFormData, WarehouseConfig, US_STATES } from '../utils/storeTypes'
+import { Store, StoreFormData, US_STATES } from '../utils/storeTypes'
 import { storeApi } from '@/app/services/storeApi'
-import { useWarehouses } from '../../warehouses/context/WarehouseContext'
-import WarehouseAssignmentTab from './WarehouseAssignmentTab'
 
 interface StoreModalProps {
   store: Store | null
@@ -16,7 +14,6 @@ interface StoreModalProps {
 }
 
 export default function StoreModal({ store, onClose }: StoreModalProps) {
-  const { warehouses } = useWarehouses()
   const [isSaving, setIsSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState<string | null>(null)
@@ -36,11 +33,6 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
     country: store?.address.country ?? 'United States',
     countryCode: store?.address.countryCode ?? 'US'
   })
-
-  // Warehouse Configuration State
-  const [warehouseConfig, setWarehouseConfig] = useState<WarehouseConfig | undefined>(
-    store?.warehouseConfig
-  )
 
   const [logoUploadMethod, setLogoUploadMethod] = useState<'upload' | 'url'>('upload')
 
@@ -127,8 +119,7 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
           zip: formData.zip,
           country: formData.country,
           countryCode: formData.countryCode
-        },
-        warehouseConfig: warehouseConfig
+        }
       }
 
       if (store) {
@@ -416,15 +407,6 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                         </div>
                       </div>
 
-                      {/* Warehouse Assignment Section */}
-                      <div className="pt-4 border-t border-gray-200">
-                        <WarehouseAssignmentTab
-                          warehouseConfig={warehouseConfig}
-                          warehouses={warehouses}
-                          onChange={setWarehouseConfig}
-                          storeId={store?.id}
-                        />
-                      </div>
                     </div>
                   </div>
 

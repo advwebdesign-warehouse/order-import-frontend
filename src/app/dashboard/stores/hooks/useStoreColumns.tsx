@@ -7,7 +7,6 @@ const DEFAULT_COLUMNS: StoreColumnConfig[] = [
   { id: 'select', field: 'select', label: '', sortable: false, visible: true },
   { id: 'storeName', field: 'storeName', label: 'Store Name', sortable: true, visible: true },
   { id: 'address', field: 'address', label: 'Address', sortable: false, visible: true },
-  { id: 'warehouses', field: 'warehouses', label: 'Warehouses', sortable: false, visible: true },
   { id: 'actions', field: 'actions', label: 'Actions', sortable: false, visible: true },
 ]
 
