@@ -4,9 +4,11 @@
 
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline'
 import { Store, StoreFormData, US_STATES } from '../utils/storeTypes'
 import { storeApi } from '@/app/services/storeApi'
+import { apiRequest } from '@/lib/api/baseApi'
+import { UploadAPI } from '@/app/services/uploadApi'
 
 interface StoreModalProps {
   store: Store | null
@@ -15,8 +17,10 @@ interface StoreModalProps {
 
 export default function StoreModal({ store, onClose }: StoreModalProps) {
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState<string | null>(null)
+  const [oldLogoUrl, setOldLogoUrl] = useState<string | null>(null)
 
   // Store Information Form State - All fields explicitly set to ensure controlled inputs
   const [formData, setFormData] = useState<StoreFormData>({
@@ -54,16 +58,79 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
     }
   }
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ✅ UPDATED: Extract filename from new URL structure
+  const extractFilename = (logoUrl: string): string | null => {
+    if (!logoUrl || !logoUrl.startsWith('/uploads/')) return null
+
+    // Extract filename from path: /uploads/[accountId]/logos/[filename]
+    const parts = logoUrl.split('/')
+    return parts[parts.length - 1] // Get last part (filename)
+  }
+
+  // Upload logo to server (SAME AS BEFORE)
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      // In a real app, you'd upload to a server
-      // For now, create a local URL
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        handleChange('logo', reader.result as string)
+    if (!file) return
+
+    const maxSize = 2 * 1024 * 1024 // 2MB
+    if (file.size > maxSize) {
+      setErrors(prev => ({
+        ...prev,
+        logo: 'Logo file is too large. Maximum size is 2MB.'
+      }))
+      return
+    }
+
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
+      setErrors(prev => ({
+        ...prev,
+        logo: 'Logo must be a PNG, JPG, or WEBP image.'
+      }))
+      return
+    }
+
+    try {
+      setIsUploadingLogo(true)
+
+      setErrors(prev => {
+        const { logo, ...rest } = prev
+        return rest
+      })
+
+      // ✅ Use UploadAPI instead of inline fetch
+      const data = await UploadAPI.uploadLogo(file)
+
+      // ✅ FIXED: Use component state, not FormData object
+      // Save old logo for deletion (if it's a server-uploaded file)
+      if (formData.logo && formData.logo.startsWith('/uploads/')) {
+        setOldLogoUrl(formData.logo)
       }
-      reader.readAsDataURL(file)
+
+      handleChange('logo', data.url)
+
+      console.log('✅ Logo uploaded:', data.url)
+
+    } catch (error: any) {
+      console.error('❌ Logo upload failed:', error)
+      setErrors(prev => ({
+        ...prev,
+        logo: error.message || 'Failed to upload logo. Please try again.'
+      }))
+    } finally {
+      setIsUploadingLogo(false)
+    }
+  }
+
+  // When deleting, now need to specify uploadType
+  const deleteOldLogo = async (logoUrl: string) => {
+    const filename = extractFilename(logoUrl)
+    if (!filename) return
+
+    try {
+      await UploadAPI.deleteFile(filename, 'logos')
+      console.log('🗑️  Old logo deleted:', filename)
+    } catch (error) {
+      console.error('Failed to delete old logo:', error)
     }
   }
 
@@ -258,12 +325,26 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                             </div>
 
                             {logoUploadMethod === 'upload' ? (
-                              <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/jpg"
-                                onChange={handleLogoUpload}
-                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                              />
+                              <div className="relative">
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                                  onChange={handleLogoUpload}
+                                  disabled={isUploadingLogo}
+                                  className="block w-full text-sm text-gray-500
+                                    file:mr-4 file:py-2 file:px-4
+                                    file:rounded-md file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-indigo-50 file:text-indigo-700
+                                    hover:file:bg-indigo-100
+                                    disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                {isUploadingLogo && (
+                                  <div className="absolute right-2 top-2">
+                                    <CloudArrowUpIcon className="h-5 w-5 text-indigo-600 animate-pulse" />
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <input
                                 type="url"
@@ -274,12 +355,24 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                               />
                             )}
 
+                            {/* ✅ ADD: Logo error display */}
+                            {errors.logo && (
+                              <p className="mt-1 text-sm text-red-600">{errors.logo}</p>
+                            )}
+
                             {formData.logo && (
                               <div className="mt-2">
                                 <img
-                                  src={formData.logo}
+                                  src={formData.logo.startsWith('/')
+                                    ? formData.logo // Server-uploaded files are served from /public
+                                    : formData.logo // External URLs
+                                  }
                                   alt="Store logo preview"
                                   className="h-16 w-auto object-contain border border-gray-200 rounded"
+                                  onError={(e) => {
+                                    console.error('Failed to load logo image')
+                                    e.currentTarget.style.display = 'none'
+                                  }}
                                 />
                               </div>
                             )}
@@ -414,14 +507,15 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                   <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-3">
                     <button
                       type="submit"
-                      disabled={isSaving}
+                      disabled={isSaving || isUploadingLogo}
                       className="inline-flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isSaving ? 'Saving...' : store ? 'Update Store' : 'Add Store'}
+                      {isSaving ? 'Saving...' : isUploadingLogo ? 'Uploading logo...' : store ? 'Update Store' : 'Add Store'}
                     </button>
                     <button
                       type="button"
                       onClick={() => onClose(false)}
+                      disabled={isSaving || isUploadingLogo}
                       className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
                     >
                       Cancel
