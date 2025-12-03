@@ -58,11 +58,11 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
   }
 
   // ✅ UPDATED: Extract filename from new URL structure
-  const extractFilename = (logoUrl: string): string | null => {
-    if (!logoUrl || !logoUrl.startsWith('/uploads/')) return null
+  const extractFilename = (url: string): string | null => {
+    if (!url) return null
 
     // Extract filename from path: /uploads/[accountId]/logos/[filename]
-    const parts = logoUrl.split('/')
+    const parts = url.split('/')
     return parts[parts.length - 1] // Get last part (filename)
   }
 
