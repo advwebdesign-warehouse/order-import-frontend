@@ -20,10 +20,10 @@
     "axios": "^1.12.1",
     "bcryptjs": "^3.0.3",
     "country-flag-icons": "^1.5.20",
-    "next": "^15.1.2",
-    "react": "^19.0.0",
+    "next": "^16.0.7",
+    "react": "^19.2.1",
     "react-country-flag": "^3.1.0",
-    "react-dom": "^19.0.0",
+    "react-dom": "^19.2.1",
     "tsx": "^4.20.6",
     "xml2js": "^0.6.2"
   },

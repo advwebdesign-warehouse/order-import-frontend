@@ -7,7 +7,6 @@ import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline'
 import { Store, StoreFormData, US_STATES } from '../utils/storeTypes'
 import { storeApi } from '@/app/services/storeApi'
-import { apiRequest } from '@/lib/api/baseApi'
 import { UploadAPI } from '@/app/services/uploadApi'
 
 interface StoreModalProps {
@@ -516,7 +515,7 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                       type="button"
                       onClick={() => onClose(false)}
                       disabled={isSaving || isUploadingLogo}
-                      className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                      className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
