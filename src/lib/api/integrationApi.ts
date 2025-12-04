@@ -96,7 +96,7 @@ export class IntegrationAPI {
   // ============================================================================
 
   /**
-   * ✅ NEW: Get warehouses linked to an integration
+   * ✅ Get warehouses linked to an integration
    * Backend route: GET /integrations/:id/warehouses
    * Returns warehouses with their linkConfig (isDefault, priority, isActive, etc.)
    */
@@ -108,7 +108,7 @@ export class IntegrationAPI {
    }
 
   /**
-   * ✅ NEW: Link a warehouse to an integration
+   * ✅ Link a warehouse to an integration
    * Backend route: POST /integrations/:id/warehouses/:warehouseId
    */
    static async linkWarehouseToIntegration(
@@ -137,7 +137,7 @@ export class IntegrationAPI {
    }
 
    /**
-    * ✅ NEW: Update warehouse-integration link configuration
+    * ✅ Update warehouse-integration link configuration
     * Backend route: PUT /integrations/:id/warehouses/:warehouseId
     */
     static async updateIntegrationWarehouseLink(
@@ -152,7 +152,7 @@ export class IntegrationAPI {
     }
 
     /**
-     * ✅ NEW: Unlink a warehouse from an integration
+     * ✅ Unlink a warehouse from an integration
      * Backend route: DELETE /integrations/:id/warehouses/:warehouseId
      */
     static async unlinkWarehouseFromIntegration(integrationId: string, warehouseId: string) {
@@ -501,9 +501,54 @@ export class IntegrationAPI {
   }
 
   // ============================================================================
+  // ETSY-SPECIFIC ENDPOINTS
+  // Backend routes at /api/integrations/etsy/*
+  // ============================================================================
+
+  /**
+   * Test Etsy connection
+   * Backend route: POST /integrations/etsy/test
+   */
+  static async testEtsy(data: {
+    apiKey: string
+    sharedSecret: string
+  }) {
+    return apiRequest('/integrations/etsy/test', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  // ============================================================================
   // CARRIER-SPECIFIC ENDPOINTS
   // Backend routes at /api/integrations/carriers/*
   // ============================================================================
+
+  /**
+   * Test USPS connection
+   * Backend route: POST /api/shipping/usps/test
+   */
+  static async testUSPS(data: {
+    storeId: string
+  }) {
+    return apiRequest('/shipping/usps/test', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  /**
+   * Test UPS connection
+   * Backend route: POST /api/integrations/ups/test
+   */
+  static async testUPS(data: {
+    storeId: string
+  }) {
+    return apiRequest('/integrations/ups/test', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
 
   /**
    * Get available services from a carrier

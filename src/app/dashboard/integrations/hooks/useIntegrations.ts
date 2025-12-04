@@ -1,5 +1,22 @@
 //file path: src/app/dashboard/integrations/hooks/useIntegrations.ts
 
+/**
+ * ✅ IMPROVED: Now uses IntegrationAPI methods for all test integrations
+ *
+ * Changed from direct fetch() calls to IntegrationAPI methods:
+ * - testUSPS() → Uses IntegrationAPI.testUSPS()
+ * - testUPS() → Uses IntegrationAPI.testUPS()
+ * - testShopify() → Uses IntegrationAPI.testShopify()
+ * - testWooCommerce() → Uses IntegrationAPI.testWooCommerce()
+ * - testEtsy() → Uses IntegrationAPI.testEtsy()
+ *
+ * Benefits:
+ * - All API logic centralized in integrationApi.ts
+ * - Automatic httpOnly cookie authentication via apiRequest
+ * - Better separation of concerns (hooks = state, api = network)
+ * - More maintainable and reusable
+ */
+
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -231,39 +248,27 @@ export function useIntegrations() {
 
       // Handle USPS integration test
       if (integration.name === 'USPS' && integration.type === 'shipping') {
-        const response = await fetch('/api/shipping/usps/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            storeId: integration.storeId
-          })
+        const result = await IntegrationAPI.testUSPS({
+          storeId: integration.storeId
         })
 
-        const data = await response.json()
-
-        if (response.ok && data.success) {
-          return { success: true, message: data.message || 'USPS connection successful!' }
+        if (result.success) {
+          return { success: true, message: result.message || 'USPS connection successful!' }
         } else {
-          return { success: false, message: data.message || 'USPS connection failed' }
+          return { success: false, message: result.message || 'USPS connection failed' }
         }
       }
 
       // Handle UPS integration test
       if (integration.name === 'UPS' && integration.type === 'shipping') {
-        const response = await fetch('/api/integrations/ups/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            storeId: integration.storeId
-          })
+        const result = await IntegrationAPI.testUPS({
+          storeId: integration.storeId
         })
 
-        const data = await response.json()
-
-        if (response.ok && data.success) {
-          return { success: true, message: data.message || 'UPS connection successful!' }
+        if (result.success) {
+          return { success: true, message: result.message || 'UPS connection successful!' }
         } else {
-          return { success: false, message: data.message || 'UPS connection failed' }
+          return { success: false, message: result.message || 'UPS connection failed' }
         }
       }
 
@@ -271,21 +276,15 @@ export function useIntegrations() {
       if (integration.name === 'Shopify' && integration.type === 'ecommerce') {
         const shopifyIntegration = integration as ShopifyIntegration
 
-        const response = await fetch('/api/integrations/shopify/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            shopUrl: shopifyIntegration.config.storeUrl,
-            accessToken: shopifyIntegration.config.accessToken
-          })
+        const result = await IntegrationAPI.testShopify({
+          shopUrl: shopifyIntegration.config.storeUrl,
+          accessToken: shopifyIntegration.config.accessToken
         })
 
-        const data = await response.json()
-
-        if (data.success === true) {
-          return { success: true, message: data.message || 'Shopify connection successful!' }
+        if (result.success === true) {
+          return { success: true, message: result.message || 'Shopify connection successful!' }
         } else {
-          return { success: false, message: data.message || data.error || 'Shopify connection failed' }
+          return { success: false, message: result.message || result.error || 'Shopify connection failed' }
         }
       }
 
@@ -293,22 +292,16 @@ export function useIntegrations() {
       if (integration.name === 'WooCommerce' && integration.type === 'ecommerce') {
         const wooIntegration = integration as WooCommerceIntegration
 
-        const response = await fetch('/api/integrations/woocommerce/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            storeUrl: wooIntegration.config.storeUrl,
-            consumerKey: wooIntegration.config.consumerKey,
-            consumerSecret: wooIntegration.config.consumerSecret
-          })
+        const result = await IntegrationAPI.testWooCommerce({
+          storeUrl: wooIntegration.config.storeUrl,
+          consumerKey: wooIntegration.config.consumerKey,
+          consumerSecret: wooIntegration.config.consumerSecret
         })
 
-        const data = await response.json()
-
-        if (data.success === true) {
-          return { success: true, message: data.message || 'WooCommerce connection successful!' }
+        if (result.success === true) {
+          return { success: true, message: result.message || 'WooCommerce connection successful!' }
         } else {
-          return { success: false, message: data.message || 'WooCommerce connection failed' }
+          return { success: false, message: result.message || 'WooCommerce connection failed' }
         }
       }
 
@@ -316,21 +309,15 @@ export function useIntegrations() {
       if (integration.name === 'Etsy' && integration.type === 'ecommerce') {
         const etsyIntegration = integration as EtsyIntegration
 
-        const response = await fetch('/api/integrations/etsy/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            apiKey: etsyIntegration.config.apiKey,
-            sharedSecret: etsyIntegration.config.sharedSecret
-          })
+        const result = await IntegrationAPI.testEtsy({
+          apiKey: etsyIntegration.config.apiKey,
+          sharedSecret: etsyIntegration.config.sharedSecret
         })
 
-        const data = await response.json()
-
-        if (response.ok && data.success) {
-          return { success: true, message: data.message || 'Etsy connection successful!' }
+        if (result.success) {
+          return { success: true, message: result.message || 'Etsy connection successful!' }
         } else {
-          return { success: false, message: data.message || 'Etsy connection failed' }
+          return { success: false, message: result.message || 'Etsy connection failed' }
         }
       }
 
