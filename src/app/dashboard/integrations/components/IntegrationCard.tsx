@@ -79,7 +79,9 @@ export default function IntegrationCard({
     }
   }
 
-  const status = statusConfig[integration.status]
+  // ⭐ Handle undefined status (when not in database schema)
+  const integrationStatus = integration.status || 'disconnected'
+  const status = statusConfig[integrationStatus]
   const StatusIcon = status.icon
 
   // Handle toggle with connection test
