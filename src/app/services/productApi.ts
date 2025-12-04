@@ -1,76 +1,49 @@
 //file path: app/services/productApi.ts
 
-import { Product } from '@/app/dashboard/products/utils/productTypes'
+/**
+ * ✅ UPDATED: Now uses httpOnly cookies via baseApi
+ * Removed localStorage token authentication
+ * Uses apiRequest for consistent authentication
+ */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.advorderflow.com'
+import { Product } from '@/app/dashboard/products/utils/productTypes'
+import { apiRequest } from '@/lib/api/baseApi'
 
 class ProductApiService {
-  private getAuthToken(): string | null {
-    // Get token from localStorage or wherever you store it
-    if (typeof window === 'undefined') return null
-    return localStorage.getItem('authToken')
-  }
-
-  private async fetchWithAuth(endpoint: string, options: RequestInit = {}) {
-    const token = this.getAuthToken()
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
-    }
-
-    // Add auth token if available
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-    }
-
-    return response.json()
-  }
-
   // Get all products for the authenticated account
   async getProducts(): Promise<Product[]> {
-    const result = await this.fetchWithAuth('/api/products')
-    return result.products
+    const result = await apiRequest('/products')
+    return result.products || result
   }
 
   // Create or update multiple products (bulk save)
   async saveProducts(products: Product[], accountId: string): Promise<Product[]> {
-    const result = await this.fetchWithAuth('/api/products/bulk', {
+    const result = await apiRequest('/products/bulk', {
       method: 'POST',
       body: JSON.stringify({ products, accountId }),
     })
-    return result.products
+    return result.products || result
   }
 
   // Update a single product
   async updateProduct(productId: string, productData: Partial<Product>): Promise<Product> {
-    const result = await this.fetchWithAuth(`/api/products/${productId}`, {
+    const result = await apiRequest(`/products/${productId}`, {
       method: 'PUT',
       body: JSON.stringify(productData),
     })
-    return result.product
+    return result.product || result
   }
 
   // Delete a product
   async deleteProduct(productId: string): Promise<void> {
-    await this.fetchWithAuth(`/api/products/${productId}`, {
+    await apiRequest(`/products/${productId}`, {
       method: 'DELETE',
     })
   }
 
   // Delete products by integration
   async deleteProductsByIntegration(integrationId: string): Promise<void> {
-    await this.fetchWithAuth('/api/products/bulk', {
+    await apiRequest('/products/bulk', {
       method: 'DELETE',
       body: JSON.stringify({ integrationId }),
     })
@@ -78,13 +51,13 @@ class ProductApiService {
 
   // Get a single product by ID
   async getProductById(productId: string): Promise<Product> {
-    const result = await this.fetchWithAuth(`/api/products/${productId}`)
-    return result.product
+    const result = await apiRequest(`/products/${productId}`)
+    return result.product || result
   }
 
   // Get product by SKU
   async getProductBySku(sku: string): Promise<Product | null> {
-    const result = await this.fetchWithAuth(`/api/products?sku=${sku}`)
+    const result = await apiRequest(`/products?sku=${sku}`)
     return result.product || null
   }
 }

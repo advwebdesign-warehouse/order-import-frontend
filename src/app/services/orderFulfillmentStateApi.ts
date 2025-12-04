@@ -2,10 +2,14 @@
 
 /**
  * Order Fulfillment State API
+ * ✅ UPDATED: Now uses httpOnly cookies via baseApi
+ * Uses apiRequest for consistent authentication
  *
  * Manages shared picking/packing state across all users in an account.
  * Replaces localStorage for: pickedItems, pickedOrders, packedOrders
  */
+
+import { apiRequest } from '@/lib/api/baseApi'
 
 export interface OrderFulfillmentState {
   id: string
@@ -27,8 +31,6 @@ export interface UpdateFulfillmentStatePayload {
 }
 
 class OrderFulfillmentStateApi {
-  private baseUrl = '/api/order-fulfillment-state'
-
   /**
    * Get fulfillment state for a specific warehouse (or all warehouses)
    */
@@ -38,11 +40,7 @@ class OrderFulfillmentStateApi {
       params.append('warehouseId', warehouseId)
     }
 
-    const response = await fetch(`${this.baseUrl}?${params.toString()}`)
-    if (!response.ok) {
-      throw new Error('Failed to fetch fulfillment state')
-    }
-    return response.json()
+    return apiRequest(`/order-fulfillment-state?${params.toString()}`)
   }
 
   /**
@@ -51,15 +49,10 @@ class OrderFulfillmentStateApi {
   async updateState(
     payload: UpdateFulfillmentStatePayload
   ): Promise<OrderFulfillmentState> {
-    const response = await fetch(this.baseUrl, {
+    return apiRequest('/order-fulfillment-state', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
-    if (!response.ok) {
-      throw new Error('Failed to update fulfillment state')
-    }
-    return response.json()
   }
 
   /**
@@ -76,7 +69,7 @@ class OrderFulfillmentStateApi {
    */
   async removePickedItem(itemId: string, warehouseId: string | null = null): Promise<OrderFulfillmentState> {
     const currentState = await this.getState(warehouseId)
-    const pickedItems = Array.from(new Set([...currentState.pickedItems, itemId]))
+    const pickedItems = currentState.pickedItems.filter(id => id !== itemId)
     return this.updateState({ warehouseId, pickedItems })
   }
 
@@ -94,7 +87,7 @@ class OrderFulfillmentStateApi {
    */
   async removePickedOrder(orderId: string, warehouseId: string | null = null): Promise<OrderFulfillmentState> {
     const currentState = await this.getState(warehouseId)
-    const pickedOrders = Array.from(new Set([...currentState.pickedOrders, orderId]))
+    const pickedOrders = currentState.pickedOrders.filter(id => id !== orderId)
     return this.updateState({ warehouseId, pickedOrders })
   }
 
@@ -112,7 +105,7 @@ class OrderFulfillmentStateApi {
    */
   async removePackedOrder(orderId: string, warehouseId: string | null = null): Promise<OrderFulfillmentState> {
     const currentState = await this.getState(warehouseId)
-    const packedOrders = Array.from(new Set([...currentState.packedOrders, orderId]))
+    const packedOrders = currentState.packedOrders.filter(id => id !== orderId)
     return this.updateState({ warehouseId, packedOrders })
   }
 

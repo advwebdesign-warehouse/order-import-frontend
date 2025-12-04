@@ -1,70 +1,42 @@
 //file path: app/services/orderApi.ts
 
-import { Order } from '@/app/dashboard/orders/utils/orderTypes'
+/**
+ * ✅ UPDATED: Now uses httpOnly cookies via baseApi
+ * Removed localStorage token authentication
+ * Uses apiRequest for consistent authentication
+ */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co'
+import { Order } from '@/app/dashboard/orders/utils/orderTypes'
+import { apiRequest } from '@/lib/api/baseApi'
 
 class OrderApiService {
-  private getAuthToken(): string | null {
-    // Get token from localStorage or wherever you store it
-    if (typeof window === 'undefined') return null
-    return localStorage.getItem('authToken')
-  }
-
-  private async fetchWithAuth(endpoint: string, options: RequestInit = {}) {
-    const token = this.getAuthToken()
-
-    // ✅ FIX: Create headers object with proper type
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
-    }
-
-    // Add auth token if available
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-    }
-
-    return response.json()
-  }
-
   // Get all orders for the authenticated account
   async getOrders(): Promise<Order[]> {
-    const result = await this.fetchWithAuth('/api/orders')
-    return result.orders
+    const result = await apiRequest('/orders')
+    return result.orders || result
   }
 
   // Create or update multiple orders (bulk save)
   async saveOrders(orders: Order[], accountId: string): Promise<Order[]> {
-    const result = await this.fetchWithAuth('/api/orders/bulk', {
+    const result = await apiRequest('/orders/bulk', {
       method: 'POST',
       body: JSON.stringify({ orders, accountId }),
     })
-    return result.orders
+    return result.orders || result
   }
 
   // Update a single order
   async updateOrder(orderId: string, orderData: Partial<Order>): Promise<Order> {
-    const result = await this.fetchWithAuth(`/api/orders/${orderId}`, {
+    const result = await apiRequest(`/orders/${orderId}`, {
       method: 'PUT',
       body: JSON.stringify(orderData),
     })
-    return result.order
+    return result.order || result
   }
 
   // Update order tracking information
   async updateOrderTracking(trackingNumber: string, trackingData: any): Promise<void> {
-    await this.fetchWithAuth('/api/orders/tracking', {
+    await apiRequest('/orders/tracking', {
       method: 'PUT',
       body: JSON.stringify({ trackingNumber, trackingData }),
     })
@@ -72,7 +44,7 @@ class OrderApiService {
 
   // Delete orders
   async deleteOrders(orderIds: string[]): Promise<void> {
-    await this.fetchWithAuth('/api/orders/bulk', {
+    await apiRequest('/orders/bulk', {
       method: 'DELETE',
       body: JSON.stringify({ orderIds }),
     })
@@ -80,20 +52,20 @@ class OrderApiService {
 
   // Get a single order by ID
   async getOrderById(orderId: string): Promise<Order> {
-    const result = await this.fetchWithAuth(`/api/orders/${orderId}`)
-    return result.order
+    const result = await apiRequest(`/orders/${orderId}`)
+    return result.order || result
   }
 
   // Get orders by store
   async getOrdersByStore(storeId: string): Promise<Order[]> {
-    const result = await this.fetchWithAuth(`/api/orders?storeId=${storeId}`)
-    return result.orders
+    const result = await apiRequest(`/orders?storeId=${storeId}`)
+    return result.orders || result
   }
 
   // Get orders by warehouse
   async getOrdersByWarehouse(warehouseId: string): Promise<Order[]> {
-    const result = await this.fetchWithAuth(`/api/orders?warehouseId=${warehouseId}`)
-    return result.orders
+    const result = await apiRequest(`/orders?warehouseId=${warehouseId}`)
+    return result.orders || result
   }
 }
 
