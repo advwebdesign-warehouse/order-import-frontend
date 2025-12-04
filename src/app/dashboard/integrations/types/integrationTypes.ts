@@ -57,6 +57,7 @@ export interface BaseIntegration {
   id: string
   name: string
   type: IntegrationType
+  provider: string
   status: IntegrationStatus
   enabled: boolean
   description: string

@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Integration, UPSIntegration, ShopifyIntegration } from '../types/integrationTypes'
 
-// ✅ FIXED: Updated interface
+// ✅ Updated interface
 interface UseOAuthCallbacksProps {
   accountId: string
   integrations: Integration[]
@@ -87,6 +87,7 @@ export function useOAuthCallbacks({
       console.log('[UPS OAuth] Found existing integration:', upsIntegration ? 'YES' : 'NO')
 
       const integrationData = {
+        provider: 'ups',
         config: {
           accountNumber: upsAccount,
           accessToken: upsAccessToken,
@@ -258,6 +259,7 @@ export function useOAuthCallbacks({
           id: integrationId,
           name: 'Shopify',
           type: 'ecommerce',
+          provider: 'shopify',
           status: 'connected',
           enabled: true,
           storeId: integrationStoreId,
