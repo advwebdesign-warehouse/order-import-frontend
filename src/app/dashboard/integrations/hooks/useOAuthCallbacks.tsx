@@ -79,7 +79,7 @@ export function useOAuthCallbacks({
       console.log('[UPS OAuth] ✅ Connection successful, saving integration...')
       console.log('[UPS OAuth] Using store ID from URL:', upsStoreId)
 
-      // ✅ FIXED: Use integrations array directly
+      // ✅ Use integrations array directly
       const upsIntegration = integrations.find(
         (i: Integration) => i.name === 'UPS' && i.storeId === upsStoreId
       )
@@ -126,7 +126,7 @@ export function useOAuthCallbacks({
           ...integrationData
         }
 
-        // ✅ FIXED: Handle Promise return
+        // ✅ Handle Promise return
         addIntegration(newIntegration).then(result => {
           console.log('[UPS OAuth] Add integration result:', result.success ? 'SUCCESS' : 'FAILED')
         })
@@ -230,7 +230,7 @@ export function useOAuthCallbacks({
         return
       }
 
-      // ✅ FIXED: Use integrations array directly
+      // ✅ Use integrations array directly
       const existingIntegration = integrations.find(
         (i: Integration) => i.name === 'Shopify' && i.storeId === integrationStoreId
       )
@@ -279,7 +279,7 @@ export function useOAuthCallbacks({
           }
         }
 
-        // ✅ FIXED: Handle Promise return
+        // ✅ Handle Promise return
         addIntegration(newIntegration).then(result => {
           console.log('[Shopify OAuth] Created new integration:', integrationId, 'Success:', result.success)
 
@@ -300,7 +300,8 @@ export function useOAuthCallbacks({
           }
 
           // Continue with auto-sync after successful add
-          triggerAutoSync(integrationId, integrationStoreId)
+          // ⭐ FIXED: Pass integration object directly (no race condition!)
+          triggerAutoSync(newIntegration, integrationStoreId)
         })
 
         // Show initial success notification
@@ -324,7 +325,8 @@ export function useOAuthCallbacks({
       }
 
       // For existing integrations, trigger auto-sync immediately
-      triggerAutoSync(integrationId, integrationStoreId)
+      // ⭐ FIXED: Pass integration object directly (no race condition!)
+      triggerAutoSync(existingIntegration, integrationStoreId)
 
       // Show initial success notification
       setNotification({
@@ -347,8 +349,9 @@ export function useOAuthCallbacks({
 
   /**
    * ✅ EXTRACTED: Auto-sync function to avoid duplication
+   * ⭐ FIXED: Accept integration directly instead of searching (avoids race condition)
    */
-  const triggerAutoSync = async (integrationId: string, integrationStoreId: string) => {
+  const triggerAutoSync = async (integration: Integration, integrationStoreId: string) => {
     setTimeout(async () => {
       try {
         // Using accountId from props (API-based)
@@ -359,25 +362,13 @@ export function useOAuthCallbacks({
           throw new Error('Account ID not available. Please refresh and try again.')
         }
 
-        // ✅ FIXED: Using integrations from props (already fresh/reactive)
-        if (!integrations || integrations.length === 0) {
-          console.error('[Auto-Sync] ❌ No integrations found')
-          throw new Error('Failed to retrieve integration data')
-        }
-
-        // Find the integration in current integrations
-        const integration = integrations.find(
-          (i: Integration) => i.id === integrationId
-        )
-
+        // ⭐ FIXED: Use integration passed as parameter (no searching needed!)
         if (!integration) {
-          console.error('[Auto-Sync] ❌ Integration not found in integrations')
-          console.log('[Auto-Sync] Looking for ID:', integrationId)
-          console.log('[Auto-Sync] Available integrations:', integrations.map((i: Integration) => ({ id: i.id, name: i.name })))
-          throw new Error('Integration not found after saving')
+          console.error('[Auto-Sync] ❌ No integration provided')
+          throw new Error('Integration object is required')
         }
 
-        console.log('[Auto-Sync] ✅ Found integration in state:', integration.id)
+        console.log('[Auto-Sync] ✅ Using integration:', integration.id)
 
         // Dynamically import the service (avoid SSR issues)
         const { ShopifyService } = await import('@/lib/shopify/shopifyService')
@@ -388,7 +379,7 @@ export function useOAuthCallbacks({
         console.log('[Auto-Sync] Starting sync for storeid:', integrationStoreId)
 
         // Trigger auto-sync
-        // ✅ FIXED: autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
+        // ✅ autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
         // Warehouse assignment is handled by backend based on integration's warehouseConfig
         await ShopifyService.autoSyncOnConnection(
           integration as any,
@@ -399,7 +390,8 @@ export function useOAuthCallbacks({
         )
 
         // Update integration with lastSyncAt
-        updateIntegration(integrationId, {
+        // ⭐ FIXED: Use integration.id instead of integrationId variable
+        updateIntegration(integration.id, {
           lastSyncAt: new Date().toISOString()
         })
 
