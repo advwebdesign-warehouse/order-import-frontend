@@ -2,10 +2,13 @@
 
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, CheckCircleIcon, InformationCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
-import { ShopifyIntegration } from '../types/integrationTypes'
+import { ShopifyIntegration, EcommerceWarehouseConfig } from '../types/integrationTypes'
+import { Warehouse } from '../../warehouses/utils/warehouseTypes'
+import EcommerceWarehouseRouting from './EcommerceWarehouseRouting'
+import WarehouseRequiredWarning from './WarehouseRequiredWarning'
 
 // Progress stages for visual feedback
 type SyncStage = 'idle' | 'starting-sync' | 'syncing-products' | 'syncing-orders' | 'success'
@@ -18,8 +21,10 @@ interface ShopifyConfigModalProps {
   onSync?: (progressCallback?: (stage: 'starting' | 'products' | 'orders' | 'complete') => void) => Promise<void>
   existingIntegration?: ShopifyIntegration
   selectedStoreId: string
-  isTesting?: boolean // ✅ Testing state from parent
-  isSyncing?: boolean // ✅ NEW: Syncing state from parent
+  selectedStoreName?: string
+  warehouses: Warehouse[]
+  isTesting?: boolean
+  isSyncing?: boolean
 }
 
 export default function ShopifyConfigModal({
@@ -30,6 +35,8 @@ export default function ShopifyConfigModal({
   onSync,
   existingIntegration,
   selectedStoreId,
+  selectedStoreName = 'this store',
+  warehouses,
   isTesting = false,
   isSyncing = false
 }: ShopifyConfigModalProps) {
@@ -43,9 +50,28 @@ export default function ShopifyConfigModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showInstructions, setShowInstructions] = useState(false)
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
-
-  // ✅ Test result state
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // ⭐ NEW: Warehouse configuration state
+  const [warehouseConfig, setWarehouseConfig] = useState<EcommerceWarehouseConfig>(
+    existingIntegration?.routingConfig || {
+      mode: 'simple',
+      primaryWarehouseId: warehouses[0]?.id || '',
+      fallbackWarehouseId: undefined,
+      enableRegionRouting: false,
+      assignments: []
+    }
+  )
+
+  // ⭐ NEW: Update warehouse config when warehouses change
+  useEffect(() => {
+    if (warehouses.length > 0 && !warehouseConfig.primaryWarehouseId) {
+      setWarehouseConfig(prev => ({
+        ...prev,
+        primaryWarehouseId: warehouses[0].id
+      }))
+    }
+  }, [warehouses])
 
   // Get stage display information
   const getStageInfo = (stage: SyncStage) => {
@@ -66,6 +92,17 @@ export default function ShopifyConfigModal({
   const currentStageInfo = getStageInfo(syncStage)
 
   const handleOAuthConnect = async () => {
+    // ⭐ VALIDATION 1: Check warehouse configuration
+    if (warehouses.length === 0) {
+      setErrors({ warehouse: 'At least one warehouse is required before connecting Shopify' })
+      return
+    }
+
+    if (!warehouseConfig.primaryWarehouseId) {
+      setErrors({ warehouse: 'Please select a primary warehouse before connecting' })
+      return
+    }
+
     if (!storeUrl.trim()) {
       setErrors({ storeUrl: 'Shop URL is required to start OAuth' })
       return
@@ -91,10 +128,18 @@ export default function ShopifyConfigModal({
     setErrors({})
 
     try {
-      // Build OAuth URL
-      const authUrl = `/api/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}`
+      // ⭐ CRITICAL: Save warehouse config to integration BEFORE OAuth
+      // This ensures it's available when auto-sync runs after OAuth callback
+      if (existingIntegration) {
+        onSave({
+          routingConfig: warehouseConfig
+        })
+      }
 
-      console.log('[Shopify Modal] Redirecting to OAuth:', authUrl)
+      // Build OAuth URL with warehouse config encoded
+      const authUrl = `/api/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}`
+
+      console.log('[Shopify Modal] Redirecting to OAuth with warehouse config:', warehouseConfig)
 
       // Redirect to OAuth - sync will happen automatically after connection
       window.location.href = authUrl
@@ -180,7 +225,7 @@ export default function ShopifyConfigModal({
       })
 
       // If no callback was used, just show success
-      if (syncStage !== 'success') {
+      if (syncStage === 'starting-sync') {
         setSyncStage('success')
       }
 
@@ -190,17 +235,33 @@ export default function ShopifyConfigModal({
       }, 2000)
     } catch (error: any) {
       console.error('[Shopify Modal] Sync failed:', error)
-      setSyncStage('idle')
       setTestResult({
         success: false,
-        message: error.message || 'Synchronization failed'
+        message: error.message || 'Sync failed'
       })
+      setSyncStage('idle')
 
       // Auto-dismiss after 5 seconds
       setTimeout(() => {
         setTestResult(null)
       }, 5000)
     }
+  }
+
+  // ⭐ NEW: Update warehouse config for existing integration
+  const handleSaveWarehouseConfig = () => {
+    if (!existingIntegration) return
+
+    onSave({
+      routingConfig: warehouseConfig
+    })
+
+    setTestResult({
+      success: true,
+      message: 'Warehouse configuration saved successfully'
+    })
+
+    setTimeout(() => setTestResult(null), 3000)
   }
 
   return (
@@ -253,7 +314,7 @@ export default function ShopifyConfigModal({
                     </div>
                     <button
                       onClick={onClose}
-                      disabled={isAuthenticating}
+                      disabled={isAuthenticating || isSyncing}
                       type="button"
                       className="text-gray-400 hover:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -287,7 +348,7 @@ export default function ShopifyConfigModal({
                             </div>
                             <button
                               type="button"
-                              onClick={handleDisconnect}
+                              onClick={() => setShowReconnect(!showReconnect)}
                               className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Disconnect
@@ -295,19 +356,91 @@ export default function ShopifyConfigModal({
                           </div>
                         </div>
 
-                        {/* Info Box about Auto-Sync */}
-                        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                          <div className="flex">
-                            <InformationCircleIcon className="h-5 w-5 text-blue-400 mr-2 flex-shrink-0" />
-                            <div className="text-sm text-blue-700">
-                              <p className="font-medium mb-1">Automatic Synchronization</p>
-                              <p>Orders and products sync automatically when you connect your store. Data refreshes periodically to keep everything up to date.</p>
+                        {/* ⭐ NEW: Warehouse Configuration Section (Always Shown) */}
+                        <div className="mb-6">
+                          {warehouses.length === 0 ? (
+                            <WarehouseRequiredWarning
+                              storeName={selectedStoreName}
+                              storeId={selectedStoreId}
+                              onClose={onClose}
+                            />
+                          ) : (
+                            <div className="space-y-4">
+                              <EcommerceWarehouseRouting
+                                warehouseConfig={warehouseConfig}
+                                warehouses={warehouses}
+                                onChange={setWarehouseConfig}
+                              />
+
+                              {/* Save Warehouse Config Button for Existing Integrations */}
+                              <div className="flex justify-end pt-4 border-t border-gray-200">
+                                <button
+                                  type="button"
+                                  onClick={handleSaveWarehouseConfig}
+                                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700"
+                                >
+                                  Save Warehouse Configuration
+                                </button>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
 
-                        {/* ✅ Test Result Display */}
-                        {testResult && (
+                        {/* Reconnect Section */}
+                        {showReconnect && (
+                          <div className="mb-6 space-y-4">
+                            <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-4">
+                              <div className="flex items-start">
+                                <InformationCircleIcon className="h-5 w-5 text-yellow-600 mt-0.5" />
+                                <div className="ml-3">
+                                  <h3 className="text-sm font-medium text-yellow-800">Reconnecting Your Store</h3>
+                                  <p className="mt-1 text-sm text-yellow-700">
+                                    To reconnect or change stores, confirm your shop URL below and click "Reconnect to Shopify"
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Shop URL <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={storeUrl}
+                                onChange={(e) => {
+                                  setstoreUrl(e.target.value)
+                                  setErrors({})
+                                }}
+                                placeholder="your-store.myshopify.com"
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              />
+                              {errors.storeUrl && (
+                                <p className="mt-1 text-sm text-red-600">{errors.storeUrl}</p>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleOAuthConnect}
+                              disabled={isAuthenticating || !storeUrl.trim()}
+                              className="w-full inline-flex justify-center items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isAuthenticating ? 'Reconnecting...' : 'Reconnect to Shopify'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleDisconnect}
+                              className="w-full inline-flex justify-center items-center px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-300 rounded-md hover:bg-red-100"
+                            >
+                              Disconnect Integration
+                            </button>
+                          </div>
+                          )}
+
+                          {/* ✅ Test Result Display */}
+                          {testResult && (
                           <div
                             className={`rounded-md p-4 ${
                               testResult.success
@@ -330,6 +463,45 @@ export default function ShopifyConfigModal({
                   ) : (
                     // OAuth Connection Flow
                     <>
+                    {/* Not Connected - Setup Flow */}
+
+                    {/* ⭐ STEP 1: Warehouse Configuration (Required FIRST) */}
+                    <div className="mb-6">
+                      <h4 className="text-base font-semibold text-gray-900 mb-4 flex items-center">
+                        <span className="flex items-center justify-center h-6 w-6 rounded-full bg-indigo-600 text-white text-sm font-medium mr-2">1</span>
+                        Configure Warehouse Routing
+                      </h4>
+
+                      {warehouses.length === 0 ? (
+                        <WarehouseRequiredWarning
+                          storeName={selectedStoreName}
+                          storeId={selectedStoreId}
+                          onClose={onClose}
+                        />
+                      ) : (
+                        <>
+                          <EcommerceWarehouseRouting
+                            warehouseConfig={warehouseConfig}
+                            warehouses={warehouses}
+                            onChange={setWarehouseConfig}
+                          />
+
+                          {errors.warehouse && (
+                            <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
+                              {errors.warehouse}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* ⭐ STEP 2: Connect to Shopify */}
+                    <div className="mb-6">
+                      <h4 className="text-base font-semibold text-gray-900 mb-4 flex items-center">
+                        <span className="flex items-center justify-center h-6 w-6 rounded-full bg-indigo-600 text-white text-sm font-medium mr-2">2</span>
+                        Connect to Shopify
+                      </h4>
+
                       {/* Instructions */}
                       <div className="rounded-md bg-blue-50 border border-blue-200">
                         <button
@@ -358,6 +530,7 @@ export default function ShopifyConfigModal({
                               <div>
                                 <p className="font-medium mb-1">Steps:</p>
                                 <ol className="list-decimal list-inside space-y-1 ml-2">
+                                  <li>Configure your warehouse routing above</li>
                                   <li>Enter your Shopify store URL below</li>
                                   <li>Click "Connect to Shopify"</li>
                                   <li>Accept the permissions in Shopify</li>
@@ -394,7 +567,7 @@ export default function ShopifyConfigModal({
                               setErrors({})
                             }}
                             placeholder="your-store.myshopify.com"
-                            disabled={isAuthenticating}
+                            disabled={isAuthenticating || warehouses.length === 0}
                             className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
                               errors.storeUrl ? 'border-red-300' : 'border-gray-300'
                             } focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed`}
@@ -410,6 +583,7 @@ export default function ShopifyConfigModal({
                           </p>
                         </div>
                       </div>
+                    </div>
                     </>
                   )}
                 </div>
@@ -436,7 +610,7 @@ export default function ShopifyConfigModal({
                     {isConnected ? 'Close' : 'Cancel'}
                   </button>
 
-                  {/* ✅ NEW: Sync Button - Only show when connected */}
+                  {/* Sync Button - Only show when connected */}
                   {isConnected && (
                     <button
                       type="button"
@@ -458,11 +632,12 @@ export default function ShopifyConfigModal({
                     </button>
                   )}
 
+                  {/* Connect Button - Only show when NOT connected */}
                     {!isConnected && (
                       <button
                         type="button"
                         onClick={handleOAuthConnect}
-                        disabled={isAuthenticating || !storeUrl.trim()}
+                        disabled={isAuthenticating || !storeUrl.trim() || warehouses.length === 0 || !warehouseConfig.primaryWarehouseId}
                         className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isAuthenticating ? (
@@ -479,7 +654,7 @@ export default function ShopifyConfigModal({
                       </button>
                     )}
                   </div>
-                </div>
+
 
                   {/* Progress Notification - Appears below buttons */}
                   {(isSyncing || syncStage !== 'idle') && currentStageInfo && (
@@ -510,6 +685,7 @@ export default function ShopifyConfigModal({
                       </div>
                     </div>
                   )}
+                </div>
                 </div>
               </Dialog.Panel>
             </Transition.Child>

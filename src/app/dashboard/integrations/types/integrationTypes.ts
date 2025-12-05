@@ -134,7 +134,7 @@ export interface ShopifyIntegration extends BaseIntegration {
     fulfillmentSync: boolean
   }
   // ✅ Flexible warehouse routing for e-commerce
-  warehouseConfig?: EcommerceWarehouseConfig
+  routingConfig?: EcommerceWarehouseConfig
 }
 
 export interface WooCommerceIntegration extends BaseIntegration {
@@ -146,7 +146,7 @@ export interface WooCommerceIntegration extends BaseIntegration {
     consumerSecret: string
   }
   // ✅ Flexible warehouse routing for e-commerce
-  warehouseConfig?: EcommerceWarehouseConfig
+  routingConfig?: EcommerceWarehouseConfig
 }
 
 export interface EtsyIntegration extends BaseIntegration {
@@ -157,7 +157,7 @@ export interface EtsyIntegration extends BaseIntegration {
     sharedSecret: string
   }
   // ✅ Flexible warehouse routing for e-commerce
-  warehouseConfig?: EcommerceWarehouseConfig
+  routingConfig?: EcommerceWarehouseConfig
 }
 
 export interface EbayIntegration extends BaseIntegration {
@@ -170,7 +170,7 @@ export interface EbayIntegration extends BaseIntegration {
     token: string
   }
   // ✅ Flexible warehouse routing for e-commerce
-  warehouseConfig?: EcommerceWarehouseConfig
+  routingConfig?: EcommerceWarehouseConfig
 }
 
 // ============================================================================

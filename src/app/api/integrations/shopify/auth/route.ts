@@ -11,6 +11,7 @@ import { randomBytes } from 'crypto';
 
 /**
  * Shopify OAuth Initiation Handler
+ * ⭐ UPDATED: Now accepts and stores warehouse configuration
  * Redirects user to Shopify OAuth authorization page
  */
 export async function GET(request: NextRequest) {
@@ -18,9 +19,11 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const shop = searchParams.get('shop');
     const storeId = searchParams.get('storeId');
+    const warehouseConfig = searchParams.get('warehouseConfig');
 
     console.log('[OAuth Initiation] Shop:', shop);
     console.log('[OAuth Initiation] Store ID:', storeId);
+    console.log('[OAuth Initiation] Warehouse Config:', warehouseConfig ? 'Provided' : 'Not provided');
 
     if (!shop) {
       return NextResponse.json(
@@ -47,6 +50,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Parse warehouse config
+    let parsedWarehouseConfig = undefined;
+    if (warehouseConfig && typeof warehouseConfig === 'string') {
+      try {
+        parsedWarehouseConfig = JSON.parse(warehouseConfig);
+        console.log('[OAuth Initiation] ✅ Warehouse config parsed successfully');
+        console.log('[OAuth Initiation] Warehouse mode:', parsedWarehouseConfig.mode);
+        console.log('[OAuth Initiation] Primary warehouse:', parsedWarehouseConfig.primaryWarehouseId);
+      } catch (error) {
+        console.warn('[OAuth Initiation] Failed to parse warehouse config');
+        // Don't fail OAuth flow, just log warning
+      }
+    }
+
     // Get credentials
     const { apiKey } = getShopifyCredentials();
     const redirectUri = getOAuthRedirectUri();
@@ -55,9 +72,10 @@ export async function GET(request: NextRequest) {
     const state = randomBytes(32).toString('hex');
 
     // Save state with shop and storeId
-    saveOAuthState(state, normalizedShop, storeId || undefined);
+    saveOAuthState(state, normalizedShop, storeId || undefined, parsedWarehouseConfig);
 
-    console.log('[OAuth Initiation] Generated state:', state);
+    console.log('[OAuth Initiation] ✅ State saved with warehouse config');
+    console.log('[OAuth Initiation] Generated state:', state.substring(0, 10) + '...');
 
     // Build Shopify OAuth URL
     const scopes = SHOPIFY_SCOPES.join(',');

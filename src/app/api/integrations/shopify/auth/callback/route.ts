@@ -3,15 +3,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient';
 import { registerShopifyWebhooks } from '@/lib/shopify/shopifyWebhookRegistration';
+import { getOAuthState, deleteOAuthState } from '@/lib/utils/shopifyAuth';
 
 /**
  * Shopify OAuth Callback Handler
- * ✅ UPDATED: Now uses backend API instead of localStorage
+ * ⭐ UPDATED: Now extracts and passes warehouse configuration to frontend
  * Handles the OAuth callback from Shopify and registers webhooks
  */
 export async function GET(request: NextRequest) {
   console.log('=================================');
-  console.log('🔐 SHOPIFY OAUTH CALLBACK');
+  console.log('ðŸ” SHOPIFY OAUTH CALLBACK');
   console.log('=================================');
 
   try {
@@ -28,45 +29,50 @@ export async function GET(request: NextRequest) {
 
     // Validate parameters
     if (!code || !shop || !state) {
-      console.error('[OAuth Callback] ❌ Missing required parameters');
+      console.error('[OAuth Callback]  Missing required parameters');
       return redirectWithError('Missing required OAuth parameters');
     }
 
-    // ✅ Get API base URL
-    const baseUrl = getApiBaseUrl(request);
-
-    // ✅ Verify state and get integration info from backend
-    const stateData = await verifyOAuthState(baseUrl, state);
+    // ⭐ Get state data (includes warehouse config!)
+    const stateData = getOAuthState(state);
     if (!stateData || stateData.shop !== shop) {
       console.error('[OAuth Callback] ❌ Invalid OAuth state');
-      await deleteOAuthState(baseUrl, state);
+      deleteOAuthState(state);
       return redirectWithError('Invalid OAuth state');
     }
 
-    const { storeId, integrationId } = stateData;
+    // ⭐ Extract warehouse config from state
+    const { storeId, warehouseConfig } = stateData;
+
+    // Validate storeId exists
+    if (!storeId) {
+      console.error('[OAuth Callback] ❌ Missing store ID in state data');
+      deleteOAuthState(state);
+      return redirectWithError('Invalid OAuth state: missing store ID');
+    }
+    
     console.log('[OAuth Callback] Store ID:', storeId);
-    console.log('[OAuth Callback] Integration ID:', integrationId);
+    console.log('[OAuth Callback] Warehouse Config available:', !!warehouseConfig);
 
     // Clean up state
-    await deleteOAuthState(baseUrl, state);
+    deleteOAuthState(state);
+
+    //Get API base URL
+    const baseUrl = getApiBaseUrl(request);
 
     // ✅ Get integration from backend to get API credentials
-    const integration = await getIntegrationFromAPI(baseUrl, integrationId);
-    if (!integration) {
-      console.error('[OAuth Callback] ❌ Integration not found');
-      return redirectWithError('Integration not found');
-    }
+    const integration = await getIntegrationFromAPI(baseUrl, `shopify-${storeId}`);
 
-    // ✅ Get API key and secret from integration config (REQUIRED - no fallback)
+    //  Get API key and secret from integration config (REQUIRED - no fallback)
     const apiKey = integration.config?.apiKey
     const apiSecret = integration.config?.apiSecret
 
     if (!apiKey || !apiSecret) {
-      console.error('[Shopify Callback] ❌ Missing API credentials in integration config')
-      throw new Error('Shopify API credentials not configured in integration. Please add apiKey and apiSecret to integration config.')
+      console.error('[OAuth Callback] ❌ Missing API credentials');
+      throw new Error('Shopify API credentials not configured');
     }
 
-    console.log('[OAuth Callback] Using API key from integration config');
+    console.log('[OAuth Callback] Using API credentials');
 
     // Exchange code for access token
     console.log('[OAuth Callback] Exchanging code for access token...');
@@ -93,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     // Update integration with connection details
     const updatedConfig = {
-      ...integration.config,
+      ...(integration?.config || {}),
       storeUrl: shop,
       storeName: testResult.shop.name,
       accessToken,
@@ -103,38 +109,44 @@ export async function GET(request: NextRequest) {
       connectedAt: new Date().toISOString(),
     };
 
-    // ✅ Update integration status and config via API
-    await updateIntegrationAPI(baseUrl, integrationId, {
+    // ⭐ Add warehouse config if present
+    if (warehouseConfig) {
+      console.log('[OAuth Callback] ✅ Including warehouse config in integration');
+    }
+
+    //  Update integration status and config via API
+    await updateIntegrationAPI(baseUrl, `shopify-${storeId}`, {
       status: 'connected',
       enabled: true,
       config: updatedConfig,
+      ...(warehouseConfig && { routingConfig: warehouseConfig })
     });
 
-    console.log('[OAuth Callback] ✅ Integration updated in database');
+    console.log('[OAuth Callback]  Integration updated in database');
 
     // Register webhooks
-    console.log('[OAuth Callback] 🔔 Registering webhooks...');
+    console.log('[OAuth Callback] Registering webhooks...');
     try {
-      const webhookUrl = `${baseUrl}/api/webhooks/shopify`;
+      const webhookUrl = `${baseUrl}/api/integrations/shopify/webhooks`;
 
       console.log('[OAuth Callback] Webhook URL:', webhookUrl);
 
       const webhookResult = await registerShopifyWebhooks(shop, accessToken, webhookUrl);
 
       if (webhookResult.success) {
-        console.log('[OAuth Callback] ✅ Webhooks registered:', webhookResult.registered);
+        console.log('[OAuth Callback]  Webhooks registered:', webhookResult.registered);
 
-        // ✅ Update integration config via API
-        await updateIntegrationConfigAPI(baseUrl, integrationId, {
+        //  Update integration config via API
+        await updateIntegrationConfigAPI(baseUrl, `shopify-${storeId}`, {
           ...updatedConfig,
           webhooksRegistered: true,
           registeredWebhooks: webhookResult.registered,
         });
       } else {
-        console.error('[OAuth Callback] ⚠️  Webhook registration had errors:', webhookResult.errors);
+        console.error('[OAuth Callback] Webhook registration had errors:', webhookResult.errors);
 
         // Still mark as partial success
-        await updateIntegrationConfigAPI(baseUrl, integrationId, {
+        await updateIntegrationConfigAPI(baseUrl, `shopify-${storeId}`, {
           ...updatedConfig,
           webhooksRegistered: webhookResult.registered.length > 0,
           registeredWebhooks: webhookResult.registered,
@@ -142,63 +154,31 @@ export async function GET(request: NextRequest) {
         });
       }
     } catch (webhookError) {
-      console.error('[OAuth Callback] ⚠️  Webhook registration failed:', webhookError);
+      console.error('[OAuth Callback] Webhook registration failed:', webhookError);
       // Don't fail the entire OAuth flow if webhooks fail
-    }
-
-    // Trigger initial sync
-    console.log('[OAuth Callback] 🔄 Triggering initial sync...');
-    try {
-      const syncResponse = await fetch(`${baseUrl}/api/integrations/shopify/sync`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          shop,
-          accessToken,
-          accountId,
-          storeId,
-          integrationId,
-          syncType: 'all',
-        }),
-      });
-
-      if (syncResponse.ok) {
-        const syncData = await syncResponse.json();
-        console.log('[OAuth Callback] ✅ Initial sync completed:', {
-          orders: syncData.orderCount,
-          products: syncData.productCount,
-        });
-
-        // Update last sync time
-        await updateIntegrationConfigAPI(baseUrl, integrationId, {
-          ...updatedConfig,
-          lastSyncTime: new Date().toISOString(),
-          lastSyncOrderCount: syncData.orderCount,
-          lastSyncProductCount: syncData.productCount,
-        });
-      } else {
-        console.error('[OAuth Callback] ⚠️  Initial sync failed');
-      }
-    } catch (syncError) {
-      console.error('[OAuth Callback] ⚠️  Initial sync error:', syncError);
-      // Don't fail the OAuth flow if sync fails
     }
 
     console.log('=================================');
     console.log('✅ SHOPIFY OAUTH CALLBACK COMPLETE');
     console.log('=================================');
 
-    // Redirect back to integrations page with success message
+    // ⭐ Add warehouse config to redirect
     const redirectUrl = new URL('/dashboard/integrations', request.nextUrl.origin);
-    redirectUrl.searchParams.set('shopify_connected', 'true');
-    redirectUrl.searchParams.set('shop', testResult.shop.name);
+    redirectUrl.searchParams.set('shopify_auth', 'success');  // Changed from shopify_connected
+    redirectUrl.searchParams.set('shop', shop);  // Use shop domain, not name
+    redirectUrl.searchParams.set('access_token', accessToken);
+    redirectUrl.searchParams.set('store_id', storeId);
+
+    // ⭐ Add warehouse config if present
+    if (warehouseConfig) {
+      redirectUrl.searchParams.set('warehouse_config', JSON.stringify(warehouseConfig));
+      console.log('[OAuth Callback] ✅ Warehouse config included in redirect');
+    }
 
     return NextResponse.redirect(redirectUrl);
 
   } catch (error) {
-    console.error('[OAuth Callback] ❌ Error:', error);
+    console.error('[OAuth Callback]  Error:', error);
     return redirectWithError(
       error instanceof Error ? error.message : 'OAuth callback failed'
     );
@@ -206,7 +186,7 @@ export async function GET(request: NextRequest) {
 }
 
 // ============================================================================
-// ✅ HELPER FUNCTIONS - UPDATED TO USE BACKEND API
+//  HELPER FUNCTIONS
 // ============================================================================
 
 /**
@@ -246,44 +226,6 @@ async function getAccountIdFromRequest(request: NextRequest): Promise<string | n
   } catch (error) {
     console.error('[OAuth Callback] Error getting account ID:', error);
     return null;
-  }
-}
-
-/**
- * Verify OAuth state via backend API
- */
-async function verifyOAuthState(
-  baseUrl: string,
-  state: string
-): Promise<{ shop: string; storeId: string; integrationId: string } | null> {
-  try {
-    // ✅ Call backend endpoint to verify state
-    const response = await fetch(`${baseUrl}/api/auth/oauth/state/${state}`, {
-      method: 'GET',
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('[OAuth Callback] Error verifying state:', error);
-    return null;
-  }
-}
-
-/**
- * Delete OAuth state via backend API
- */
-async function deleteOAuthState(baseUrl: string, state: string): Promise<void> {
-  try {
-    await fetch(`${baseUrl}/api/auth/oauth/state/${state}`, {
-      method: 'DELETE',
-    });
-  } catch (error) {
-    console.error('[OAuth Callback] Error deleting state:', error);
   }
 }
 

@@ -17,6 +17,7 @@ import StoreSelector from './components/StoreSelector'
 import BrowseIntegrationsModal from './components/BrowseIntegrationsModal'
 import { Integration } from './types/integrationTypes'
 import { storeApi } from '@/app/services/storeApi'
+import { WarehouseAPI } from '@/lib/api/warehouseApi'
 import Notification from '@/app/dashboard/shared/components/Notification'
 import WarehouseRequiredWarning from './components/WarehouseRequiredWarning'
 import { checkStoreWarehouseById } from './utils/storeWarehouseUtils'
@@ -50,6 +51,11 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
   const [selectedStoreId, setSelectedStoreId] = useState<string>('')
   const [hasWarehouses, setHasWarehouses] = useState<boolean>(true)
 
+  // ✅ NEW: Warehouse state
+  const [warehouses, setWarehouses] = useState<any[]>([])
+  const [warehousesLoading, setWarehousesLoading] = useState(true)
+  const [warehousesError, setWarehousesError] = useState<string | null>(null)
+
   // Notification state
   const [notification, setNotification] = useState<{
     show: boolean
@@ -66,7 +72,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
   const [testResults, setTestResults] = useState<{ [key: string]: { success: boolean; message: string } | null }>({})
   const [testingId, setTestingId] = useState<string | null>(null)
 
-  // ✅ NEW: Syncing state
+  // ✅ Syncing state
   const [syncingId, setSyncingId] = useState<string | null>(null)
 
   // Modal management hook
@@ -116,6 +122,13 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
     loadStores()
   }, [])
 
+  // ✅ NEW: Load warehouses when accountId is available
+  useEffect(() => {
+    if (accountId) {
+      loadWarehouses()
+    }
+  }, [accountId])
+
   /**
    * Load stores from API
    */
@@ -164,6 +177,31 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
     }
   }
 
+  /**
+   * ✅ NEW: Load warehouses from API
+   */
+  const loadWarehouses = async () => {
+    try {
+      setWarehousesLoading(true)
+      setWarehousesError(null)
+
+      console.log('[Integrations Page] 🔄 Loading warehouses from API...')
+      const loadedWarehouses = await WarehouseAPI.getAllWarehouses()
+
+      console.log('[Integrations Page] ✅ Loaded', loadedWarehouses.length, 'warehouses')
+      setWarehouses(loadedWarehouses)
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load warehouses'
+      console.error('[Integrations Page] ❌ Error loading warehouses:', errorMessage)
+      setWarehousesError(errorMessage)
+      // Don't show error notification for warehouses - it's optional
+      setWarehouses([])
+    } finally {
+      setWarehousesLoading(false)
+    }
+  }
+
   // ✅ Check warehouses when store changes (async call)
   useEffect(() => {
     if (selectedStoreId) {
@@ -209,7 +247,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
     return store?.name || store?.storeName || store?.companyName || ''
   }
 
-  // ✅ FIXED: Filter integrations by selected store using integrations from hook
+  // ✅ Filter integrations by selected store using integrations from hook
   const filteredIntegrations = selectedStoreId
     ? integrations.filter((i: Integration) => i.storeId === selectedStoreId)
     : integrations
@@ -444,7 +482,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
 
       // Trigger sync with the integration we already have
       // Note: accountId is handled automatically by API via JWT token
-      // ✅ FIXED: autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
+      // ✅ autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
       // Warehouse assignment is handled by backend based on integration's warehouseConfig
       await ShopifyService.autoSyncOnConnection(
         shopifyIntegration as any,
@@ -671,7 +709,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
                   storeName={stores.find(s => s.id === integration.storeId)?.name}
                 />
 
-                {/* ✅ TEST RESULTS DISPLAY */}
+                {/* TEST RESULTS DISPLAY */}
                 {testResults[integration.id] && (
                   <div
                     className={`mt-2 px-4 py-2 rounded-md text-sm font-medium ${
@@ -709,7 +747,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
                   storeName={stores.find(s => s.id === integration.storeId)?.name}
                 />
 
-                {/* ✅ TEST RESULTS DISPLAY */}
+                {/* TEST RESULTS DISPLAY */}
                 {testResults[integration.id] && (
                   <div
                     className={`mt-2 px-4 py-2 rounded-md text-sm font-medium ${
@@ -827,6 +865,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
           integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId) as any
         }
         selectedStoreId={selectedStoreId}
+        warehouses={warehouses}
         onTest={() => createModalTestHandler(
           integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)!
         )()}

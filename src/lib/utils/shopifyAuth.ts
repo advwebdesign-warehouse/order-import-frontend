@@ -103,6 +103,7 @@ interface StateData {
   shop: string
   timestamp: number
   storeId?: string
+  warehouseConfig?: any
 }
 
 // ✅ Use global variable to persist across serverless invocations
@@ -120,17 +121,19 @@ const getStateStore = (): Map<string, StateData> => {
 }
 
 /**
- * ✅ FIXED: Save OAuth state with 30-minute timeout and better logging
+ * ✅ Save OAuth state with 30-minute timeout and better logging
  * @param state - Random state token for CSRF protection
  * @param shop - Store domain from Shopify (e.g., store.myshopify.com)
  * @param storeId - Internal store ID (optional)
+ * @param warehouseConfig - Warehouse routing configuration (optional)
  */
-export function saveOAuthState(state: string, shop: string, storeId?: string) {
+export function saveOAuthState(state: string, shop: string, storeId?: string, warehouseConfig?: any) {
   const stateStore = getStateStore()
 
   stateStore.set(state, {
     shop,
     storeId,
+    warehouseConfig,
     timestamp: Date.now(),
   })
 
@@ -138,10 +141,11 @@ export function saveOAuthState(state: string, shop: string, storeId?: string) {
     statePreview: state.substring(0, 10) + '...',
     shop,
     storeId,
+    hasWarehouseConfig: !!warehouseConfig,
     totalStates: stateStore.size
   })
 
-  // ✅ FIXED: Clean up old states (older than 30 minutes instead of 10)
+  // ✅ Clean up old states (older than 30 minutes instead of 10)
   const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
   let cleanedCount = 0
 
@@ -158,7 +162,7 @@ export function saveOAuthState(state: string, shop: string, storeId?: string) {
 }
 
 /**
- * ✅ FIXED: Get OAuth state with better logging and validation
+ * ✅ Get OAuth state with warehouse config support
  * @param state - State token to retrieve
  * @returns StateData or undefined if not found
  */
@@ -193,6 +197,7 @@ export function getOAuthState(state: string): StateData | undefined {
     console.log('[Shopify Auth] ✅ OAuth state found:', {
       shop: stateData.shop,
       storeId: stateData.storeId,
+      hasWarehouseConfig: !!stateData.warehouseConfig,
       ageSeconds
     })
   }
