@@ -72,10 +72,10 @@ export default function WarehouseSelector({
   return (
     <div className={className}>
       {label && (
-        <Listbox.Label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
-        </Listbox.Label>
+        </label>
       )}
 
       <Listbox value={selectedWarehouseId || ''} onChange={onWarehouseChange} disabled={disabled}>
