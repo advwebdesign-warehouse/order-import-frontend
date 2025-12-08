@@ -137,9 +137,12 @@ export default function ShopifyConfigModal({
       }
 
       // Build OAuth URL with warehouse config encoded
-      const authUrl = `/api/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}`
+      // ✅ FIXED: Use backend API URL instead of relative URL
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+      const authUrl = `${API_BASE}/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}`
 
       console.log('[Shopify Modal] Redirecting to OAuth with warehouse config:', warehouseConfig)
+      console.log('[Shopify Modal] OAuth URL:', authUrl)
 
       // Redirect to OAuth - sync will happen automatically after connection
       window.location.href = authUrl
