@@ -2,7 +2,7 @@
 const nextConfig = {
   allowedDevOrigins: [
     'unpreempted-narcisa-appropriative.ngrok-free.dev',
-    'advorderflow.com'
+    'gravityhub.co'
   ],
 }
 module.exports = nextConfig

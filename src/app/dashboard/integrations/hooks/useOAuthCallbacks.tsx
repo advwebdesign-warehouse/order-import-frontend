@@ -183,6 +183,7 @@ export function useOAuthCallbacks({
     const shop = searchParams.get('shop')
     const accessToken = searchParams.get('access_token')
     const storeIdParam = searchParams.get('store_id')
+    const warehouseConfigParam = searchParams.get('warehouse_config')
     const errorParam = searchParams.get('error')
 
     // Only process if we have OAuth params
@@ -212,6 +213,9 @@ export function useOAuthCallbacks({
     // Handle success
     if (shopifyAuth === 'success' && shop && accessToken) {
       console.log('[Shopify OAuth] ✅ Connection successful, saving integration...')
+      console.log('[Shopify OAuth] Shop:', shop)
+      console.log('[Shopify OAuth] Has access token:', !!accessToken)
+      console.log('[Shopify OAuth] Has warehouse config:', !!warehouseConfigParam)
 
       const integrationStoreId = storeIdParam || selectedStoreId
 
@@ -230,6 +234,18 @@ export function useOAuthCallbacks({
         return
       }
 
+      // ✅ ADDED: Parse warehouse config
+      let warehouseConfig = undefined
+      if (warehouseConfigParam) {
+        try {
+          warehouseConfig = JSON.parse(warehouseConfigParam)
+          console.log('[Shopify OAuth] ✅ Warehouse config parsed successfully')
+        } catch (error) {
+          console.error('[Shopify OAuth] ❌ Failed to parse warehouse config:', error)
+          // Don't fail the OAuth - continue without warehouse config
+        }
+      }
+
       // ✅ Use integrations array directly
       const existingIntegration = integrations.find(
         (i: Integration) => i.name === 'Shopify' && i.storeId === integrationStoreId
@@ -244,6 +260,7 @@ export function useOAuthCallbacks({
             storeUrl: shop,
             accessToken: accessToken,
           },
+          routingConfig: warehouseConfig,
           status: 'connected',
           enabled: true,
           connectedAt: new Date().toISOString()
@@ -270,6 +287,7 @@ export function useOAuthCallbacks({
             storeUrl: shop,
             accessToken: accessToken,
           },
+          routingConfig: warehouseConfig,
           connectedAt: new Date().toISOString(),
           features: {
             orderSync: true,
@@ -278,6 +296,14 @@ export function useOAuthCallbacks({
             fulfillmentSync: true,
           }
         }
+
+        console.log('[Shopify OAuth] 💾 Saving new integration:', {
+          id: newIntegration.id,
+          storeId: newIntegration.storeId,
+          hasStoreUrl: !!newIntegration.config.storeUrl,
+          hasAccessToken: !!newIntegration.config.accessToken,
+          hasWarehouseConfig: !!newIntegration.routingConfig
+        })
 
         // ✅ Handle Promise return
         addIntegration(newIntegration).then(result => {
@@ -300,7 +326,7 @@ export function useOAuthCallbacks({
           }
 
           // Continue with auto-sync after successful add
-          // ⭐ FIXED: Pass integration object directly (no race condition!)
+          // ⭐ Pass integration object directly (no race condition!)
           triggerAutoSync(newIntegration, integrationStoreId)
         })
 
@@ -325,7 +351,7 @@ export function useOAuthCallbacks({
       }
 
       // For existing integrations, trigger auto-sync immediately
-      // ⭐ FIXED: Pass integration object directly (no race condition!)
+      // ⭐ Pass integration object directly (no race condition!)
       triggerAutoSync(existingIntegration, integrationStoreId)
 
       // Show initial success notification
@@ -348,8 +374,8 @@ export function useOAuthCallbacks({
   }, [searchParams, integrations, selectedStoreId, stores, updateIntegration, addIntegration, setNotification, setTestResults])
 
   /**
-   * ✅ EXTRACTED: Auto-sync function to avoid duplication
-   * ⭐ FIXED: Accept integration directly instead of searching (avoids race condition)
+   * ✅ Auto-sync function to avoid duplication
+   * ⭐ Accept integration directly instead of searching (avoids race condition)
    */
   const triggerAutoSync = async (integration: Integration, integrationStoreId: string) => {
     setTimeout(async () => {
@@ -362,7 +388,7 @@ export function useOAuthCallbacks({
           throw new Error('Account ID not available. Please refresh and try again.')
         }
 
-        // ⭐ FIXED: Use integration passed as parameter (no searching needed!)
+        // ⭐ Use integration passed as parameter (no searching needed!)
         if (!integration) {
           console.error('[Auto-Sync] ❌ No integration provided')
           throw new Error('Integration object is required')
@@ -390,7 +416,7 @@ export function useOAuthCallbacks({
         )
 
         // Update integration with lastSyncAt
-        // ⭐ FIXED: Use integration.id instead of integrationId variable
+        // ⭐ Use integration.id instead of integrationId variable
         updateIntegration(integration.id, {
           lastSyncAt: new Date().toISOString()
         })
