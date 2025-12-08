@@ -1,4 +1,5 @@
 //file path: src/app/dashboard/integrations/hooks/useOAuthCallbacks.tsx
+// ✅ FIXED: Reads warehouse_config from URL parameters (sent by backend)
 
 'use client'
 
@@ -244,15 +245,17 @@ export function useOAuthCallbacks({
       }
 
       // ✅ ADDED: Parse warehouse config
-      let warehouseConfig = undefined
+      let warehouseConfig = null
       if (warehouseConfigParam) {
         try {
           warehouseConfig = JSON.parse(warehouseConfigParam)
-          console.log('[Shopify OAuth] ✅ Warehouse config parsed successfully')
+          console.log('[Shopify OAuth] ✅ Warehouse config received:', warehouseConfig)
         } catch (error) {
           console.error('[Shopify OAuth] ❌ Failed to parse warehouse config:', error)
           // Don't fail the OAuth - continue without warehouse config
         }
+      } else {
+        console.warn('[Shopify OAuth] ⚠️ No warehouse config in URL parameters')
       }
 
       // ✅ Use integrations array directly
@@ -280,6 +283,14 @@ export function useOAuthCallbacks({
         // Create new integration
         const timestamp = Date.now()
         integrationId = `shopify-${integrationStoreId}-${timestamp}`
+
+        console.log('[Shopify OAuth] 💾 Saving new integration:', {
+          id: `shopify-${storeIdParam}-${Date.now()}`,
+          storeId: storeIdParam,
+          hasStoreUrl: !!shop,
+          hasAccessToken: !!accessToken,
+          hasWarehouseConfig: !!warehouseConfig  // ⭐ Log if we have it
+        })
 
         const newIntegration: ShopifyIntegration = {
           id: integrationId,
