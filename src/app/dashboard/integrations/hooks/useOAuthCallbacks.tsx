@@ -186,6 +186,15 @@ export function useOAuthCallbacks({
     const warehouseConfigParam = searchParams.get('warehouse_config')
     const errorParam = searchParams.get('error')
 
+    console.log('[Shopify OAuth] 🔍 URL Parameters:', {
+      shopifyAuth,
+      shop,
+      accessToken: accessToken ? '***' : undefined,
+      storeIdParam,
+      warehouseConfigParam,  // ← Check if this is present!
+      errorParam
+    })
+
     // Only process if we have OAuth params
     if (!shopifyAuth && !errorParam) {
       return
