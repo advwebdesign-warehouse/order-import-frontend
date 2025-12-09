@@ -33,7 +33,7 @@ export class ShopifyService {
       if (onProgress) onProgress('Connection successful! Syncing data...')
 
       // ✅ Call backend Express API to sync
-      const response = await fetch(`${API_BASE}/integrations/shopify/sync`, {
+      const response = await fetch(`${API_BASE_URL}/integrations/shopify/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -85,7 +85,7 @@ export class ShopifyService {
   ): Promise<{ success: boolean; error?: string; message?: string; data?: any }> {
     try {
       // ✅ Call backend Express API to test
-      const response = await fetch(`${API_BASE}/integrations/shopify/test`, {
+      const response = await fetch(`${API_BASE_URL}/integrations/shopify/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ export class ShopifyService {
       if (onProgress) onProgress('Starting sync...')
 
       // ✅ Call backend Express API to sync
-      const response = await fetch(`${API_BASE}/integrations/shopify/sync`, {
+      const response = await fetch(`${API_BASE_URL}/integrations/shopify/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
