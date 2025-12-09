@@ -88,7 +88,7 @@ export class ShopifyService {
         },
         credentials: 'include',
         body: JSON.stringify({
-          shop: storeUrl,
+          storeUrl,
           accessToken
         }),
       })
