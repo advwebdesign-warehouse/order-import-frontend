@@ -180,19 +180,15 @@ export class IntegrationAPI {
 
   /**
    * Update an existing integration
-   * ✅ Uses POST (upsert) - backend doesn't have separate PUT /:id route
    * Sends full integration object to backend
    */
-  static async updateIntegration(integrationId: string, integration: any) {
-    const response = await apiRequest('/integrations', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...integration,
-        id: integrationId
-      })
-    })
-    return response.integration || response
-  }
+   static async updateIntegration(integrationId: string, integration: any) {
+     const response = await apiRequest(`/integrations/${integrationId}`, {
+       method: 'PUT',
+       body: JSON.stringify(integration)
+     })
+     return response.integration || response
+   }
 
   /**
    * Update only the config of an integration
