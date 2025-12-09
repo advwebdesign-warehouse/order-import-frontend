@@ -52,7 +52,7 @@ export interface Warehouse {
  * IntegrationAPI
  * Handles all API calls related to integrations
  * ✅ Added proper type annotations using shippingTypes
- * ✅ UPDATED: Added getIntegrationWarehouses for integration-based warehouse linking
+ * ✅ Added getIntegrationWarehouses for integration-based warehouse linking
  */
 export class IntegrationAPI {
   /**
@@ -168,7 +168,7 @@ export class IntegrationAPI {
   /**
    * Save a new integration (create or update via upsert)
    * ✅ Backend uses POST for both create and update (upsert)
-   * Backend returns: { integration: {...}, lastUpdated: string }
+   * Backend returns: { integration: {...}, lastupdate string }
    */
   static async saveIntegration(integration: any) {
     const response = await apiRequest('/integrations', {
@@ -431,7 +431,7 @@ export class IntegrationAPI {
    * Test Shopify connection
    */
   static async testShopify(data: {
-    shopUrl: string
+    storeUrl: string
     accessToken: string
   }) {
     return apiRequest('/integrations/shopify/test', {
@@ -441,9 +441,23 @@ export class IntegrationAPI {
   }
 
   /**
-   * Sync Shopify products
-   * Backend route: POST /integrations/:id/shopify/products/sync
+   * ✅ NEW: Sync Shopify data (orders and/or products)
+   * Backend route: POST /integrations/shopify/sync
    */
+   static async syncShopify(data: {
+     storeId: string
+     syncType: 'all' | 'orders' | 'products'
+   }) {
+     return apiRequest('/integrations/shopify/sync', {
+       method: 'POST',
+       body: JSON.stringify(data)
+     })
+   }
+
+   /**
+    * Sync Shopify products
+    * Backend route: POST /integrations/:id/shopify/products/sync
+    */
   static async syncShopifyProducts(integrationId: string) {
     return apiRequest(`/integrations/${integrationId}/shopify/products/sync`, {
       method: 'POST'

@@ -1,10 +1,12 @@
 //file path: src/lib/shopify/shopifyService.ts (FRONTEND)
 
 import { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
 
-// ✅ API base URL - points to backend Express server
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api';
-
+/**
+ * ✅ CLEAN ARCHITECTURE: Uses IntegrationAPI for all backend calls
+ * No manual fetch calls, consistent with rest of codebase
+ */
 export class ShopifyService {
   /**
    * Auto-sync on connection (called after OAuth completes)
@@ -20,11 +22,11 @@ export class ShopifyService {
     if (onProgress) onProgress('Testing connection to Shopify...')
 
     try {
-      // Test connection first
-      const testResult = await this.testConnectionViaAPI(
-        integration.config.storeUrl,
-        integration.config.accessToken
-      )
+      // ✅ Test connection using IntegrationAPI
+      const testResult = await IntegrationAPI.testShopify({
+        storeUrl: integration.config.storeUrl,
+        accessToken: integration.config.accessToken
+      })
 
       if (!testResult.success) {
         throw new Error(testResult.error || testResult.message || 'Connection test failed')
@@ -32,25 +34,11 @@ export class ShopifyService {
 
       if (onProgress) onProgress('Connection successful! Syncing data...')
 
-      // ✅ Call backend Express API to sync
-      const response = await fetch(`${API_BASE_URL}/integrations/shopify/sync`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include httpOnly cookies
-        body: JSON.stringify({
-          storeId: integration.storeId,
-          syncType: 'all' // Sync both orders and products
-        }),
+      // ✅ Sync data using IntegrationAPI
+      const result = await IntegrationAPI.syncShopify({
+        storeId: integration.storeId,
+        syncType: 'all' // Sync both orders and products
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Sync failed')
-      }
-
-      const result = await response.json()
 
       if (!result.success) {
         throw new Error(result.error || 'Sync failed')
@@ -61,7 +49,7 @@ export class ShopifyService {
       if (onProgress) onProgress(message)
       console.log('[Shopify Service Frontend] ✅ Auto-sync complete:', result.data)
 
-      // Update last sync time
+      // ✅ Update last sync time using IntegrationAPI
       await this.updateLastSyncTime(integration.id)
 
     } catch (error: any) {
@@ -84,20 +72,11 @@ export class ShopifyService {
     accessToken: string
   ): Promise<{ success: boolean; error?: string; message?: string; data?: any }> {
     try {
-      // ✅ Call backend Express API to test
-      const response = await fetch(`${API_BASE_URL}/integrations/shopify/test`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          storeUrl, // ✅ Using storeUrl consistently
-          accessToken
-        }),
+      // ✅ Use IntegrationAPI
+      const result = await IntegrationAPI.testShopify({
+        storeUrl,
+        accessToken
       })
-
-      const result = await response.json()
       return result
     } catch (error: any) {
       return {
@@ -109,67 +88,49 @@ export class ShopifyService {
 
   /**
    * Update last sync time for integration
+   * Uses IntegrationAPI.updateIntegration
    */
-  static async updateLastSyncTime(integrationId: string): Promise<void> {
-    try {
-      await fetch(`/api/integrations/${integrationId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          lastSyncedAt: new Date().toISOString()
-        }),
-      })
-    } catch (error) {
-      console.error('[Shopify Service Frontend] Error updating last sync time:', error)
-      // Don't throw - this is not critical
-    }
-  }
+   static async updateLastSyncTime(integrationId: string): Promise<void> {
+     try {
+       // ✅ Use IntegrationAPI - only update the timestamp
+       await IntegrationAPI.updateIntegration(integrationId, {
+         lastSyncedAt: new Date().toISOString()
+       })
+     } catch (error) {
+       console.error('[Shopify Service Frontend] Error updating last sync time:', error)
+       // Don't throw - this is not critical
+     }
+   }
 
-  /**
-   * Manual sync (called from UI)
-   */
-  static async manualSync(
-    storeId: string,
-    syncType: 'all' | 'orders' | 'products' = 'all',
-    onProgress?: (message: string) => void
-  ): Promise<{ orders: number; products: number }> {
-    try {
-      if (onProgress) onProgress('Starting sync...')
+   /**
+    * Manual sync (called from UI)
+    * Uses IntegrationAPI
+    */
+   static async manualSync(
+     storeId: string,
+     syncType: 'all' | 'orders' | 'products' = 'all',
+     onProgress?: (message: string) => void
+   ): Promise<{ orders: number; products: number }> {
+     try {
+       if (onProgress) onProgress('Starting sync...')
 
-      // ✅ Call backend Express API to sync
-      const response = await fetch(`${API_BASE_URL}/integrations/shopify/sync`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          storeId,
-          syncType
-        }),
-      })
+       // ✅ Use IntegrationAPI
+       const result = await IntegrationAPI.syncShopify({
+         storeId,
+         syncType
+       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Sync failed')
-      }
+       if (!result.success) {
+         throw new Error(result.error || 'Sync failed')
+       }
 
-      const result = await response.json()
+       const message = `✅ Synced ${result.data.orders} orders and ${result.data.products} products`
+       if (onProgress) onProgress(message)
 
-      if (!result.success) {
-        throw new Error(result.error || 'Sync failed')
-      }
-
-      const message = `✅ Synced ${result.data.orders} orders and ${result.data.products} products`
-      if (onProgress) onProgress(message)
-
-      return result.data
-    } catch (error: any) {
-      if (onProgress) onProgress(`❌ ${error.message}`)
-      throw error
-    }
-  }
-}
+       return result.data
+     } catch (error: any) {
+       if (onProgress) onProgress(`❌ ${error.message}`)
+       throw error
+     }
+   }
+ }

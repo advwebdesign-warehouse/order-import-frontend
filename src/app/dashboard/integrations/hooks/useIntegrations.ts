@@ -277,7 +277,7 @@ export function useIntegrations() {
         const shopifyIntegration = integration as ShopifyIntegration
 
         const result = await IntegrationAPI.testShopify({
-          shopUrl: shopifyIntegration.config.storeUrl,
+          storeUrl: shopifyIntegration.config.storeUrl,
           accessToken: shopifyIntegration.config.accessToken
         })
 
