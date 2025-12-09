@@ -2,6 +2,9 @@
 
 import { ShopifyIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 
+// ✅ API base URL - points to backend Express server
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api';
+
 export class ShopifyService {
   /**
    * Auto-sync on connection (called after OAuth completes)
@@ -29,8 +32,7 @@ export class ShopifyService {
 
       if (onProgress) onProgress('Connection successful! Syncing data...')
 
-      // Call backend API to sync
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api'
+      // ✅ Call backend Express API to sync
       const response = await fetch(`${API_BASE}/integrations/shopify/sync`, {
         method: 'POST',
         headers: {
@@ -82,7 +84,7 @@ export class ShopifyService {
     accessToken: string
   ): Promise<{ success: boolean; error?: string; message?: string; data?: any }> {
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api'
+      // ✅ Call backend Express API to test
       const response = await fetch(`${API_BASE}/integrations/shopify/test`, {
         method: 'POST',
         headers: {
@@ -90,7 +92,7 @@ export class ShopifyService {
         },
         credentials: 'include',
         body: JSON.stringify({
-          storeUrl,
+          storeUrl, // ✅ Using storeUrl consistently
           accessToken
         }),
       })
@@ -137,7 +139,8 @@ export class ShopifyService {
     try {
       if (onProgress) onProgress('Starting sync...')
 
-      const response = await fetch('/api/integrations/shopify/sync', {
+      // ✅ Call backend Express API to sync
+      const response = await fetch(`${API_BASE}/integrations/shopify/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
