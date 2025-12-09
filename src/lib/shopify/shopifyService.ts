@@ -30,7 +30,8 @@ export class ShopifyService {
       if (onProgress) onProgress('Connection successful! Syncing data...')
 
       // Call backend API to sync
-      const response = await fetch('/api/integrations/shopify/sync', {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api'
+      const response = await fetch(`${API_BASE}/integrations/shopify/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,7 +82,8 @@ export class ShopifyService {
     accessToken: string
   ): Promise<{ success: boolean; error?: string; message?: string; data?: any }> {
     try {
-      const response = await fetch('/api/integrations/shopify/test', {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.gravityhub.co/api'
+      const response = await fetch(`${API_BASE}/integrations/shopify/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
