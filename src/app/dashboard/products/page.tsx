@@ -511,7 +511,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       )}
 
       {/* Empty State - Has Integrations but No Products */}
-      {hasIntegrations && products.length === 0 && (
+      {hasIntegrations && products.length === 0 && !loading && (
         <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 p-6">
           <div className="text-center">
             <svg

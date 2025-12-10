@@ -10,6 +10,35 @@ export type Environment = 'sandbox' | 'production'
 export type WarehouseRoutingMode = 'simple' | 'advanced'
 
 // ============================================================================
+// INVENTORY SYNC CONFIGURATION
+// ============================================================================
+
+/**
+ * Product import mode - how products are initially imported from e-commerce platform
+ */
+export type ProductImportMode = 'products_only' | 'with_quantities'
+
+/**
+ * Sync direction - how quantities are synchronized between warehouses and platform
+ */
+export type SyncDirection = 'one_way_from' | 'one_way_to' | 'two_way' | 'manual'
+
+/**
+ * E-commerce inventory synchronization configuration
+ */
+export interface EcommerceInventoryConfig {
+  // Product Import Settings
+  productImport: {
+    mode: ProductImportMode
+    primaryWarehouseId?: string  // Only used when mode === 'with_quantities'
+  }
+
+  // Stock Synchronization Settings
+  managesInventory: boolean  // Enable/disable inventory management
+  syncDirection: SyncDirection  // Direction of quantity sync
+}
+
+// ============================================================================
 // WAREHOUSE CONFIGURATION FOR INTEGRATIONS
 // ============================================================================
 
@@ -126,6 +155,11 @@ export interface ShopifyIntegration extends BaseIntegration {
   config: {
     storeUrl: string
     accessToken: string
+    // Product import configuration stored in config
+    productImport?: {
+      mode: ProductImportMode
+      primaryWarehouseId?: string
+    }
   }
   features: {
     orderSync: boolean
@@ -133,8 +167,14 @@ export interface ShopifyIntegration extends BaseIntegration {
     inventorySync: boolean
     fulfillmentSync: boolean
   }
-  // ✅ Flexible warehouse routing for e-commerce
+  // ✅ Flexible warehouse routing for e-commerce orders
   routingConfig?: EcommerceWarehouseConfig
+
+  // ✅ Inventory management fields (stored at root level in DB)
+  managesInventory?: boolean
+  inventorySync?: boolean
+  syncDirection?: SyncDirection
+  syncFrequency?: string
 }
 
 export interface WooCommerceIntegration extends BaseIntegration {
@@ -144,9 +184,20 @@ export interface WooCommerceIntegration extends BaseIntegration {
     storeUrl: string
     consumerKey: string
     consumerSecret: string
+    // Product import configuration stored in config
+    productImport?: {
+      mode: ProductImportMode
+      primaryWarehouseId?: string
+    }
   }
-  // ✅ Flexible warehouse routing for e-commerce
+  // ✅ Flexible warehouse routing for e-commerce orders
   routingConfig?: EcommerceWarehouseConfig
+
+  // ✅ Inventory management fields (stored at root level in DB)
+  managesInventory?: boolean
+  inventorySync?: boolean
+  syncDirection?: SyncDirection
+  syncFrequency?: string
 }
 
 export interface EtsyIntegration extends BaseIntegration {
@@ -155,9 +206,20 @@ export interface EtsyIntegration extends BaseIntegration {
   config: {
     apiKey: string
     sharedSecret: string
+    // Product import configuration stored in config
+    productImport?: {
+      mode: ProductImportMode
+      primaryWarehouseId?: string
+    }
   }
-  // ✅ Flexible warehouse routing for e-commerce
+  // ✅ Flexible warehouse routing for e-commerce orders
   routingConfig?: EcommerceWarehouseConfig
+
+  // ✅ Inventory management fields (stored at root level in DB)
+  managesInventory?: boolean
+  inventorySync?: boolean
+  syncDirection?: SyncDirection
+  syncFrequency?: string
 }
 
 export interface EbayIntegration extends BaseIntegration {
@@ -168,9 +230,20 @@ export interface EbayIntegration extends BaseIntegration {
     certId: string
     devId: string
     token: string
+    // Product import configuration stored in config
+    productImport?: {
+      mode: ProductImportMode
+      primaryWarehouseId?: string
+    }
   }
-  // ✅ Flexible warehouse routing for e-commerce
+  // ✅ Flexible warehouse routing for e-commerce orders
   routingConfig?: EcommerceWarehouseConfig
+
+  // ✅ Inventory management fields (stored at root level in DB)
+  managesInventory?: boolean
+  inventorySync?: boolean
+  syncDirection?: SyncDirection
+  syncFrequency?: string
 }
 
 // ============================================================================
@@ -205,6 +278,46 @@ export function isShippingIntegration(
   integration: Integration
 ): integration is USPSIntegration | UPSIntegration {
   return integration.type === 'shipping'
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Extract inventory config from an e-commerce integration
+ * Combines config.productImport with root-level inventory fields
+ */
+export function getInventoryConfig(
+  integration: ShopifyIntegration | WooCommerceIntegration | EtsyIntegration | EbayIntegration
+): EcommerceInventoryConfig {
+  return {
+    productImport: integration.config.productImport || {
+      mode: 'products_only',
+      primaryWarehouseId: undefined
+    },
+    managesInventory: integration.managesInventory || false,
+    syncDirection: integration.syncDirection || 'manual'
+  }
+}
+
+/**
+ * Update an integration with new inventory config
+ * Splits config into config.productImport and root-level fields
+ */
+export function setInventoryConfig<T extends ShopifyIntegration | WooCommerceIntegration | EtsyIntegration | EbayIntegration>(
+  integration: T,
+  inventoryConfig: EcommerceInventoryConfig
+): T {
+  return {
+    ...integration,
+    config: {
+      ...integration.config,
+      productImport: inventoryConfig.productImport
+    },
+    managesInventory: inventoryConfig.managesInventory,
+    syncDirection: inventoryConfig.syncDirection
+  }
 }
 
 // ============================================================================

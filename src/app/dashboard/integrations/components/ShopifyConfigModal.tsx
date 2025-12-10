@@ -5,9 +5,16 @@
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, CheckCircleIcon, InformationCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
-import { ShopifyIntegration, EcommerceWarehouseConfig } from '../types/integrationTypes'
+import {
+  ShopifyIntegration,
+  EcommerceWarehouseConfig,
+  EcommerceInventoryConfig,
+  getInventoryConfig,
+  setInventoryConfig as applyInventoryConfig
+} from '../types/integrationTypes'
 import { Warehouse } from '../../warehouses/utils/warehouseTypes'
 import EcommerceWarehouseRouting from './EcommerceWarehouseRouting'
+import EcommerceInventorySync from './EcommerceInventorySync'
 import WarehouseRequiredWarning from './WarehouseRequiredWarning'
 
 // Progress stages for visual feedback
@@ -251,21 +258,40 @@ export default function ShopifyConfigModal({
     }
   }
 
-  // ⭐ NEW: Update warehouse config for existing integration
-  const handleSaveWarehouseConfig = () => {
-    if (!existingIntegration) return
+  // ✅ Save configuration using helper function
+    const handleSaveWarehouseConfig = () => {
+      console.log('[Shopify Modal] Saving configuration...')
 
-    onSave({
-      routingConfig: warehouseConfig
-    })
+      // Use helper to properly merge inventory config
+      const updatedIntegration = applyInventoryConfig(
+        {
+          ...existingIntegration,
+          routingConfig: warehouseConfig
+        } as ShopifyIntegration,
+        inventoryConfig
+      )
 
-    setTestResult({
-      success: true,
-      message: 'Warehouse configuration saved successfully'
-    })
+      onSave(updatedIntegration)
 
-    setTimeout(() => setTestResult(null), 3000)
-  }
+      console.log('[Shopify Modal] ✅ Configuration saved:', {
+        routingConfig: warehouseConfig,
+        inventoryConfig
+      })
+    }
+
+  // ✅ Inventory Sync Configuration (using reusable component)
+  const [inventoryConfig, setInventoryConfig] = useState<EcommerceInventoryConfig>(
+    existingIntegration
+      ? getInventoryConfig(existingIntegration)
+      : {
+          productImport: {
+            mode: 'products_only',
+            primaryWarehouseId: warehouses[0]?.id || ''
+          },
+          managesInventory: false,
+          syncDirection: 'one_way_to'
+        }
+  )
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
@@ -368,12 +394,23 @@ export default function ShopifyConfigModal({
                               onClose={onClose}
                             />
                           ) : (
-                            <div className="space-y-4">
+                            <div className="space-y-6">
+                              {/* Step 1: Warehouse Routing */}
                               <EcommerceWarehouseRouting
                                 warehouseConfig={warehouseConfig}
                                 warehouses={warehouses}
                                 onChange={setWarehouseConfig}
                               />
+
+                              {/* Step 2: Inventory Sync */}
+                              <div className="border-t border-gray-200 pt-6">
+                                <EcommerceInventorySync
+                                  inventoryConfig={inventoryConfig}
+                                  warehouses={warehouses}
+                                  onChange={setInventoryConfig}
+                                  integrationName="Shopify"
+                                />
+                              </div>
 
                               {/* Save Warehouse Config Button for Existing Integrations */}
                               <div className="flex justify-end pt-4 border-t border-gray-200">
@@ -482,19 +519,30 @@ export default function ShopifyConfigModal({
                           onClose={onClose}
                         />
                       ) : (
-                        <>
+                        <div className="space-y-6">
+                          {/* Step 1: Warehouse Routing */}
                           <EcommerceWarehouseRouting
                             warehouseConfig={warehouseConfig}
                             warehouses={warehouses}
                             onChange={setWarehouseConfig}
                           />
 
+                          {/* Step 2: Inventory Sync */}
+                          <div className="border-t border-gray-200 pt-6">
+                            <EcommerceInventorySync
+                              inventoryConfig={inventoryConfig}
+                              warehouses={warehouses}
+                              onChange={setInventoryConfig}
+                              integrationName="Shopify"
+                              />
+                          </div>
+
                           {errors.warehouse && (
                             <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
                               {errors.warehouse}
                             </div>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
 

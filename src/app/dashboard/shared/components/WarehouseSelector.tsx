@@ -10,7 +10,7 @@ interface Warehouse {
   name: string
   code: string
   isDefault: boolean
-  status: 'active' | 'inactive'
+  status: 'active' | 'inactive' | 'ACTIVE' | 'INACTIVE'
   productCount?: number
 }
 
@@ -51,8 +51,10 @@ export default function WarehouseSelector({
     }
   }, [isOpen])
 
-  // Get active warehouses only
-  const activeWarehouses = warehouses.filter(w => w.status === 'active')
+  // ✅ FIXED: Case-insensitive status check
+  const activeWarehouses = warehouses.filter(w =>
+    w.status.toUpperCase() === 'ACTIVE'
+  )
 
   // Find selected warehouse
   const selectedWarehouse = warehouses.find(w => w.id === selectedWarehouseId)
