@@ -34,6 +34,9 @@ import { getProductWarehouseNames } from './utils/productUtils'
 import { Product } from './utils/productTypes'
 import { PRODUCTS_PER_PAGE } from './constants/productConstants'
 
+// ✅  Import IntegrationAPI and Integration type
+import { IntegrationAPI, Integration } from '@/lib/api/integrationApi'
+
 // Helper function to export products as CSV
 const exportProductsToCSV = (
   products: Product[],
@@ -125,9 +128,33 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
 
+  // ✅ NEW: Load integrations from API
+  const [integrations, setIntegrations] = useState<Integration[]>([])
+  const [loadingIntegrations, setLoadingIntegrations] = useState(true)
+
   // Get settings for stock management
   const { settings } = useSettings()
   const isStockManagementEnabled = settings?.inventory?.manageStock || false
+
+  // ✅ Load integrations on mount
+  useEffect(() => {
+    const loadIntegrations = async () => {
+      try {
+        console.log('[ProductsPage] 🔄 Loading integrations...')
+        setLoadingIntegrations(true)
+        const data = await IntegrationAPI.getAccountIntegrations()
+        console.log('[ProductsPage] ✅ Loaded integrations:', data.length)
+        setIntegrations(data)
+      } catch (error) {
+        console.error('[ProductsPage] ❌ Error loading integrations:', error)
+        setIntegrations([]) // Set empty array on error
+      } finally {
+        setLoadingIntegrations(false)
+      }
+    }
+
+    loadIntegrations()
+  }, [accountId])
 
   // General product sync hook (works with ALL integrations)
   const {
@@ -140,7 +167,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     hasIntegrations,
     integrationCount,
     getSyncStats
-  } = useProductSync(accountId, []) // accountId is guaranteed to be valid here
+  } = useProductSync(accountId, integrations) // ✅ Pass loaded integrations
 
   // Get sync stats
   const [syncStats, setSyncStats] = useState(() => getSyncStats())
@@ -326,7 +353,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     ? 'All Warehouses'
     : 'Unknown Warehouse'
 
-  if (loading) {
+    // ✅ Show loading state while integrations are loading
+    if (loadingIntegrations || loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
@@ -340,8 +368,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
-      {/* Empty State - No Integrations */}
-      {!hasIntegrations && syncStats.totalProducts === 0 && (
+      {/* ✅ UPDATED: No Integrations - Check for integrations properly */}
+      {!hasIntegrations && (
         <div className="mb-6 rounded-lg bg-yellow-50 border border-yellow-200 p-4">
           <div className="flex items-start">
             <div className="flex-shrink-0">

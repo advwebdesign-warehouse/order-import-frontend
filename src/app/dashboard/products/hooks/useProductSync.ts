@@ -1,6 +1,6 @@
 //file path: app/dashboard/products/hooks/useProductSync.ts
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { isEcommerceIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 import type { Integration } from '@/app/dashboard/integrations/types/integrationTypes'
 import { useProducts } from './useProducts'
@@ -19,18 +19,20 @@ export function useProductSync(accountId: string, integrations: Integration[]) {
   const [syncing, setSyncing] = useState(false)
   const [progress, setProgress] = useState<Record<string, SyncProgress>>({})
   const [error, setError] = useState<string | null>(null)
-  const [ecommerceIntegrations, setEcommerceIntegrations] = useState<Integration[]>([])
 
   // Load products from API
   const { products: allProducts } = useProducts()
 
+  // ✅ FIXED: Use useMemo instead of useEffect to prevent infinite loops
   // Filter to connected ecommerce integrations
-  useEffect(() => {
+  const ecommerceIntegrations = useMemo(() => {
+    console.log('[useProductSync] 🔄 Filtering ecommerce integrations from:', integrations.length)
     const ecommerce = integrations.filter(i =>
       isEcommerceIntegration(i) && i.status === 'connected' && i.enabled
     )
-    setEcommerceIntegrations(ecommerce)
-  }, [integrations])
+    console.log('[useProductSync] ✅ Found ecommerce integrations:', ecommerce.length)
+    return ecommerce
+  }, [integrations]) // Only recompute when integrations array changes
 
   /**
    * Generic sync using factory pattern
