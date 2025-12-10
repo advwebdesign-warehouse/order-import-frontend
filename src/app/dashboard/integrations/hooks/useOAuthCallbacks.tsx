@@ -285,7 +285,7 @@ export function useOAuthCallbacks({
         integrationId = `shopify-${integrationStoreId}-${timestamp}`
 
         console.log('[Shopify OAuth] 💾 Saving new integration:', {
-          id: `shopify-${storeIdParam}-${Date.now()}`,
+          id: integrationId,
           storeId: storeIdParam,
           hasStoreUrl: !!shop,
           hasAccessToken: !!accessToken,
@@ -345,9 +345,14 @@ export function useOAuthCallbacks({
             return
           }
 
+          // ✅ CRITICAL FIX: Use result.integration instead of newIntegration
+          // The integration ID may have been updated by the backend
+          const savedIntegration = result.integration || newIntegration
+          console.log('[Shopify OAuth] ✅ Using saved integration with ID:', savedIntegration.id)
+
           // Continue with auto-sync after successful add
-          // ⭐ Pass integration object directly (no race condition!)
-          triggerAutoSync(newIntegration, integrationStoreId)
+          // ✅ Pass savedIntegration (not newIntegration!) to ensure correct ID
+          triggerAutoSync(savedIntegration, integrationStoreId)
         })
 
         // Show initial success notification
