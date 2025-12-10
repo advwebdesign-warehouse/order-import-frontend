@@ -98,62 +98,77 @@ export function useIntegrations() {
    * Now accepts (id, partialData) like callers expect
    * Optimistic update with rollback on error
    */
-  const updateIntegration = async (integrationId: string, partialData: Partial<Integration>) => {
-    // Store previous state for rollback
-    const previousIntegrations = [...integrations]
+   const updateIntegration = async (integrationId: string, partialData: Partial<Integration>, retryCount = 0): Promise<{ success: boolean; message?: string }> => {
+     const MAX_RETRIES = 3
+     const RETRY_DELAY = 100 // 100ms between retries
 
-    try {
-      console.log('[updateIntegration] 🔄 Updating integration:', integrationId)
+     try {
+       console.log('[updateIntegration] 🔄 Updating integration:', integrationId, `(attempt ${retryCount + 1})`)
 
-      // Find the existing integration to merge with partial data
-      const existingIntegration = integrations.find(i => i.id === integrationId)
+       // Use functional update to safely work with latest state
+       let existingIntegration: Integration | undefined
 
-      if (!existingIntegration) {
-        throw new Error(`Integration not found: ${integrationId}`)
-      }
+       setIntegrations(prev => {
+         existingIntegration = prev.find(i => i.id === integrationId)
 
-      // Merge existing with partial data
-      const updatedIntegration = {
-        ...existingIntegration,
-        ...partialData,
-        // Ensure we don't lose nested config if only updating specific config fields
-        config: partialData.config
-          ? { ...existingIntegration.config, ...partialData.config }
-          : existingIntegration.config
-      } as Integration
+         if (!existingIntegration) {
+           console.warn('[updateIntegration] ⚠️ Integration not in state yet:', integrationId)
+           return prev // No change to state yet
+         }
 
-      // Optimistic update
-      const updated = integrations.map(i =>
-        i.id === integrationId ? updatedIntegration : i
-      )
-      setIntegrations(updated)
+         // Merge existing with partial data
+         const updatedIntegration = {
+           ...existingIntegration,
+           ...partialData,
+           config: partialData.config
+             ? { ...existingIntegration.config, ...partialData.config }
+             : existingIntegration.config
+         } as Integration
 
-      // Save to API (send full merged integration)
-      await IntegrationAPI.updateIntegration(integrationId, updatedIntegration)
+         // Optimistic update
+         return prev.map(i => i.id === integrationId ? updatedIntegration : i)
+       })
 
-      console.log('[updateIntegration] ✅ Integration updated successfully')
-      return { success: true }
+       // If integration not found and we haven't exceeded retries, wait and retry
+       if (!existingIntegration && retryCount < MAX_RETRIES) {
+         console.log(`[updateIntegration] ⏳ Retrying in ${RETRY_DELAY}ms... (${retryCount + 1}/${MAX_RETRIES})`)
+         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
+         return updateIntegration(integrationId, partialData, retryCount + 1)
+       }
 
-    } catch (err) {
-      console.error('[updateIntegration] ❌ Error:', err)
+       if (!existingIntegration) {
+         throw new Error(`Integration not found after ${MAX_RETRIES} retries: ${integrationId}`)
+       }
 
-      // Rollback on error
-      setIntegrations(previousIntegrations)
+       // Merge for API call
+       const updatedIntegration = {
+         ...existingIntegration,
+         ...partialData,
+         config: partialData.config
+           ? { ...existingIntegration.config, ...partialData.config }
+           : existingIntegration.config
+       } as Integration
 
-      return {
-        success: false,
-        message: err instanceof Error ? err.message : 'Failed to update integration'
-      }
-    }
-  }
+       // Save to API
+       await IntegrationAPI.updateIntegration(integrationId, updatedIntegration)
+
+       console.log('[updateIntegration] ✅ Integration updated successfully')
+       return { success: true }
+
+     } catch (err) {
+       console.error('[updateIntegration] ❌ Error:', err)
+
+       return {
+         success: false,
+         message: err instanceof Error ? err.message : 'Failed to update integration'
+       }
+     }
+   }
 
   /**
    * Add a new integration
    */
   const addIntegration = async (integration: Integration) => {
-    // Store previous state for rollback
-    const previousIntegrations = [...integrations]
-
     try {
       console.log('[addIntegration] 🔄 Adding integration:', integration.name, 'for store:', integration.storeId)
 
@@ -162,41 +177,45 @@ export function useIntegrations() {
         i => i.name === integration.name && i.storeId === integration.storeId
       )
 
-      let updatedIntegrations: Integration[]
-
       if (existingIndex >= 0) {
         console.log('[addIntegration] ⚠️ Integration already exists, updating instead')
-        // Update existing
-        updatedIntegrations = integrations.map((i, index) =>
+        // Update existing integration
+        const updated = integrations.map((i, index) =>
           index === existingIndex ? { ...i, ...integration } : i
         )
-      } else {
-        // Add new
-        updatedIntegrations = [...integrations, integration]
+        setIntegrations(updated)
+
+        const savedIntegration = await IntegrationAPI.saveIntegration(integration)
+        console.log('[addIntegration] ✅ Integration updated with ID:', savedIntegration.id)
+
+        return { success: true, integration: savedIntegration }
       }
 
-      // Optimistic update
-      setIntegrations(updatedIntegrations)
-
-      // Save to API
+      // ✅ FIX: Save to API FIRST, then add to state with correct ID
       const savedIntegration = await IntegrationAPI.saveIntegration(integration)
-
       console.log('[addIntegration] ✅ Integration saved with ID:', savedIntegration.id)
 
-      // Update with the actual ID from API
-      const finalIntegrations = updatedIntegrations.map(i =>
-        i === integration ? { ...integration, id: savedIntegration.id } as Integration : i
-      )
-      setIntegrations(finalIntegrations)
+      // Now add to state with the correct ID from backend
+      const integrationWithCorrectId = { ...integration, id: savedIntegration.id } as Integration
 
-      return { success: true, integration: savedIntegration }
+      // Use functional update to ensure we have latest state
+      setIntegrations(prev => {
+        // Double-check it's not already there
+        const exists = prev.find(i => i.id === savedIntegration.id)
+        if (exists) {
+          console.log('[addIntegration] ⚠️ Integration already in state, updating')
+          return prev.map(i => i.id === savedIntegration.id ? integrationWithCorrectId : i)
+        }
+        return [...prev, integrationWithCorrectId]
+      })
+
+      console.log('[addIntegration] ✅ Added to state with ID:', savedIntegration.id)
+
+      // ✅ Return the integration with correct ID
+      return { success: true, integration: integrationWithCorrectId }
 
     } catch (err) {
       console.error('[addIntegration] ❌ Error:', err)
-
-      // Rollback on error
-      setIntegrations(previousIntegrations)
-
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Failed to add integration'

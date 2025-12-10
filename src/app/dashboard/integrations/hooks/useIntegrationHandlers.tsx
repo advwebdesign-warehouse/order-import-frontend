@@ -39,7 +39,6 @@ export function useIntegrationHandlers({
     data: any,
     modalSetter: (show: boolean) => void
   ) => {
-    const timestamp = Date.now()
 
     // Use integrations array directly
     const existingIntegration = integrations.find(
@@ -85,7 +84,7 @@ export function useIntegrationHandlers({
 
       // Create new integration
       const newIntegration = {
-        id: `${integrationName.toLowerCase()}-${selectedStoreId}-${timestamp}`,
+        id: `${integrationName.toLowerCase()}-${selectedStoreId}`,
         name: integrationName,
         storeId: selectedStoreId,
         accountId: accountId,

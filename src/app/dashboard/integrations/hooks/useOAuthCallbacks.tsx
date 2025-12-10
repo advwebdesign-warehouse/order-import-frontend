@@ -110,7 +110,7 @@ export function useOAuthCallbacks({
       } else {
         console.log('[UPS OAuth] Creating new integration for store:', upsStoreId)
         const newIntegration: UPSIntegration = {
-          id: `ups-${upsStoreId}-${Date.now()}`,
+          id: `ups-${upsStoreId}`,
           name: 'UPS',
           type: 'shipping',
           storeId: upsStoreId,
@@ -281,8 +281,7 @@ export function useOAuthCallbacks({
         console.log('[Shopify OAuth] Updated existing integration:', integrationId)
       } else {
         // Create new integration
-        const timestamp = Date.now()
-        integrationId = `shopify-${integrationStoreId}-${timestamp}`
+        integrationId = `shopify-${integrationStoreId}`
 
         console.log('[Shopify OAuth] 💾 Saving new integration:', {
           id: integrationId,
