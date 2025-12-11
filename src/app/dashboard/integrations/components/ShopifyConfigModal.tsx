@@ -144,7 +144,7 @@ export default function ShopifyConfigModal({
       }
 
       // Build OAuth URL with warehouse config encoded
-      // ✅ FIXED: Use backend API URL instead of relative URL
+      // ✅ Use backend API URL instead of relative URL
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
       const authUrl = `${API_BASE}/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}`
 
@@ -216,6 +216,18 @@ export default function ShopifyConfigModal({
       setTimeout(() => setTestResult(null), 3000)
       return
     }
+
+    // ✅ AUTO-SAVE configuration before syncing
+    console.log('[Shopify Modal] Auto-saving configuration before sync...')
+    const updatedIntegration = applyInventoryConfig(
+      {
+        ...existingIntegration,
+        routingConfig: warehouseConfig
+      } as ShopifyIntegration,
+      inventoryConfig
+    )
+    onSave(updatedIntegration)
+    console.log('[Shopify Modal] ✅ Configuration auto-saved')
 
     setTestResult(null) // Clear previous results
     setSyncStage('starting-sync')
@@ -410,17 +422,6 @@ export default function ShopifyConfigModal({
                                   onChange={setInventoryConfig}
                                   integrationName="Shopify"
                                 />
-                              </div>
-
-                              {/* Save Warehouse Config Button for Existing Integrations */}
-                              <div className="flex justify-end pt-4 border-t border-gray-200">
-                                <button
-                                  type="button"
-                                  onClick={handleSaveWarehouseConfig}
-                                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700"
-                                >
-                                  Save Warehouse Configuration
-                                </button>
                               </div>
                             </div>
                           )}
