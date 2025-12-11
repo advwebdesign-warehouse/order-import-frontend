@@ -59,7 +59,7 @@ export default function ShopifyConfigModal({
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  // ⭐ NEW: Warehouse configuration state
+  // ⭐ Warehouse configuration state
   const [warehouseConfig, setWarehouseConfig] = useState<EcommerceWarehouseConfig>(
     existingIntegration?.routingConfig || {
       mode: 'simple',
@@ -70,7 +70,7 @@ export default function ShopifyConfigModal({
     }
   )
 
-  // ⭐ NEW: Update warehouse config when warehouses change
+  // ⭐ Update warehouse config when warehouses change
   useEffect(() => {
     if (warehouses.length > 0 && !warehouseConfig.primaryWarehouseId) {
       setWarehouseConfig(prev => ({
@@ -203,7 +203,7 @@ export default function ShopifyConfigModal({
     }
   }
 
-  // ✅ NEW: Sync handler implementation
+  // ✅ Sync handler implementation
   const handleSync = async () => {
     if (!onSync) {
       console.warn('[Shopify Modal] No onSync handler provided')
@@ -377,7 +377,7 @@ export default function ShopifyConfigModal({
                             </div>
                             <button
                               type="button"
-                              onClick={() => setShowReconnect(!showReconnect)}
+                              onClick={handleDisconnect}
                               className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Disconnect
@@ -385,7 +385,7 @@ export default function ShopifyConfigModal({
                           </div>
                         </div>
 
-                        {/* ⭐ NEW: Warehouse Configuration Section (Always Shown) */}
+                        {/* ⭐ Warehouse Configuration Section (Always Shown) */}
                         <div className="mb-6">
                           {warehouses.length === 0 ? (
                             <WarehouseRequiredWarning
@@ -704,6 +704,7 @@ export default function ShopifyConfigModal({
                         )}
                       </button>
                     )}
+                    </div>
                   </div>
 
 
@@ -736,7 +737,6 @@ export default function ShopifyConfigModal({
                       </div>
                     </div>
                   )}
-                </div>
                 </div>
               </Dialog.Panel>
             </Transition.Child>
