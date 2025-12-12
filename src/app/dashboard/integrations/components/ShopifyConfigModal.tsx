@@ -4,13 +4,17 @@
 
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { XMarkIcon, CheckCircleIcon, InformationCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import {
+  XMarkIcon,
+  CheckCircleIcon,
+  InformationCircleIcon,
+  ChevronDownIcon
+} from '@heroicons/react/24/outline'
 import {
   ShopifyIntegration,
   EcommerceWarehouseConfig,
-  EcommerceInventoryConfig,
-  getInventoryConfig,
-  setInventoryConfig as applyInventoryConfig
+  SyncDirection,
+  Integration
 } from '../types/integrationTypes'
 import { Warehouse } from '../../warehouses/utils/warehouseTypes'
 import EcommerceWarehouseRouting from './EcommerceWarehouseRouting'
@@ -30,6 +34,7 @@ interface ShopifyConfigModalProps {
   selectedStoreId: string
   selectedStoreName?: string
   warehouses: Warehouse[]
+  allIntegrations?: Integration[]  // ⭐ Use proper Integration union type
   isTesting?: boolean
   isSyncing?: boolean
 }
@@ -44,6 +49,7 @@ export default function ShopifyConfigModal({
   selectedStoreId,
   selectedStoreName = 'this store',
   warehouses,
+  allIntegrations = [],
   isTesting = false,
   isSyncing = false
 }: ShopifyConfigModalProps) {
@@ -68,6 +74,14 @@ export default function ShopifyConfigModal({
       enableRegionRouting: false,
       assignments: []
     }
+  )
+
+  // ⭐ Simplified Inventory sync configuration
+  const [inventorySyncEnabled, setInventorySyncEnabled] = useState(
+    existingIntegration?.inventorySync || false
+  )
+  const [syncDirection, setSyncDirection] = useState<SyncDirection>(
+    existingIntegration?.syncDirection || 'one_way_to'
   )
 
   // ⭐ Update warehouse config when warehouses change
@@ -135,21 +149,25 @@ export default function ShopifyConfigModal({
     setErrors({})
 
     try {
-      // ⭐ CRITICAL: Save warehouse config to integration BEFORE OAuth
-      // This ensures it's available when auto-sync runs after OAuth callback
+      // ⭐ CRITICAL: Save warehouse config AND inventory config to integration BEFORE OAuth
       if (existingIntegration) {
         onSave({
-          routingConfig: warehouseConfig
+          routingConfig: warehouseConfig,
+          inventorySync: inventorySyncEnabled,
+          syncDirection: syncDirection,
+          managesInventory: inventorySyncEnabled
         })
       }
 
       // Build OAuth URL with warehouse config encoded
-      // ✅ Use backend API URL instead of relative URL
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
       const authUrl = `${API_BASE}/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}`
 
-      console.log('[Shopify Modal] Redirecting to OAuth with warehouse config:', warehouseConfig)
-      console.log('[Shopify Modal] OAuth URL:', authUrl)
+      console.log('[Shopify Modal] Redirecting to OAuth with configs:', {
+        warehouseConfig,
+        inventorySync: inventorySyncEnabled,
+        syncDirection
+      })
 
       // Redirect to OAuth - sync will happen automatically after connection
       window.location.href = authUrl
@@ -185,7 +203,6 @@ export default function ShopifyConfigModal({
       const result = await onTest()
       setTestResult(result)
 
-      // Auto-dismiss after 5 seconds
       setTimeout(() => {
         setTestResult(null)
       }, 5000)
@@ -196,7 +213,6 @@ export default function ShopifyConfigModal({
         message: error.message || 'Connection test failed'
       })
 
-      // Auto-dismiss after 5 seconds
       setTimeout(() => {
         setTestResult(null)
       }, 5000)
@@ -219,21 +235,23 @@ export default function ShopifyConfigModal({
 
     // ✅ AUTO-SAVE configuration before syncing
     console.log('[Shopify Modal] Auto-saving configuration before sync...')
-    const updatedIntegration = applyInventoryConfig(
-      {
-        ...existingIntegration,
-        routingConfig: warehouseConfig
-      } as ShopifyIntegration,
-      inventoryConfig
-    )
+    const updatedIntegration: Partial<ShopifyIntegration> = {
+      ...existingIntegration,
+      routingConfig: warehouseConfig,
+      inventorySync: inventorySyncEnabled,
+      syncDirection: syncDirection,
+      managesInventory: inventorySyncEnabled
+    }
     onSave(updatedIntegration)
-    console.log('[Shopify Modal] ✅ Configuration auto-saved')
+    console.log('[Shopify Modal] ✅ Configuration auto-saved:', {
+      inventorySync: inventorySyncEnabled,
+      syncDirection
+    })
 
     setTestResult(null) // Clear previous results
     setSyncStage('starting-sync')
 
     try {
-      // Call onSync with a callback to update stages
       await onSync((stage: 'starting' | 'products' | 'orders' | 'complete') => {
         if (stage === 'starting') {
           setSyncStage('starting-sync')
@@ -246,12 +264,10 @@ export default function ShopifyConfigModal({
         }
       })
 
-      // If no callback was used, just show success
       if (syncStage === 'starting-sync') {
         setSyncStage('success')
       }
 
-      // Keep success message visible for 2 seconds
       setTimeout(() => {
         setSyncStage('idle')
       }, 2000)
@@ -263,47 +279,11 @@ export default function ShopifyConfigModal({
       })
       setSyncStage('idle')
 
-      // Auto-dismiss after 5 seconds
       setTimeout(() => {
         setTestResult(null)
       }, 5000)
     }
   }
-
-  // ✅ Save configuration using helper function
-    const handleSaveWarehouseConfig = () => {
-      console.log('[Shopify Modal] Saving configuration...')
-
-      // Use helper to properly merge inventory config
-      const updatedIntegration = applyInventoryConfig(
-        {
-          ...existingIntegration,
-          routingConfig: warehouseConfig
-        } as ShopifyIntegration,
-        inventoryConfig
-      )
-
-      onSave(updatedIntegration)
-
-      console.log('[Shopify Modal] ✅ Configuration saved:', {
-        routingConfig: warehouseConfig,
-        inventoryConfig
-      })
-    }
-
-  // ✅ Inventory Sync Configuration (using reusable component)
-  const [inventoryConfig, setInventoryConfig] = useState<EcommerceInventoryConfig>(
-    existingIntegration
-      ? getInventoryConfig(existingIntegration)
-      : {
-          productImport: {
-            mode: 'products_only',
-            primaryWarehouseId: warehouses[0]?.id || ''
-          },
-          managesInventory: false,
-          syncDirection: 'one_way_to'
-        }
-  )
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
@@ -338,7 +318,7 @@ export default function ShopifyConfigModal({
                     <div className="flex items-center space-x-3">
                     <img
                       src="/logos/shopify-logo.svg"
-                      alt="USPS"
+                      alt="Shopify"
                       className="w-20 h-10"
                     />
                     <div className="text-left">
@@ -414,13 +394,18 @@ export default function ShopifyConfigModal({
                                 onChange={setWarehouseConfig}
                               />
 
-                              {/* Step 2: Inventory Sync */}
+                              {/* ⭐ Product & Inventory Sync - Uses proper Integration[] type */}
                               <div className="border-t border-gray-200 pt-6">
-                                <EcommerceInventorySync
-                                  inventoryConfig={inventoryConfig}
-                                  warehouses={warehouses}
-                                  onChange={setInventoryConfig}
-                                  integrationName="Shopify"
+                              <EcommerceInventorySync
+                                inventorySyncEnabled={inventorySyncEnabled}
+                                syncDirection={syncDirection}
+                                onInventorySyncChange={setInventorySyncEnabled}
+                                onSyncDirectionChange={setSyncDirection}
+                                integrationName="Shopify"
+                                primaryWarehouseId={warehouseConfig.primaryWarehouseId}
+                                warehouses={warehouses}
+                                allIntegrations={allIntegrations}
+                                currentIntegrationId={existingIntegration?.id}
                                 />
                               </div>
                             </div>
@@ -528,14 +513,19 @@ export default function ShopifyConfigModal({
                             onChange={setWarehouseConfig}
                           />
 
-                          {/* Step 2: Inventory Sync */}
+                            {/* ⭐ Product & Inventory Sync - Uses proper Integration[] type */}
                           <div className="border-t border-gray-200 pt-6">
                             <EcommerceInventorySync
-                              inventoryConfig={inventoryConfig}
-                              warehouses={warehouses}
-                              onChange={setInventoryConfig}
+                              inventorySyncEnabled={inventorySyncEnabled}
+                              syncDirection={syncDirection}
+                              onInventorySyncChange={setInventorySyncEnabled}
+                              onSyncDirectionChange={setSyncDirection}
                               integrationName="Shopify"
-                              />
+                              primaryWarehouseId={warehouseConfig.primaryWarehouseId}
+                              warehouses={warehouses}
+                              allIntegrations={allIntegrations}
+                              currentIntegrationId={existingIntegration?.id}
+                            />
                           </div>
 
                           {errors.warehouse && (

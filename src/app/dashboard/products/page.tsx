@@ -1,4 +1,5 @@
 // File: app/dashboard/products/page.tsx
+// ✅ UPDATED: Added stores loading and passing to ProductsTable
 
 'use client'
 
@@ -25,6 +26,9 @@ import { withAuth } from '../shared/components/withAuth'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
+
+// ✅ NEW: Store support
+import { useStores } from '../stores/hooks/useStores'
 
 // Utils
 import { exportToCSV, ExportableItem } from '../shared/utils/csvExporter'
@@ -67,6 +71,10 @@ const exportProductsToCSV = (
           return product.visibility || ''
         case 'type':
           return product.type || ''
+        case 'platform':
+          return product.platform || ''
+        case 'store':
+          return product.storeId || ''
         case 'stockStatus':
           return isStockManagementEnabled ? (product.stockStatus || '').replace('_', ' ') : ''
         case 'stockQuantity':
@@ -183,6 +191,9 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
 
   // Warehouse management
   const { warehouses } = useWarehouses()
+
+  // ✅ NEW: Store management
+  const { stores } = useStores()
 
   // Custom hooks for state management
   const { products, loading, refetchProducts } = useProducts(selectedWarehouseId)
@@ -629,6 +640,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             onEditProduct={handleEditProduct}
             onDuplicateProduct={handleDuplicateProduct}
             onColumnReorder={handleColumnReorder}
+            stores={stores} // ✅ NEW: Pass stores to ProductsTable
           />
 
           <ProductsPagination

@@ -30,6 +30,7 @@ export const VISIBILITY_COLORS = {
   search: 'bg-purple-100 text-purple-800',
 } as const
 
+// ✅ UPDATED: Added platform and store columns (visible by default)
 export const DEFAULT_PRODUCT_COLUMNS: ProductColumnConfig[] = [
   { id: 'select', field: 'select', label: '', sortable: false, visible: true },
   { id: 'image', field: 'image', label: 'Image', sortable: false, visible: true },
@@ -37,6 +38,8 @@ export const DEFAULT_PRODUCT_COLUMNS: ProductColumnConfig[] = [
   { id: 'name', field: 'name', label: 'Product Name', sortable: true, visible: true },
   { id: 'type', field: 'type', label: 'Type', sortable: true, visible: true },
   { id: 'status', field: 'status', label: 'Status', sortable: true, visible: true },
+  { id: 'platform', field: 'platform', label: 'Platform', sortable: true, visible: true },
+  { id: 'store', field: 'store', label: 'Store', sortable: true, visible: true },
   { id: 'stockStatus', field: 'stockStatus', label: 'Stock', sortable: true, visible: true },
   { id: 'stockQuantity', field: 'stockQuantity', label: 'Quantity', sortable: true, visible: true },
   { id: 'price', field: 'price', label: 'Price', sortable: true, visible: true },

@@ -46,10 +46,13 @@ import {
   getStockLevel,
   formatStockStatus,
   formatProductType,
-  formatVisibility
+  formatVisibility,
+  getStoreName
 } from '../utils/productUtils'
 import { useSettings } from '../../shared/hooks/useSettings'
+import { Store } from '../../stores/utils/storeTypes'
 
+// ✅ UPDATED: Added stores prop
 interface ProductsTableProps {
   products: Product[]
   columns: ProductColumnConfig[]
@@ -62,6 +65,7 @@ interface ProductsTableProps {
   onEditProduct: (product: Product) => void
   onDuplicateProduct: (product: Product) => void
   onColumnReorder: (columns: ProductColumnConfig[]) => void
+  stores?: Store[] // ✅ NEW: Added stores for rendering store names
 }
 
 export default function ProductsTable({
@@ -75,7 +79,8 @@ export default function ProductsTable({
   onViewProduct,
   onEditProduct,
   onDuplicateProduct,
-  onColumnReorder
+  onColumnReorder.
+  stores = [] // ✅ NEW: Default empty array
 }: ProductsTableProps) {
   const { settings } = useSettings()
   const isStockManagementEnabled = settings.inventory.manageStock
@@ -290,6 +295,32 @@ export default function ProductsTable({
             {formatVisibility(product.visibility)}
           </span>
         )
+
+        // ✅ NEW: Platform column
+        case 'platform':
+          return (
+            <div className="text-sm">
+              {product.platform ? (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {product.platform}
+                </span>
+              ) : (
+                <span className="text-gray-400">-</span>
+              )}
+            </div>
+          )
+
+        // ✅ NEW: Store column
+        case 'store':
+          return (
+            <div className="text-sm text-gray-700">
+              {product.storeId ? (
+                getStoreName(product.storeId, stores)
+              ) : (
+                <span className="text-gray-400">-</span>
+              )}
+            </div>
+          )
 
       // Stock-related columns - only render if stock management is enabled
       case 'stockStatus':

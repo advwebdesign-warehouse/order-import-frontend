@@ -4,10 +4,8 @@
 
 import {
   ArrowDownTrayIcon,
-  PlusIcon,
-  EllipsisVerticalIcon
+  PlusIcon
 } from '@heroicons/react/24/outline'
-import { useState, useRef, useEffect } from 'react'
 import { ProductColumnConfig } from '../utils/productTypes'
 import ColumnSettings from '../../shared/components/ColumnSettings'
 
@@ -32,26 +30,6 @@ export default function ProductsToolbar({
   totalProducts,
   filteredProducts
 }: ProductsToolbarProps) {
-  const [showBulkActions, setShowBulkActions] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowBulkActions(false)
-      }
-    }
-
-    if (showBulkActions) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showBulkActions])
-
   return (
     <div className="sm:flex sm:items-center">
       <div className="sm:flex-auto">
@@ -69,59 +47,12 @@ export default function ProductsToolbar({
       <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none flex gap-2">
         {/* Bulk Actions Dropdown */}
         {selectedProductsCount > 0 && (
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setShowBulkActions(!showBulkActions)}
-              className="inline-flex items-center gap-x-2 rounded-md bg-orange-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-            >
-              <EllipsisVerticalIcon className="h-4 w-4" />
-              Bulk Actions ({selectedProductsCount})
-            </button>
-
-            {showBulkActions && (
-              <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      onBulkAction('activate')
-                      setShowBulkActions(false)
-                    }}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Activate Products
-                  </button>
-                  <button
-                    onClick={() => {
-                      onBulkAction('deactivate')
-                      setShowBulkActions(false)
-                    }}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Deactivate Products
-                  </button>
-                  <button
-                    onClick={() => {
-                      onBulkAction('export')
-                      setShowBulkActions(false)
-                    }}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Export Selected
-                  </button>
-                  <hr className="my-1" />
-                  <button
-                    onClick={() => {
-                      onBulkAction('delete')
-                      setShowBulkActions(false)
-                    }}
-                    className="block w-full px-4 py-2 text-left text-sm text-red-700 hover:bg-red-50"
-                  >
-                    Delete Products
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => onBulkAction('delete')}
+            className="inline-flex items-center gap-x-2 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+          >
+            Delete Products ({selectedProductsCount})
+          </button>
         )}
 
         {/* Add Product Button */}

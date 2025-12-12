@@ -260,6 +260,24 @@ export default function IntegrationCard({
           </div>
         )}
 
+        {/* Last Synced Info - for e-commerce integrations */}
+        {integration.type === 'ecommerce' && integration.lastSyncAt && (
+          <div className="mt-2 flex items-center text-xs">
+            <ArrowPathIcon className="h-3.5 w-3.5 mr-1.5 text-gray-400" />
+            <span className="text-gray-500">Last synced:</span>
+            <span className="ml-1 font-medium text-gray-700">
+              {new Date(integration.lastSyncAt).toLocaleDateString('en-US', {
+                month: 'numeric',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+              })}
+            </span>
+          </div>
+        )}
+
         {/* Test Message */}
         {testMessage && (
           <div className={`mt-3 text-xs font-medium ${

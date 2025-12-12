@@ -98,6 +98,16 @@ export function useProductColumns(products: Product[]) {
           aValue = a.parentName || ''
           bValue = b.parentName || ''
           break
+        // ✅ NEW: Platform sorting
+        case 'platform':
+          aValue = a.platform || ''
+          bValue = b.platform || ''
+          break
+        // ✅ NEW: Store sorting (by storeId)
+        case 'store':
+          aValue = a.storeId || ''
+          bValue = b.storeId || ''
+          break
         case 'price':
           aValue = Number(a.price) || 0
           bValue = Number(b.price) || 0
