@@ -79,7 +79,7 @@ export default function ProductsTable({
   onViewProduct,
   onEditProduct,
   onDuplicateProduct,
-  onColumnReorder.
+  onColumnReorder,
   stores = [] // ✅ NEW: Default empty array
 }: ProductsTableProps) {
   const { settings } = useSettings()

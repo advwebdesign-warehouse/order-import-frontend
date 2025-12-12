@@ -3,7 +3,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Store } from '../utils/storeTypes'
+import { Store } from '@/app/dashboard/stores/utils/storeTypes'
 import { storeApi } from '@/app/services/storeApi'
 
 export function useStores() {

@@ -1,7 +1,7 @@
 //file path: app/dashboard/stores/hooks/useStores.tsx
 
 import { useState, useEffect } from 'react'
-import { Store } from '../utils/storeTypes'
+import { Store } from '@/app/dashboard/stores/utils/storeTypes'
 import { apiRequest } from '@/lib/api/baseApi'
 
 export function useStores() {
