@@ -16,6 +16,8 @@ interface FilterOptions {
   visibilities: string[]
   types: string[]
   stockStatuses: string[]
+  platforms: string[]
+  stores: string[]
 }
 
 interface ProductsFiltersProps {
@@ -50,6 +52,8 @@ export default function ProductsFilters({
     filters.category ||
     filters.vendor ||
     filters.brand ||
+    filters.platform ||
+    filters.storeId ||
     filters.priceMin ||
     filters.priceMax ||
     filters.hasVariants ||
@@ -177,6 +181,24 @@ export default function ProductsFilters({
               label={`Brand: ${filters.brand}`}
               onRemove={() => onFiltersChange({ ...filters, brand: '' })}
               color="emerald"
+            />
+          )}
+
+          {/* ✅ NEW: Platform Filter Badge */}
+          {filters.platform && (
+            <FilterBadge
+              label={`Platform: ${filters.platform}`}
+              onRemove={() => onFiltersChange({ ...filters, platform: '' })}
+              color="stone"
+            />
+          )}
+
+          {/* ✅ NEW: Store Filter Badge */}
+          {filters.storeId && (
+            <FilterBadge
+              label={`Store: ${filters.storeId}`}
+              onRemove={() => onFiltersChange({ ...filters, storeId: '' })}
+              color="slate"
             />
           )}
 
@@ -330,6 +352,37 @@ export default function ProductsFilters({
                 <option value="">All Brands</option>
                 {filterOptions.brands.map(brand => (
                   <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* ✅ NEW: Platform and Store Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
+              <select
+                value={filters.platform || ''}
+                onChange={(e) => onFiltersChange({ ...filters, platform: e.target.value })}
+                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+              >
+                <option value="">All Platforms</option>
+                {filterOptions.platforms.map(platform => (
+                  <option key={platform} value={platform}>{platform}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Store</label>
+              <select
+                value={filters.storeId || ''}
+                onChange={(e) => onFiltersChange({ ...filters, storeId: e.target.value })}
+                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+              >
+                <option value="">All Stores</option>
+                {filterOptions.stores.map(store => (
+                  <option key={store} value={store}>{store}</option>
                 ))}
               </select>
             </div>

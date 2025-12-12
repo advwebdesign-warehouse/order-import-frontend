@@ -30,4 +30,16 @@ export class ProductAPI {
       method: 'DELETE'
     })
   }
+
+  /**
+   * ✅ NEW: Bulk delete multiple products in a single request
+   * @param productIds - Array of product IDs to delete
+   * @returns Object with deletedCount and notFoundCount
+   */
+  static async bulkDeleteProducts(productIds: string[]) {
+    return apiRequest('/products/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ productIds })
+    })
+  }
 }

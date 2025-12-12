@@ -1,5 +1,5 @@
 // File: app/dashboard/products/page.tsx
-// ✅ UPDATED: Added stores loading and passing to ProductsTable
+// ✅ UPDATED: Added actual delete implementation
 
 'use client'
 
@@ -27,7 +27,7 @@ import { withAuth } from '../shared/components/withAuth'
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
 
-// ✅ NEW: Store support
+// ✅ lastSyncAtStore support
 import { useStores } from '../stores/hooks/useStores'
 
 // Utils
@@ -40,6 +40,9 @@ import { PRODUCTS_PER_PAGE } from './constants/productConstants'
 
 // ✅  Import IntegrationAPI and Integration type
 import { IntegrationAPI, Integration } from '@/lib/api/integrationApi'
+
+// ✅ NEW: Import ProductAPI for delete functionality
+import { ProductAPI } from '@/lib/api/productApi'
 
 // Helper function to export products as CSV
 const exportProductsToCSV = (
@@ -136,9 +139,12 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
 
-  // ✅ NEW: Load integrations from API
+  // ✅ lastSyncAtLoad integrations from API
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loadingIntegrations, setLoadingIntegrations] = useState(true)
+
+  // ✅ NEW: State for tracking delete operations
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Get settings for stock management
   const { settings } = useSettings()
@@ -192,7 +198,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   // Warehouse management
   const { warehouses } = useWarehouses()
 
-  // ✅ NEW: Store management
+  // ✅ lastSyncAtStore management
   const { stores } = useStores()
 
   // Custom hooks for state management
@@ -274,7 +280,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     // TODO: Implement product duplication
   }
 
-  const handleBulkAction = (action: string) => {
+  // ✅ UPDATED: Implement bulk delete
+  const handleBulkAction = async (action: string) => {
     if (selectedProducts.size === 0) {
       alert('Please select at least one product.')
       return
@@ -291,13 +298,46 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         // TODO: Bulk deactivate products
         break
       case 'delete':
-        if (confirm(`Are you sure you want to delete ${selectedProducts.size} products?`)) {
-          // TODO: Bulk delete products
+        // ✅ Bulk delete implementation
+        if (confirm(`Are you sure you want to delete ${selectedProducts.size} product${selectedProducts.size > 1 ? 's' : ''}?`)) {
+          await handleDeleteProducts(selectedProductIds)
         }
         break
-      case 'export':
-        handleExport()
-        break
+    }
+  }
+
+  // ✅ UPDATED: Use bulk delete API instead of sequential deletes
+  const handleDeleteProducts = async (productIds: string[]) => {
+    setIsDeleting(true)
+    console.log('[ProductsPage] 🗑️ Starting bulk delete for', productIds.length, 'products')
+
+    try {
+      // ✅ Single API call to delete all products at once
+      const result = await ProductAPI.bulkDeleteProducts(productIds)
+
+      console.log('[ProductsPage] ✅ Bulk delete result:', result)
+
+      // Refetch products to update the list
+      await refetchProducts()
+
+      // Clear selection
+      clearSelection()
+
+      // Show success message
+      if (result.notFoundCount > 0) {
+        alert(
+          `Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}. ` +
+          `${result.notFoundCount} product${result.notFoundCount > 1 ? 's were' : ' was'} not found.`
+        )
+      } else {
+        alert(`Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}!`)
+      }
+
+    } catch (error) {
+      console.error('[ProductsPage] ❌ Error during bulk delete:', error)
+      alert('An error occurred while deleting products. Please try again.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -306,7 +346,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       ? sortedProducts.filter(product => selectedProducts.has(product.id))
       : sortedProducts
 
-    exportProductsToCSV(productsToExport, columns.filter(col => col.visible), isStockManagementEnabled, warehouses)  // FIXED: Added third parameter
+    exportProductsToCSV(productsToExport, columns.filter(col => col.visible), isStockManagementEnabled, warehouses)
   }
 
   const handleResetLayout = () => {
@@ -604,6 +644,18 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         </div>
       )}
 
+      {/* ✅ NEW: Show deleting indicator */}
+      {isDeleting && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
+          <div className="flex items-center">
+            <div className="animate-spin h-5 w-5 border-2 border-red-600 border-t-transparent rounded-full mr-3"></div>
+            <p className="text-sm font-medium text-red-900">
+              Deleting {selectedProducts.size} product{selectedProducts.size > 1 ? 's' : ''}...
+            </p>
+          </div>
+        </div>
+      )}
+
       {products.length > 0 && (
         <>
           <ProductsToolbar
@@ -640,7 +692,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             onEditProduct={handleEditProduct}
             onDuplicateProduct={handleDuplicateProduct}
             onColumnReorder={handleColumnReorder}
-            stores={stores} // ✅ NEW: Pass stores to ProductsTable
+            stores={stores}
           />
 
           <ProductsPagination

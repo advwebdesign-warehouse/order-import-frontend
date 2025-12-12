@@ -78,6 +78,8 @@ export const DEFAULT_PRODUCT_FILTERS: ProductFilterState = {
   parentOnly: false,
   includeVariants: true,
   warehouseId: '',
+  platform: '',
+  storeId: '',
 }
 
 export const DEFAULT_PRODUCT_SORT: ProductSortState = {

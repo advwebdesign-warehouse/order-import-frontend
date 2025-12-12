@@ -65,6 +65,12 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
         product.warehouseStock?.some(stock => stock.warehouseId === filters.warehouseId) ||
         false
 
+      // ✅ NEW: Platform filtering
+      const matchesPlatform = filters.platform === '' || product.platform === filters.platform
+
+      // ✅ NEW: Store filtering
+      const matchesStore = filters.storeId === '' || product.storeId === filters.storeId
+
       // Price range filtering
       let matchesPriceRange = true
       if (filters.priceMin && !isNaN(parseFloat(filters.priceMin))) {
@@ -106,6 +112,8 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
              matchesVendor &&
              matchesBrand &&
              matchesWarehouse &&
+             matchesPlatform &&
+             matchesStore &&
              matchesPriceRange &&
              matchesTags &&
              matchesHasVariants &&
@@ -124,8 +132,9 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
       statuses: ['active', 'inactive', 'draft', 'archived'],
       visibilities: ['visible', 'hidden', 'catalog', 'search'],
       types: ['simple', 'variant', 'bundle', 'configurable'],
-      // Only include stock statuses if stock management is enabled
-      stockStatuses: isStockManagementEnabled ? ['in_stock', 'out_of_stock', 'low_stock', 'backorder'] : []
+      stockStatuses: isStockManagementEnabled ? ['in_stock', 'out_of_stock', 'low_stock', 'backorder'] : [],
+      platforms: Array.from(new Set(products.map(p => p.platform).filter((v): v is string => Boolean(v)))),
+      stores: Array.from(new Set(products.map(p => p.storeId).filter((v): v is string => Boolean(v)))),
     }
   }, [products, warehouses, isStockManagementEnabled])
 
@@ -167,6 +176,8 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
     if (filters.vendor) count++
     if (filters.brand) count++
     if (filters.warehouseId) count++
+    if (filters.platform) count++
+    if (filters.storeId) count++
     if (filters.priceMin || filters.priceMax) count++
     if (filters.hasVariants) count++
     if (filters.parentOnly) count++
