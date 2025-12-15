@@ -17,7 +17,7 @@ interface FilterOptions {
   types: string[]
   stockStatuses: string[]
   platforms: string[]
-  stores: string[]
+  stores: Array<{ id: string; name: string }>
 }
 
 interface ProductsFiltersProps {
@@ -60,6 +60,12 @@ export default function ProductsFilters({
     filters.parentOnly ||
     !filters.includeVariants ||
     filters.tags.length > 0
+
+    // ✅ NEW: Helper to get store name from ID
+    const getStoreName = (storeId: string) => {
+      const store = filterOptions.stores.find(s => s.id === storeId)
+      return store?.name || storeId
+    }
 
   return (
     <div className="mt-8">
@@ -193,10 +199,10 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* ✅ NEW: Store Filter Badge */}
+          {/* ✅ UPDATED: Store Filter Badge - Show store name */}
           {filters.storeId && (
             <FilterBadge
-              label={`Store: ${filters.storeId}`}
+              label={`Store: ${getStoreName(filters.storeId)}`}
               onRemove={() => onFiltersChange({ ...filters, storeId: '' })}
               color="slate"
             />
@@ -357,7 +363,7 @@ export default function ProductsFilters({
             </div>
           </div>
 
-          {/* ✅ NEW: Platform and Store Row */}
+          {/* Platform and Store Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
@@ -380,10 +386,11 @@ export default function ProductsFilters({
                 onChange={(e) => onFiltersChange({ ...filters, storeId: e.target.value })}
                 className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               >
-                <option value="">All Stores</option>
-                {filterOptions.stores.map(store => (
-                  <option key={store} value={store}>{store}</option>
-                ))}
+              <option value="">All Stores</option>
+              {/* ✅ UPDATED: Show store name, but use store ID as value */}
+              {filterOptions.stores.map(store => (
+                <option key={store.id} value={store.id}>{store.name}</option>
+              ))}
               </select>
             </div>
           </div>

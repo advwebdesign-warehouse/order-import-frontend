@@ -5,9 +5,10 @@ import { Product, ProductFilterState } from '../utils/productTypes'
 import { DEFAULT_PRODUCT_FILTERS } from '../constants/productConstants'
 import { useSettings } from '../../shared/hooks/useSettings'
 import { Warehouse } from '../../warehouses/utils/warehouseTypes'
+import { Store } from '../../stores/utils/storeTypes'
 import { getUniqueWarehousesFromProducts } from '../utils/productUtils'
 
-export function useProductFilters(products: Product[], warehouses: Warehouse[] = []) {
+export function useProductFilters(products: Product[], warehouses: Warehouse[] = [], stores: Store[] = []) {
   const { settings } = useSettings()
   const [searchTerm, setSearchTerm] = useState('')
   const [showFilters, setShowFilters] = useState(false)
@@ -121,6 +122,19 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
     })
   }, [products, searchTerm, filters, isStockManagementEnabled])
 
+  // ✅ UPDATED: Get unique stores with names from products
+  const getUniqueStoresFromProducts = useMemo(() => {
+    const uniqueStoreIds = Array.from(new Set(products.map(p => p.storeId).filter((v): v is string => Boolean(v))))
+
+    return uniqueStoreIds.map(storeId => {
+      const store = stores.find(s => s.id === storeId)
+      return {
+        id: storeId,
+        name: store?.storeName || storeId // Fallback to ID if name not found
+      }
+    })
+  }, [products, stores])
+
   // Get unique values for filter dropdowns - Fixed with Array.from() for Vercel compatibility
   const filterOptions = useMemo(() => {
     return {
@@ -134,9 +148,9 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
       types: ['simple', 'variant', 'bundle', 'configurable'],
       stockStatuses: isStockManagementEnabled ? ['in_stock', 'out_of_stock', 'low_stock', 'backorder'] : [],
       platforms: Array.from(new Set(products.map(p => p.platform).filter((v): v is string => Boolean(v)))),
-      stores: Array.from(new Set(products.map(p => p.storeId).filter((v): v is string => Boolean(v)))),
+      stores: getUniqueStoresFromProducts,
     }
-  }, [products, warehouses, isStockManagementEnabled])
+  }, [products, warehouses, isStockManagementEnabled, getUniqueStoresFromProducts])
 
   // Helper function to reset filters to defaults
   const resetFilters = () => {

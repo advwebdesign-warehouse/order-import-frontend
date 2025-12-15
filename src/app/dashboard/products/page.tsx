@@ -1,5 +1,5 @@
 // File: app/dashboard/products/page.tsx
-// ✅ UPDATED: Added actual delete implementation
+// ✅ lastSyncAtAdded actual delete implementation
 
 'use client'
 
@@ -36,12 +36,11 @@ import { getProductWarehouseNames } from './utils/productUtils'
 
 // Types
 import { Product } from './utils/productTypes'
-import { PRODUCTS_PER_PAGE } from './constants/productConstants'
 
 // ✅  Import IntegrationAPI and Integration type
 import { IntegrationAPI, Integration } from '@/lib/api/integrationApi'
 
-// ✅ NEW: Import ProductAPI for delete functionality
+// ✅ lastSyncAtImport ProductAPI for delete functionality
 import { ProductAPI } from '@/lib/api/productApi'
 
 // Helper function to export products as CSV
@@ -143,12 +142,19 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loadingIntegrations, setLoadingIntegrations] = useState(true)
 
-  // ✅ NEW: State for tracking delete operations
+  // ✅ lastSyncAtState for tracking delete operations
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteMessage, setDeleteMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
+  // ✅ lastSyncAtState for custom confirmation modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [productsToDelete, setProductsToDelete] = useState<string[]>([])
+
+  // ✅ lastSyncAtState for screen options panel
+  const [optionsOpen, setOptionsOpen] = useState(false)
 
   // Get settings for stock management
   const { settings } = useSettings()
-  const isStockManagementEnabled = settings?.inventory?.manageStock || false
 
   // ✅ Load integrations on mount
   useEffect(() => {
@@ -212,8 +218,10 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     filters,
     setFilters,
     filteredProducts,
-    filterOptions
-  } = useProductFilters(products)
+    filterOptions,
+    resetFilters,
+    getActiveFilterCount
+  } = useProductFilters(products, warehouses, stores)
 
   const {
     selectedProducts,
@@ -229,15 +237,16 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     handleSort,
     handleColumnVisibilityChange,
     handleColumnReorder,
-    resetToDefaults
+    resetToDefaults,
+    isStockManagementEnabled
   } = useProductColumns(filteredProducts)
 
   const { productsPerPage, setProductsPerPage } = usePagination()
 
   // Pagination
-  const totalPages = Math.ceil(sortedProducts.length / PRODUCTS_PER_PAGE)
-  const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE
-  const endIndex = startIndex + PRODUCTS_PER_PAGE
+  const totalPages = Math.ceil(sortedProducts.length / productsPerPage)
+  const startIndex = (currentPage - 1) * productsPerPage
+  const endIndex = startIndex + productsPerPage
   const currentProducts = sortedProducts.slice(startIndex, endIndex)
 
   // Handle product sync
@@ -280,10 +289,11 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     // TODO: Implement product duplication
   }
 
-  // ✅ UPDATED: Implement bulk delete
+  // ✅ lastSyncAtImplement bulk delete
   const handleBulkAction = async (action: string) => {
     if (selectedProducts.size === 0) {
-      alert('Please select at least one product.')
+      setDeleteMessage({ type: 'error', text: 'Please select at least one product.' })
+      setTimeout(() => setDeleteMessage(null), 3000)
       return
     }
 
@@ -298,46 +308,79 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         // TODO: Bulk deactivate products
         break
       case 'delete':
-        // ✅ Bulk delete implementation
-        if (confirm(`Are you sure you want to delete ${selectedProducts.size} product${selectedProducts.size > 1 ? 's' : ''}?`)) {
-          await handleDeleteProducts(selectedProductIds)
-        }
+        console.log('[ProductsPage] 🗑️ Delete action - showing modal')
+        setProductsToDelete(selectedProductIds)
+        setShowDeleteModal(true)
         break
     }
   }
 
-  // ✅ UPDATED: Use bulk delete API instead of sequential deletes
+  // ✅ Handle confirmed deletion
+  const handleConfirmDelete = async () => {
+    console.log('[ProductsPage] ✅ User confirmed deletion')
+    setShowDeleteModal(false)
+    await handleDeleteProducts(productsToDelete)
+  }
+
+  // ✅ Handle cancel deletion
+  const handleCancelDelete = () => {
+    console.log('[ProductsPage] ❌ User cancelled deletion')
+    setShowDeleteModal(false)
+    setProductsToDelete([])
+  }
+
+  // ✅ lastSyncAtUse bulk delete API instead of sequential deletes
   const handleDeleteProducts = async (productIds: string[]) => {
     setIsDeleting(true)
+    setDeleteMessage(null)
     console.log('[ProductsPage] 🗑️ Starting bulk delete for', productIds.length, 'products')
+    console.log('[ProductsPage] Product IDs to delete:', productIds)
 
     try {
       // ✅ Single API call to delete all products at once
+      console.log('[ProductsPage] Calling ProductAPI.bulkDeleteProducts...')
       const result = await ProductAPI.bulkDeleteProducts(productIds)
 
       console.log('[ProductsPage] ✅ Bulk delete result:', result)
+      console.log('[ProductsPage] Response type:', typeof result)
+      console.log('[ProductsPage] Response keys:', Object.keys(result || {}))
 
       // Refetch products to update the list
+      console.log('[ProductsPage] Refetching products...')
       await refetchProducts()
+      console.log('[ProductsPage] Products refetched successfully')
 
       // Clear selection
       clearSelection()
 
       // Show success message
-      if (result.notFoundCount > 0) {
-        alert(
-          `Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}. ` +
-          `${result.notFoundCount} product${result.notFoundCount > 1 ? 's were' : ' was'} not found.`
-        )
+      if (result.notFoundCount && result.notFoundCount > 0) {
+        const message = `Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}. ${result.notFoundCount} product${result.notFoundCount > 1 ? 's were' : ' was'} not found.`
+        console.log('[ProductsPage] 📝', message)
+        setDeleteMessage({ type: 'success', text: message })
       } else {
-        alert(`Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}!`)
+        const message = `Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}!`
+        console.log('[ProductsPage] 📝', message)
+        setDeleteMessage({ type: 'success', text: message })
       }
+
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => setDeleteMessage(null), 5000)
 
     } catch (error) {
       console.error('[ProductsPage] ❌ Error during bulk delete:', error)
-      alert('An error occurred while deleting products. Please try again.')
+      console.error('[ProductsPage] Error type:', typeof error)
+      console.error('[ProductsPage] Error details:', error)
+
+      const errorMessage = 'An error occurred while deleting products. Please try again.'
+      console.log('[ProductsPage] 📝', errorMessage)
+      setDeleteMessage({ type: 'error', text: errorMessage })
+
+      // Auto-hide error message after 5 seconds
+      setTimeout(() => setDeleteMessage(null), 5000)
     } finally {
       setIsDeleting(false)
+      console.log('[ProductsPage] Delete operation completed')
     }
   }
 
@@ -419,7 +462,54 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
-      {/* ✅ UPDATED: No Integrations - Check for integrations properly */}
+    {/* ✅ DELETE CONFIRMATION MODAL */}
+    {showDeleteModal && (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="flex min-h-screen items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCancelDelete}></div>
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+            <div className="sm:flex sm:items-start">
+              <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
+                <h3 className="text-lg font-semibold leading-6 text-gray-900">
+                  Delete Products
+                </h3>
+                <div className="mt-2">
+                  <p className="text-sm text-gray-500">
+                    Are you sure you want to delete {productsToDelete.length} product{productsToDelete.length > 1 ? 's' : ''}? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="inline-flex w-full justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:w-auto"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelDelete}
+                className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+      {/* ✅ No Integrations - Check for integrations properly */}
       {!hasIntegrations && (
         <div className="mb-6 rounded-lg bg-yellow-50 border border-yellow-200 p-4">
           <div className="flex items-start">
@@ -644,7 +734,33 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         </div>
       )}
 
-      {/* ✅ NEW: Show deleting indicator */}
+      {/* ✅ Success/Error Message Banner */}
+      {deleteMessage && (
+        <div className={`mb-6 rounded-lg border p-4 ${
+          deleteMessage.type === 'success'
+            ? 'bg-green-50 border-green-200'
+            : 'bg-red-50 border-red-200'
+        }`}>
+          <div className="flex items-center">
+            {deleteMessage.type === 'success' ? (
+              <svg className="h-5 w-5 text-green-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5 text-red-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <p className={`text-sm font-medium ${
+              deleteMessage.type === 'success' ? 'text-green-900' : 'text-red-900'
+            }`}>
+              {deleteMessage.text}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ lastSyncAtShow deleting indicator */}
       {isDeleting && (
         <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
           <div className="flex items-center">
@@ -667,6 +783,10 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             onColumnVisibilityChange={handleColumnVisibilityChange}
             totalProducts={products.length}
             filteredProducts={filteredProducts.length}
+            itemsPerPage={productsPerPage}
+            onItemsPerPageChange={setProductsPerPage}
+            optionsOpen={optionsOpen}
+            onOptionsOpenChange={setOptionsOpen}
           />
 
           <ProductsFilters
@@ -699,7 +819,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             currentPage={currentPage}
             totalPages={totalPages}
             totalItems={sortedProducts.length}
-            itemsPerPage={PRODUCTS_PER_PAGE}
+            itemsPerPage={productsPerPage}
             onPageChange={setCurrentPage}
           />
           </>
