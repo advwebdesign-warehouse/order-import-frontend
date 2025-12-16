@@ -18,6 +18,7 @@ import { useProductColumns } from './hooks/useProductColumns'
 import { useProductSync } from './hooks/useProductSync'
 
 // Shared components
+import SelectAllBanner from '../shared/components/SelectAllBanner'
 import { ColumnConfig } from '../shared/components/ColumnSettings'
 import { usePagination } from '../shared/hooks/usePagination'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
@@ -227,6 +228,9 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     selectedProducts,
     handleSelectProduct,
     handleSelectAll,
+    handleSelectAllAcrossPages,
+    areAllCurrentPageSelected,
+    selectAllMode,
     clearSelection
   } = useProductSelection()
 
@@ -799,6 +803,18 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             onClearAllFilters={handleClearAllFilters}
             filterOptions={filterOptions}
           />
+
+          {/* ✅ Select All Banner - Shows when all current page items are selected */}
+          {areAllCurrentPageSelected(currentProducts) && selectedProducts.size > 0 && (
+            <SelectAllBanner
+              currentPageCount={currentProducts.length}
+              totalCount={filteredProducts.length}
+              allSelected={selectAllMode}
+              onSelectAll={() => handleSelectAllAcrossPages(filteredProducts)}
+              onClear={clearSelection}
+              itemName="products"
+            />
+          )}
 
           <ProductsTable
             products={currentProducts}

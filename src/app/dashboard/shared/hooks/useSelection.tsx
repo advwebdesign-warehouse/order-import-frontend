@@ -1,4 +1,6 @@
-import { useState } from 'react'
+// File path: app/dashboard/shared/hooks/useSelection.tsx
+
+import { useState, useCallback } from 'react'
 
 interface SelectableItem {
   id: string
@@ -6,6 +8,7 @@ interface SelectableItem {
 
 export function useSelection<T extends SelectableItem>() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+  const [selectAllMode, setSelectAllMode] = useState(false) // ✅ NEW: Track if "select all across pages" is active
 
   const handleSelectItem = (itemId: string) => {
     setSelectedItems(prev => {
@@ -17,6 +20,8 @@ export function useSelection<T extends SelectableItem>() {
       }
       return newSelection
     })
+    // ✅ NEW: Disable selectAllMode when manually toggling items
+    setSelectAllMode(false)
   }
 
   const handleSelectAll = (items: T[]) => {
@@ -30,10 +35,21 @@ export function useSelection<T extends SelectableItem>() {
         return new Set(allItemIds)
       }
     })
+    // ✅ NEW: Disable selectAllMode when using page-level select all
+    setSelectAllMode(false)
   }
+
+  // ✅ NEW: Select ALL items across all pages
+  const handleSelectAllAcrossPages = useCallback((allItems: T[]) => {
+    const allIds = new Set(allItems.map(item => item.id))
+    setSelectedItems(allIds)
+    setSelectAllMode(true)
+  }, [])
 
   const clearSelection = () => {
     setSelectedItems(new Set())
+    // ✅ NEW: Also clear selectAllMode
+    setSelectAllMode(false)
   }
 
   const isSelected = (itemId: string) => {
@@ -44,18 +60,36 @@ export function useSelection<T extends SelectableItem>() {
     return items.length > 0 && items.every(item => selectedItems.has(item.id))
   }
 
+  // ✅ NEW: Check if all items on current page are selected (for banner)
+  const areAllCurrentPageSelected = useCallback((currentPageItems: T[]) => {
+    if (currentPageItems.length === 0) return false
+    return currentPageItems.every(item => selectedItems.has(item.id))
+  }, [selectedItems])
+
+  // ✅ NEW: Check if some (but not all) items on current page are selected
+  const areSomeCurrentPageSelected = useCallback((currentPageItems: T[]) => {
+    if (currentPageItems.length === 0) return false
+    const someSelected = currentPageItems.some(item => selectedItems.has(item.id))
+    const allSelected = currentPageItems.every(item => selectedItems.has(item.id))
+    return someSelected && !allSelected
+  }, [selectedItems])
+
   const getSelectedItemIds = () => {
     return Array.from(selectedItems)
   }
 
   const selectItems = (itemIds: string[]) => {
     setSelectedItems(new Set(itemIds))
+    // ✅ NEW: Disable selectAllMode when programmatically setting items
+    setSelectAllMode(false)
   }
 
   const selectItemsByFilter = (items: T[], filterFn: (item: T) => boolean) => {
     const filteredIds = items.filter(filterFn).map(item => item.id)
     // Fixed: Use Array.from() instead of spread operator for Vercel compatibility
     setSelectedItems(prev => new Set([...Array.from(prev), ...filteredIds]))
+    // ✅ NEW: Disable selectAllMode when using filter selection
+    setSelectAllMode(false)
   }
 
   const getSelectedItems = (items: T[]) => {
@@ -82,6 +116,12 @@ export function useSelection<T extends SelectableItem>() {
     selectItemsByFilter,
     getSelectedItems,
     hasSelection,
-    getSelectionCount
+    getSelectionCount,
+
+    // ✅ NEW: SelectAllBanner support
+    selectAllMode,
+    handleSelectAllAcrossPages,
+    areAllCurrentPageSelected,
+    areSomeCurrentPageSelected,
   }
 }
