@@ -49,10 +49,9 @@ import {
   formatVisibility,
   getStoreName
 } from '../utils/productUtils'
-import { useSettings } from '../../shared/hooks/useSettings'
 import { Store } from '../../stores/utils/storeTypes'
 
-// ✅ UPDATED: Added stores prop
+// ✅ lastSyncAtAdded stores prop
 interface ProductsTableProps {
   products: Product[]
   columns: ProductColumnConfig[]
@@ -65,7 +64,7 @@ interface ProductsTableProps {
   onEditProduct: (product: Product) => void
   onDuplicateProduct: (product: Product) => void
   onColumnReorder: (columns: ProductColumnConfig[]) => void
-  stores?: Store[] // ✅ NEW: Added stores for rendering store names
+  stores?: Store[] // ✅ lastSyncAtAdded stores for rendering store names
 }
 
 export default function ProductsTable({
@@ -80,10 +79,8 @@ export default function ProductsTable({
   onEditProduct,
   onDuplicateProduct,
   onColumnReorder,
-  stores = [] // ✅ NEW: Default empty array
+  stores = [] // ✅ lastSyncAtDefault empty array
 }: ProductsTableProps) {
-  const { settings } = useSettings()
-  const isStockManagementEnabled = settings.inventory.manageStock
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -296,7 +293,7 @@ export default function ProductsTable({
           </span>
         )
 
-        // ✅ NEW: Platform column
+        // ✅ lastSyncAtPlatform column
         case 'platform':
           return (
             <div className="text-sm">
@@ -310,7 +307,7 @@ export default function ProductsTable({
             </div>
           )
 
-        // ✅ NEW: Store column
+        // ✅ lastSyncAtStore column
         case 'store':
           return (
             <div className="text-sm text-gray-700">
@@ -324,8 +321,6 @@ export default function ProductsTable({
 
       // Stock-related columns - only render if stock management is enabled
       case 'stockStatus':
-        if (!isStockManagementEnabled) return null
-
         const stockLevel = getStockLevel(product)
         return (
           <div className="flex items-center">
@@ -342,8 +337,6 @@ export default function ProductsTable({
         )
 
       case 'stockQuantity':
-        if (!isStockManagementEnabled) return null
-
         return (
           <div className="text-sm">
             <div className="font-medium text-gray-900">

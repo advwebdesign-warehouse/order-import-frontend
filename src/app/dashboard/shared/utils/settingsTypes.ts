@@ -6,15 +6,6 @@ export interface PaginationSettings {
   showJumpToPage: boolean
 }
 
-export interface InventorySettings {
-  manageStock: boolean
-  trackQuantity: boolean
-  showStockWarnings: boolean
-  lowStockThreshold: number
-  enableBackorders: boolean
-  autoUpdateStock: boolean
-}
-
 export interface TableSettings {
   enableColumnReordering: boolean
   enableColumnResizing: boolean
@@ -59,7 +50,6 @@ export interface PerformanceSettings {
 
 export interface UserSettings {
   pagination: PaginationSettings
-  inventory: InventorySettings
   table: TableSettings
   filters: FilterSettings
   export: ExportSettings
@@ -74,14 +64,6 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
     productsPerPage: 20,
     showPaginationInfo: true,
     showJumpToPage: true
-  },
-  inventory: {
-    manageStock: false,
-    trackQuantity: true,
-    showStockWarnings: true,
-    lowStockThreshold: 10,
-    enableBackorders: false,
-    autoUpdateStock: true
   },
   table: {
     enableColumnReordering: true,

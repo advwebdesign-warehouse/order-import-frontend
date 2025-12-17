@@ -1,4 +1,5 @@
-// app/dashboard/warehouses/components/AddWarehouseModal.tsx
+//file path: app/dashboard/warehouses/components/AddWarehouseModal.tsx
+
 'use client'
 
 import { Fragment, useState, useEffect } from 'react'
@@ -55,7 +56,7 @@ export default function AddWarehouseModal({
     status: 'active' as 'active' | 'inactive',
     isDefault: false,
 
-    // NEW: Add these fields
+    // lastSyncAtAdd these fields
     useDifferentReturnAddress: false,
     returnAddress: {
       name: '',
@@ -96,10 +97,10 @@ export default function AddWarehouseModal({
             email: warehouse.contactInfo.email || ''
           },
           settings: { ...warehouse.settings },
-          status: warehouse.status,
+          status: warehouse.status.toLowerCase() as 'active' | 'inactive',
           isDefault: warehouse.isDefault,
 
-          // NEW: Load return address data
+          // lastSyncAtLoad return address data
           useDifferentReturnAddress: warehouse.useDifferentReturnAddress || false,
           returnAddress: {
             name: warehouse.returnAddress?.name || '',
@@ -195,7 +196,7 @@ export default function AddWarehouseModal({
       newErrors['address.zip'] = 'ZIP/Postal code is required'
     }
 
-    // NEW: Validate return address if different return address is checked
+    // lastSyncAtValidate return address if different return address is checked
     if (formData.useDifferentReturnAddress) {
       if (!formData.returnAddress.name?.trim()) {
         newErrors['returnAddress.name'] = 'Return address name is required'
@@ -238,7 +239,8 @@ export default function AddWarehouseModal({
     try {
       const warehouseData = {
         ...formData,
-        code: formData.code.toUpperCase() // Standardize code format
+        code: formData.code.toUpperCase(), // Standardize code format
+        status: formData.status.toUpperCase() as 'ACTIVE' | 'INACTIVE'
       }
 
       await onSave(warehouseData)
@@ -791,8 +793,8 @@ export default function AddWarehouseModal({
                               <input
                                 type="number"
                                 min="1"
-                                max="10"
-                                value={formData.settings.priority}
+                                max="100"
+                                value={formData.settings.priority || 1}
                                 onChange={(e) => setFormData({
                                   ...formData,
                                   settings: { ...formData.settings, priority: parseInt(e.target.value) || 1 }

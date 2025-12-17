@@ -168,7 +168,7 @@ export default function OrdersFilters({
 
   // Get warehouse options for filter
   const warehouseOptions = warehouses
-    .filter(w => w.status === 'active')
+    .filter(w => w.status === 'ACTIVE')
     .map(warehouse => ({
       value: warehouse.id,
       label: warehouse.name

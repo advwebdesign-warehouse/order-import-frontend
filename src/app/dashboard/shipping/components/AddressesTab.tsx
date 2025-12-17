@@ -14,7 +14,7 @@ interface AddressesTabProps {
 export default function AddressesTab({ selectedWarehouseId }: AddressesTabProps) {
   const { warehouses, loading } = useWarehouses()
 
-  const activeWarehouses = warehouses.filter(w => w.status === 'active')
+  const activeWarehouses = warehouses.filter(w => w.status === 'ACTIVE')
   const displayWarehouses = selectedWarehouseId
     ? activeWarehouses.filter(w => w.id === selectedWarehouseId)
     : activeWarehouses

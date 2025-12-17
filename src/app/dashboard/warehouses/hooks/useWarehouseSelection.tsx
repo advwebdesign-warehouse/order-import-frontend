@@ -19,11 +19,11 @@ export function useWarehouseSelection() {
   }
 
   const selectActiveWarehouses = (warehouses: Warehouse[]) => {
-    selection.selectItemsByFilter(warehouses, warehouse => warehouse.status === 'active')
+    selection.selectItemsByFilter(warehouses, warehouse => warehouse.status === 'ACTIVE')
   }
 
   const selectInactiveWarehouses = (warehouses: Warehouse[]) => {
-    selection.selectItemsByFilter(warehouses, warehouse => warehouse.status === 'inactive')
+    selection.selectItemsByFilter(warehouses, warehouse => warehouse.status === 'INACTIVE')
   }
 
   const selectNonDefaultWarehouses = (warehouses: Warehouse[]) => {

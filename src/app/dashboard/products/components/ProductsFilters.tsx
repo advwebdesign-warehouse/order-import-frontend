@@ -42,13 +42,12 @@ export default function ProductsFilters({
   filterOptions
 }: ProductsFiltersProps) {
   const { settings } = useSettings()
-  const isStockManagementEnabled = settings.inventory.manageStock
 
   const hasActiveFilters = searchTerm ||
     filters.status ||
     filters.visibility ||
     filters.type ||
-    (isStockManagementEnabled && filters.stockStatus) ||
+    filters.stockStatus ||
     filters.category ||
     filters.vendor ||
     filters.brand ||
@@ -61,7 +60,7 @@ export default function ProductsFilters({
     !filters.includeVariants ||
     filters.tags.length > 0
 
-    // ✅ NEW: Helper to get store name from ID
+    // ✅ Helper to get store name from ID
     const getStoreName = (storeId: string) => {
       const store = filterOptions.stores.find(s => s.id === storeId)
       return store?.name || storeId
@@ -95,25 +94,6 @@ export default function ProductsFilters({
           Filters
         </button>
       </div>
-
-      {/* Stock Management Disabled Notice */}
-      {!isStockManagementEnabled && (
-        <div className="mt-3 rounded-md bg-blue-50 p-3">
-          <div className="flex">
-            <div className="ml-3">
-              <p className="text-sm text-blue-700">
-                <strong>Stock management is disabled.</strong> Stock-related filters and columns are hidden.
-                <button
-                  onClick={() => window.location.href = '/dashboard/settings'}
-                  className="ml-1 underline hover:text-blue-900"
-                >
-                  Enable in settings
-                </button>
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Active Filters Display */}
       {hasActiveFilters && (
@@ -156,8 +136,8 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* Stock Status Filter - Only show if stock management is enabled */}
-          {isStockManagementEnabled && filters.stockStatus && (
+          {/* Stock Status Filter */}
+          {filters.stockStatus && (
             <FilterBadge
               label={`Stock: ${filters.stockStatus.replace('_', ' ')}`}
               onRemove={() => onFiltersChange({ ...filters, stockStatus: '' })}
@@ -190,7 +170,7 @@ export default function ProductsFilters({
             />
           )}
 
-          {/* ✅ NEW: Platform Filter Badge */}
+          {/* ✅ Platform Filter Badge */}
           {filters.platform && (
             <FilterBadge
               label={`Platform: ${filters.platform}`}
@@ -300,8 +280,7 @@ export default function ProductsFilters({
               </select>
             </div>
 
-            {/* Stock Status Filter - Only show if stock management is enabled */}
-            {isStockManagementEnabled && (
+            {/* Stock Status Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Stock Status</label>
                 <select
@@ -316,7 +295,6 @@ export default function ProductsFilters({
                   <option value="backorder">Backorder</option>
                 </select>
               </div>
-            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">

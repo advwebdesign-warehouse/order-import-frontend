@@ -6,7 +6,7 @@ export interface Warehouse {
   code: string
   description?: string
   address: WarehouseAddress
-  status: 'active' | 'inactive'
+  status: 'ACTIVE' | 'INACTIVE'
   isDefault: boolean
   contactInfo: WarehouseContact
   settings: WarehouseSettings
@@ -227,4 +227,24 @@ export interface LocationSuggestion {
   distance?: number
   reason: string
   priority: 'high' | 'medium' | 'low'
+}
+
+// ============================================================================
+// STATUS CONVERSION HELPERS
+// ============================================================================
+
+/**
+ * Convert UI status (lowercase) to API status (UPPERCASE)
+ * Use this when sending data to the API
+ */
+export function toApiStatus(status: 'active' | 'inactive'): 'ACTIVE' | 'INACTIVE' {
+  return status.toUpperCase() as 'ACTIVE' | 'INACTIVE'
+}
+
+/**
+ * Convert API status (UPPERCASE) to UI status (lowercase)
+ * Use this when receiving data from the API for display
+ */
+export function toUiStatus(status: 'ACTIVE' | 'INACTIVE'): 'active' | 'inactive' {
+  return status.toLowerCase() as 'active' | 'inactive'
 }

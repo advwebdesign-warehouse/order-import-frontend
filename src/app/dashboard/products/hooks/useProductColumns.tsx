@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Product, ProductColumnConfig, ProductSortState } from '../utils/productTypes'
 import { DEFAULT_PRODUCT_COLUMNS, DEFAULT_PRODUCT_SORT } from '../constants/productConstants'
-import { useSettings } from '../../shared/hooks/useSettings'
 import { useProductPreferences } from './useProductPreferences'
 
 /**
@@ -14,7 +13,6 @@ import { useProductPreferences } from './useProductPreferences'
  * - Synced via API, not localStorage
  */
 export function useProductColumns(products: Product[]) {
-  const { settings } = useSettings()
   const {
     preferences,
     loading: prefsLoading,
@@ -34,19 +32,6 @@ export function useProductColumns(products: Product[]) {
       setSortConfig(preferences.sortConfig)
     }
   }, [preferences, initialized])
-
-  // Filter columns for display based on stock management setting
-  const visibleColumns = useMemo(() => {
-    if (settings.inventory.manageStock) {
-      return columns
-    } else {
-      // Completely hide stock columns from the UI when stock management is disabled
-      return columns.filter(col =>
-        col.field !== 'stockStatus' &&
-        col.field !== 'stockQuantity'
-      )
-    }
-  }, [columns, settings.inventory.manageStock])
 
   // Sort products based on current sort config
   const sortedProducts = useMemo(() => {
@@ -98,12 +83,12 @@ export function useProductColumns(products: Product[]) {
           aValue = a.parentName || ''
           bValue = b.parentName || ''
           break
-        // ✅ NEW: Platform sorting
+        // ✅ Platform sorting
         case 'platform':
           aValue = a.platform || ''
           bValue = b.platform || ''
           break
-        // ✅ NEW: Store sorting (by storeId)
+        // ✅ Store sorting (by storeId)
         case 'store':
           aValue = a.storeId || ''
           bValue = b.storeId || ''
@@ -180,10 +165,6 @@ export function useProductColumns(products: Product[]) {
 
   // Handle sorting - prevent sorting on stock columns when stock management is disabled
   const handleSort = (field: string) => {
-    if (!settings.inventory.manageStock && (field === 'stockStatus' || field === 'stockQuantity')) {
-      return // Don't allow sorting on hidden stock columns
-    }
-
     const newSort: ProductSortState = {
       field,
       direction: sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc'
@@ -195,13 +176,6 @@ export function useProductColumns(products: Product[]) {
 
   // Handle column visibility changes
   const handleColumnVisibilityChange = (columnId: string, visible: boolean) => {
-    // Don't allow hiding/showing stock columns when stock management is disabled
-    const column = columns.find(col => col.id === columnId)
-    if (!settings.inventory.manageStock && column &&
-        (column.field === 'stockStatus' || column.field === 'stockQuantity')) {
-      return
-    }
-
     const newColumns = columns.map(col =>
       col.id === columnId ? { ...col, visible } : col
     )
@@ -218,17 +192,7 @@ export function useProductColumns(products: Product[]) {
 
   // Reset to defaults
   const resetToDefaults = async () => {
-    // Reset columns based on current stock management setting
-    const defaultColumns = settings.inventory.manageStock
-      ? DEFAULT_PRODUCT_COLUMNS
-      : DEFAULT_PRODUCT_COLUMNS.map(column => {
-          if (column.field === 'stockStatus' || column.field === 'stockQuantity') {
-            return { ...column, visible: false }
-          }
-          return column
-        })
-
-    setColumns(defaultColumns)
+    setColumns(DEFAULT_PRODUCT_COLUMNS)
     setSortConfig(DEFAULT_PRODUCT_SORT)
 
     // Reset in API
@@ -236,16 +200,13 @@ export function useProductColumns(products: Product[]) {
   }
 
   return {
-    columns: visibleColumns,
+    columns,
     sortConfig,
     sortedProducts,
     handleSort,
     handleColumnVisibilityChange,
     handleColumnReorder,
     resetToDefaults,
-    // Additional helpers
-    isStockManagementEnabled: settings.inventory.manageStock,
-    stockSettings: settings.inventory,
     isLoading: prefsLoading || !initialized
   }
 }

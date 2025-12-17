@@ -12,7 +12,6 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import { useWarehouses } from '../../context/WarehouseContext'
-import { useSettings } from '../../../shared/hooks/useSettings' // ADDED: Import useSettings
 import { Zone, Aisle, Shelf, Bin, WarehouseLayout } from '../../utils/warehouseTypes'
 
 // Import the new components
@@ -28,14 +27,10 @@ import { DEFAULT_LOCATION_FORMAT } from './utils/layoutConstants'
 
 export default function WarehouseLayoutPage() {
   const params = useParams()
-  const router = useRouter() // ADDED: For redirecting
+  const router = useRouter() // For redirecting
   const warehouseId = params.id as string
   const { warehouses, updateWarehouse } = useWarehouses()
-  const { settings } = useSettings() // ADDED: Get settings
   const warehouse = warehouses.find(w => w.id === warehouseId)
-
-  // ADDED: Check if stock management is enabled
-  const isStockManagementEnabled = settings?.inventory?.manageStock || false
 
   const [activeTab, setActiveTab] = useState<'visual' | 'zones' | 'aisles' | 'settings'>('zones')
 
@@ -64,7 +59,7 @@ export default function WarehouseLayoutPage() {
     return positions
   })
 
-  // Zone dimensions state - NEW
+  // Zone dimensions state -
   const [zoneDimensions, setZoneDimensions] = useState<{[key: string]: {width: number, height: number}}>(() => {
     if (warehouse?.layout?.zoneDimensions) {
       return warehouse.layout.zoneDimensions
@@ -98,14 +93,6 @@ export default function WarehouseLayoutPage() {
   const [selectedShelf, setSelectedShelf] = useState<Shelf | null>(null)
   const [selectedZoneInMap, setSelectedZoneInMap] = useState<string | null>(null)
 
-  // ADDED: Redirect if stock management is disabled
-  useEffect(() => {
-    if (settings && !isStockManagementEnabled && warehouse) {
-      // Redirect to warehouse overview or orders page
-      router.push(`/dashboard/warehouses/${warehouseId}/orders`)
-    }
-  }, [settings, isStockManagementEnabled, warehouse, warehouseId, router])
-
   // Load zones, positions, and dimensions from warehouse when warehouse data changes
   useEffect(() => {
     if (warehouse?.layout?.zones) {
@@ -126,7 +113,7 @@ export default function WarehouseLayoutPage() {
         setZonePositions(positions)
       }
 
-      // Update dimensions if they exist in warehouse data - NEW
+      // Update dimensions if they exist in warehouse data -
       if (warehouse.layout.zoneDimensions) {
         setZoneDimensions(warehouse.layout.zoneDimensions)
       } else {
@@ -161,7 +148,7 @@ export default function WarehouseLayoutPage() {
     await persistZones(zones, positions, zoneDimensions)
   }
 
-  // Zone dimensions handlers - NEW
+  // Zone dimensions handlers -
   const handleZoneDimensionsChange = (dimensions: {[key: string]: {width: number, height: number}}) => {
     // Update local state for live feedback during resizing
     setZoneDimensions(dimensions)
@@ -191,7 +178,7 @@ export default function WarehouseLayoutPage() {
 
       updatedLayout.zones = updatedZones
       updatedLayout.zonePositions = updatedPositions || zonePositions
-      updatedLayout.zoneDimensions = updatedDimensions || zoneDimensions // NEW
+      updatedLayout.zoneDimensions = updatedDimensions || zoneDimensions
       updatedLayout.updatedAt = new Date().toISOString()
 
       await updateWarehouse(warehouseId, {
@@ -550,36 +537,6 @@ export default function WarehouseLayoutPage() {
   }
   layoutStats.emptyBins = layoutStats.totalBins - layoutStats.occupiedBins
   layoutStats.utilizationRate = layoutStats.totalBins > 0 ? Math.round((layoutStats.occupiedBins / layoutStats.totalBins) * 100) : 0
-
-  // ADDED: Show access denied message if stock management is disabled
-  if (!isStockManagementEnabled) {
-    return (
-      <div className="min-h-[400px] flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <ExclamationTriangleIcon className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Stock Management Required</h2>
-          <p className="text-gray-600 mb-6">
-            Warehouse layout management requires stock management to be enabled.
-            Please enable it in the settings to access this feature.
-          </p>
-          <div className="space-y-3">
-            <button
-              onClick={() => router.push('/dashboard/settings')}
-              className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              Go to Settings
-            </button>
-            <button
-              onClick={() => router.push(`/dashboard/warehouses/${warehouseId}/orders`)}
-              className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-            >
-              View Orders Instead
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   if (!warehouse) {
     return (

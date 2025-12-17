@@ -175,14 +175,14 @@ function WarehousesContent() {
     switch (action) {
       case 'activate':
         for (const warehouse of selectedWarehousesList) {
-          await updateWarehouse(warehouse.id, { status: 'active' })
+          await updateWarehouse(warehouse.id, { status: 'ACTIVE' })
         }
         clearSelection()
         break
       case 'deactivate':
         for (const warehouse of selectedWarehousesList) {
           if (!warehouse.isDefault) {
-            await updateWarehouse(warehouse.id, { status: 'inactive' })
+            await updateWarehouse(warehouse.id, { status: 'INACTIVE' })
           }
         }
         clearSelection()

@@ -22,7 +22,6 @@ import SelectAllBanner from '../shared/components/SelectAllBanner'
 import { ColumnConfig } from '../shared/components/ColumnSettings'
 import { usePagination } from '../shared/hooks/usePagination'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
-import { useSettings } from '../shared/hooks/useSettings'
 import { withAuth } from '../shared/components/withAuth'
 
 // Warehouse support
@@ -48,7 +47,6 @@ import { ProductAPI } from '@/lib/api/productApi'
 const exportProductsToCSV = (
   products: Product[],
   columns: ColumnConfig[],
-  isStockManagementEnabled: boolean,
   warehouses: any[]
 ) => {
   const exportColumns = columns.map(column => ({
@@ -79,9 +77,9 @@ const exportProductsToCSV = (
         case 'store':
           return product.storeId || ''
         case 'stockStatus':
-          return isStockManagementEnabled ? (product.stockStatus || '').replace('_', ' ') : ''
+          return (product.stockStatus || '').replace('_', ' ')
         case 'stockQuantity':
-          return isStockManagementEnabled ? (product.stockQuantity || 0).toString() : ''
+          return (product.stockQuantity || 0).toString()
         case 'category':
           return product.category || ''
         case 'vendor':
@@ -122,10 +120,7 @@ const exportProductsToCSV = (
     }
   }))
 
-  const filteredColumns = isStockManagementEnabled
-    ? exportColumns
-    : exportColumns.filter(col => col.field !== 'stockStatus' && col.field !== 'stockQuantity')
-
+  const filteredColumns = exportColumns
   const now = new Date()
   const dateStr = now.toISOString().split('T')[0] // YYYY-MM-DD format
   const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-') // HH-MM-SS format
@@ -153,9 +148,6 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
 
   // ✅ lastSyncAtState for screen options panel
   const [optionsOpen, setOptionsOpen] = useState(false)
-
-  // Get settings for stock management
-  const { settings } = useSettings()
 
   // ✅ Load integrations on mount
   useEffect(() => {
@@ -241,8 +233,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     handleSort,
     handleColumnVisibilityChange,
     handleColumnReorder,
-    resetToDefaults,
-    isStockManagementEnabled
+    resetToDefaults
   } = useProductColumns(filteredProducts)
 
   const { productsPerPage, setProductsPerPage } = usePagination()
@@ -393,7 +384,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       ? sortedProducts.filter(product => selectedProducts.has(product.id))
       : sortedProducts
 
-    exportProductsToCSV(productsToExport, columns.filter(col => col.visible), isStockManagementEnabled, warehouses)
+    exportProductsToCSV(productsToExport, columns.filter(col => col.visible), warehouses)
   }
 
   const handleResetLayout = () => {

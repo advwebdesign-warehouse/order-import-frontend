@@ -1,4 +1,4 @@
-//file path: src/app/services/settingsApi.ts
+//file path: app/services/settingsApi.ts
 
 import { apiRequest } from '@/lib/api/baseApi'
 

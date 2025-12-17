@@ -43,7 +43,7 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
 
       console.log('[WarehouseContext] Loading warehouses from API...')
 
-      // ✅ UPDATED: Fetch from API instead of localStorage
+      // ✅ lastSyncAtFetch from API instead of localStorage
       const warehousesData = await WarehouseAPI.getAllWarehouses()
 
       console.log('[WarehouseContext] ✅ Loaded warehouses:', warehousesData.length)
@@ -63,7 +63,7 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
     try {
       console.log('[WarehouseContext] Creating warehouse:', warehouseData.name)
 
-      // ✅ UPDATED: Create via API
+      // ✅ lastSyncAtCreate via API
       const newWarehouse = await WarehouseAPI.createWarehouse({
         ...warehouseData,
         settings: {
@@ -91,7 +91,7 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
     try {
       console.log('[WarehouseContext] Updating warehouse:', id)
 
-      // ✅ UPDATED: Update via API
+      // ✅ lastSyncAtUpdate via API
       const updatedWarehouse = await WarehouseAPI.updateWarehouse(id, updates)
 
       console.log('[WarehouseContext] ✅ Updated warehouse:', id)
@@ -131,7 +131,7 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
         }
       }
 
-      // ✅ UPDATED: Update via API
+      // ✅ lastSyncAtUpdate via API
       await WarehouseAPI.updateWarehouse(id, { settings: updatedSettings })
 
       console.log('[WarehouseContext] ✅ Updated order settings for warehouse:', id)
@@ -165,7 +165,7 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
 
       console.log('[WarehouseContext] Deleting warehouse:', id)
 
-      // ✅ UPDATED: Delete via API
+      // ✅ lastSyncAtDelete via API
       await WarehouseAPI.deleteWarehouse(id)
 
       console.log('[WarehouseContext] ✅ Deleted warehouse:', id)
@@ -185,7 +185,7 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
 
   // Get active warehouses
   const getActiveWarehouses = (): Warehouse[] => {
-    return warehouses.filter(w => w.status === 'active')
+    return warehouses.filter(w => w.status === 'ACTIVE')
   }
 
   // Refresh warehouses data
