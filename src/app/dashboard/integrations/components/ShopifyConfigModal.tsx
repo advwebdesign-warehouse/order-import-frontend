@@ -65,7 +65,7 @@ export default function ShopifyConfigModal({
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  // ⭐ Warehouse configuration state
+  // ⭐ Warehouse configuration state (from root level per integrationTypes.ts)
   const [warehouseConfig, setWarehouseConfig] = useState<EcommerceWarehouseConfig>(
     existingIntegration?.routingConfig || {
       mode: 'simple',
@@ -76,7 +76,7 @@ export default function ShopifyConfigModal({
     }
   )
 
-  // ⭐ Simplified Inventory sync configuration
+  // ⭐ Inventory sync configuration (from root level per integrationTypes.ts)
   const [inventorySyncEnabled, setInventorySyncEnabled] = useState(
     existingIntegration?.inventorySync || false
   )
@@ -93,6 +93,24 @@ export default function ShopifyConfigModal({
       }))
     }
   }, [warehouses])
+
+  // ⭐ NEW: Reload saved configuration when modal opens (THE KEY FIX!)
+  useEffect(() => {
+    if (isConnected && existingIntegration) {
+      console.log('[Shopify Modal] Reloading saved configuration from root-level fields:', {
+        routingConfig: existingIntegration.routingConfig,
+        inventorySync: existingIntegration.inventorySync,
+        syncDirection: existingIntegration.syncDirection
+      })
+
+      // Load from root-level fields (per integrationTypes.ts)
+      if (existingIntegration.routingConfig) {
+        setWarehouseConfig(existingIntegration.routingConfig)
+      }
+      setInventorySyncEnabled(existingIntegration.inventorySync || false)
+      setSyncDirection(existingIntegration.syncDirection || 'one_way_to')
+    }
+  }, [isConnected, existingIntegration])
 
   // Get stage display information
   const getStageInfo = (stage: SyncStage) => {
@@ -149,7 +167,7 @@ export default function ShopifyConfigModal({
     setErrors({})
 
     try {
-      // ⭐ CRITICAL: Save warehouse config AND inventory config to integration BEFORE OAuth
+      // ⭐ Save warehouse config AND inventory config to ROOT LEVEL before OAuth
       if (existingIntegration) {
         onSave({
           routingConfig: warehouseConfig,

@@ -866,6 +866,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
         }
         selectedStoreId={selectedStoreId}
         warehouses={warehouses}
+        allIntegrations={integrations}
         onTest={() => createModalTestHandler(
           integrations.find((i: Integration) => i.name === 'Shopify' && i.storeId === selectedStoreId)!
         )()}
