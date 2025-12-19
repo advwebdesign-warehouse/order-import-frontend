@@ -38,7 +38,6 @@ export const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'actions', field: 'actions', label: 'Actions', sortable: false, visible: true },
 
   // Hidden columns (available but not shown by default)
-  { id: 'fulfillmentStatus', field: 'fulfillmentStatus', label: 'Fulfillment Status', sortable: true, visible: false },
   { id: 'currency', field: 'currency', label: 'Currency', sortable: true, visible: false },
   { id: 'country', field: 'country', label: 'Country', sortable: true, visible: false },
   { id: 'countryName', field: 'countryName', label: 'Country Name', sortable: true, visible: false },

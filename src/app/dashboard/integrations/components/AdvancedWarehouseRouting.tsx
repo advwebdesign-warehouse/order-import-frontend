@@ -32,6 +32,7 @@ export default function AdvancedWarehouseRouting({
   warehouses,
   onChange
 }: AdvancedWarehouseRoutingProps) {
+
   const [selectedWarehouseToAdd, setSelectedWarehouseToAdd] = useState('')
   const [draggedState, setDraggedState] = useState<string | null>(null)
   const [unassignedStates, setUnassignedStates] = useState<string[]>([])
@@ -52,12 +53,19 @@ export default function AdvancedWarehouseRouting({
 
   // Get the region of a state
   const getStateRegion = (stateCode: string): USRegion => {
-    return US_STATES.find(s => s.code === stateCode)?.region || 'West'
+    return US_STATES.find(s => s.code === stateCode)?.region || 'Mountain'
   }
 
   // Get the region of a warehouse
   const getWarehouseRegion = (warehouse: Warehouse): USRegion => {
-    return US_STATES.find(s => s.code === warehouse.address.state)?.region || 'West'
+    if (!warehouse?.address?.state) {
+      console.warn(`[getWarehouseRegion] ⚠️ Warehouse "${warehouse?.name}" is missing address.state - defaulting to West region`)
+      return 'Mountain'
+    }
+
+    // ✅ FIX: Trim whitespace from state code
+    const stateCode = warehouse.address.state.trim()
+    return US_STATES.find(s => s.code === stateCode)?.region || 'Mountain'
   }
 
   // Calculate distance score between a state and warehouse (lower = closer)
@@ -81,6 +89,7 @@ export default function AdvancedWarehouseRouting({
   }
 
   // Find the closest warehouse for a given state
+  // ✅ Enhanced with priority-based tiebreaking for equal distances
   const findClosestWarehouse = (stateCode: string, warehouseAssignments: WarehouseAssignment[]): string | null => {
     let closestWarehouse: string | null = null
     let lowestScore = Infinity
@@ -90,9 +99,17 @@ export default function AdvancedWarehouseRouting({
       if (!warehouse) return
 
       const score = calculateProximityScore(stateCode, warehouse)
+
+      // If this warehouse is closer, it becomes the closest
       if (score < lowestScore) {
         lowestScore = score
         closestWarehouse = assignment.warehouseId
+      } else if (score === lowestScore && closestWarehouse) {
+        // Tie: use priority (lower priority number wins)
+        const currentAssignment = warehouseAssignments.find(a => a.warehouseId === closestWarehouse)
+        if (currentAssignment && assignment.priority < currentAssignment.priority) {
+          closestWarehouse = assignment.warehouseId
+        }
       }
     })
 
@@ -100,64 +117,50 @@ export default function AdvancedWarehouseRouting({
   }
 
   // Auto-assign states to warehouses based on proximity
+  // ✅ FIXED: Assigns each state to exactly ONE warehouse (no overlaps)
   const handleAutoAssign = () => {
     if (config.assignments.length === 0) return
-
-    // Step 1: Assign states based on warehouse regions
-    const updatedAssignments: WarehouseAssignment[] = config.assignments.map((assignment) => {
-      const warehouse = warehouses.find(w => w.id === assignment.warehouseId)
-      if (!warehouse) return assignment
-
-      const warehouseRegion = getWarehouseRegion(warehouse)
-      const regionStates = US_REGIONS[warehouseRegion as keyof typeof US_REGIONS] || []
-
-      return {
-        ...assignment,
-        regions: [{
-          country: 'United States',
-          countryCode: 'US',
-          states: regionStates
-        }]
-      }
-    })
-
-    // Step 2: Find all unassigned states
-    const assignedStates = new Set<string>()
-    updatedAssignments.forEach(assignment => {
-      assignment.regions.forEach(region => {
-        region.states.forEach(state => assignedStates.add(state))
-      })
-    })
-
     const allUSStates = US_STATES.map(s => s.code)
-    const remainingUnassigned = allUSStates.filter(state => !assignedStates.has(state))
 
-    // Step 3: Assign each remaining state to the closest warehouse
-    const stateToWarehouse: Record<string, string[]> = {}
+    // Single-pass assignment: each state goes to exactly ONE warehouse
+    const stateToWarehouse: Record<string, string> = {}
 
-    remainingUnassigned.forEach(stateCode => {
-      const closestWarehouseId = findClosestWarehouse(stateCode, updatedAssignments)
+    allUSStates.forEach(stateCode => {
+      const closestWarehouseId = findClosestWarehouse(stateCode, config.assignments)
+
       if (closestWarehouseId) {
-        if (!stateToWarehouse[closestWarehouseId]) {
-          stateToWarehouse[closestWarehouseId] = []
+        stateToWarehouse[stateCode] = closestWarehouseId
+
+        // Log first 10 for debugging
+        if (Object.keys(stateToWarehouse).length <= 10) {
+          const warehouse = warehouses.find(w => w.id === closestWarehouseId)
+          console.log(`[Auto-Assign] ${stateCode} → ${warehouse?.name} (priority: ${config.assignments.find(a => a.warehouseId === closestWarehouseId)?.priority})`)
         }
-        stateToWarehouse[closestWarehouseId].push(stateCode)
       }
     })
 
-    // Step 4: Add the proximity-based assignments to each warehouse
-    const finalAssignments = updatedAssignments.map(assignment => {
-      const additionalStates = stateToWarehouse[assignment.warehouseId] || []
+    // Build final assignments
+    const finalAssignments = config.assignments.map(assignment => {
+      const assignedStates = Object.entries(stateToWarehouse)
+        .filter(([state, warehouseId]) => warehouseId === assignment.warehouseId)
+        .map(([state]) => state)
+        .sort()
+
+      console.log(`[Auto-Assign] ${assignment.warehouseName}: ${assignedStates.length} states`)
+
       return {
         ...assignment,
         regions: [{
           country: 'United States',
           countryCode: 'US',
-          states: [...assignment.regions[0].states, ...additionalStates]
+          states: assignedStates
         }]
       }
     })
 
+    console.log('[Auto-Assign] ✅ Complete - states distributed with no overlaps')
+
+    // Update config
     onChange({
       ...config,
       assignments: finalAssignments

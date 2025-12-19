@@ -41,7 +41,7 @@ export function useOrderFilters(orders: Order[]) {
     validateFilterState(DEFAULT_FILTERS_WITH_PRESETS)
   )
 
-  // ✅ NEW: Use backend preferences instead of localStorage
+  // ✅ Use backend preferences instead of localStorage
   const {
     preferences,
     updateField,
@@ -73,7 +73,11 @@ export function useOrderFilters(orders: Order[]) {
     // ✅ Get current value from preferences directly
     const currentValue = preferences?.showOrderFilters ?? false
     const newValue = typeof show === 'function' ? show(currentValue) : show
-    // ...
+
+    // ✅ FIXED: Actually save the new value to backend
+    updateField('showOrderFilters', newValue).catch(err => {
+      console.error('[useOrderFilters] Error saving showOrderFilters:', err)
+    })
   }, [preferences, updateField])
 
   // ✅ Load saved filter settings from backend preferences on mount

@@ -8,6 +8,8 @@ import { XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { Warehouse, DEFAULT_ORDER_STATUS_SETTINGS } from '../utils/warehouseTypes'
 import { generateAddressPreview } from '../utils/addressVariables'
 import { COUNTRIES, DEFAULT_COUNTRY } from '../../shared/utils/countries'
+import { US_STATES } from '../../shared/utils/usStates'
+import { getCitiesByState } from '../../shared/utils/usCities'
 
 interface AddWarehouseModalProps {
   isOpen: boolean
@@ -237,9 +239,29 @@ export default function AddWarehouseModal({
     setIsSubmitting(true)
 
     try {
+      // ✅ Trim all address fields to prevent trailing spaces
       const warehouseData = {
         ...formData,
-        code: formData.code.toUpperCase(), // Standardize code format
+        name: formData.name.trim(),
+        code: formData.code.trim().toUpperCase(), // Standardize code format
+        description: formData.description?.trim() || '',
+        address: {
+          ...formData.address,
+          address1: formData.address.address1.trim(),
+          address2: formData.address.address2?.trim() || '',
+          city: formData.address.city.trim(),
+          state: formData.address.state.trim(),
+          zip: formData.address.zip.trim()
+        },
+        returnAddress: formData.useDifferentReturnAddress ? {
+          ...formData.returnAddress,
+          name: formData.returnAddress.name?.trim() || '',
+          address1: formData.returnAddress.address1?.trim() || '',
+          address2: formData.returnAddress.address2?.trim() || '',
+          city: formData.returnAddress.city?.trim() || '',
+          state: formData.returnAddress.state?.trim() || '',
+          zip: formData.returnAddress.zip?.trim() || ''
+        } : formData.returnAddress,
         status: formData.status.toUpperCase() as 'ACTIVE' | 'INACTIVE'
       }
 
@@ -369,103 +391,7 @@ export default function AddWarehouseModal({
                       <div>
                         <h4 className="text-lg font-medium text-gray-900 mb-4">Address</h4>
                         <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Address Line 1 *
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.address.address1}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                address: { ...formData.address, address1: e.target.value }
-                              })}
-                              className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
-                                errors['address.address1'] ? 'ring-red-300' : 'ring-gray-300'
-                              } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
-                            />
-                            {errors['address.address1'] && (
-                              <p className="mt-1 text-sm text-red-600">{errors['address.address1']}</p>
-                            )}
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Address Line 2
-                            </label>
-                            <input
-                              type="text"
-                              value={formData.address.address2}
-                              onChange={(e) => setFormData({
-                                ...formData,
-                                address: { ...formData.address, address2: e.target.value }
-                              })}
-                              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                City *
-                              </label>
-                              <input
-                                type="text"
-                                value={formData.address.city}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  address: { ...formData.address, city: e.target.value }
-                                })}
-                                className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
-                                  errors['address.city'] ? 'ring-red-300' : 'ring-gray-300'
-                                } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
-                              />
-                              {errors['address.city'] && (
-                                <p className="mt-1 text-sm text-red-600">{errors['address.city']}</p>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                State/Province *
-                              </label>
-                              <input
-                                type="text"
-                                value={formData.address.state}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  address: { ...formData.address, state: e.target.value }
-                                })}
-                                className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
-                                  errors['address.state'] ? 'ring-red-300' : 'ring-gray-300'
-                                } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
-                              />
-                              {errors['address.state'] && (
-                                <p className="mt-1 text-sm text-red-600">{errors['address.state']}</p>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                ZIP/Postal Code *
-                              </label>
-                              <input
-                                type="text"
-                                value={formData.address.zip}
-                                onChange={(e) => setFormData({
-                                  ...formData,
-                                  address: { ...formData.address, zip: e.target.value }
-                                })}
-                                className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
-                                  errors['address.zip'] ? 'ring-red-300' : 'ring-gray-300'
-                                } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
-                              />
-                              {errors['address.zip'] && (
-                                <p className="mt-1 text-sm text-red-600">{errors['address.zip']}</p>
-                              )}
-                            </div>
-                          </div>
-
+                          {/* Country - MOVED TO TOP */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Country *
@@ -486,6 +412,160 @@ export default function AddWarehouseModal({
                                 </option>
                               ))}
                             </select>
+                          </div>
+
+                          {/* State & City - 2 column grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* State/Province - NOW A SELECT */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                State/Province *
+                              </label>
+                              <select
+                                value={formData.address.state}
+                                onChange={(e) => {
+                                  setFormData({
+                                    ...formData,
+                                    address: {
+                                      ...formData.address,
+                                      state: e.target.value.trim(),
+                                      city: '' // Reset city when state changes
+                                    }
+                                  })
+                                }}
+                                className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                  errors['address.state'] ? 'ring-red-300' : 'ring-gray-300'
+                                } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                              >
+                                <option value="">Select a state...</option>
+                                {US_STATES.map((state) => (
+                                  <option key={state.code} value={state.code}>
+                                    {state.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {errors['address.state'] && (
+                                <p className="mt-1 text-sm text-red-600">{errors['address.state']}</p>
+                              )}
+                            </div>
+
+                            {/* City - NOW A SELECT */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                City *
+                              </label>
+                              {formData.address.state ? (
+                                <>
+                                  <select
+                                    value={formData.address.city === 'OTHER' ? 'OTHER' : formData.address.city}
+                                    onChange={(e) => {
+                                      if (e.target.value === 'OTHER') {
+                                        setFormData({
+                                          ...formData,
+                                          address: { ...formData.address, city: 'OTHER' }
+                                        })
+                                      } else {
+                                        setFormData({
+                                          ...formData,
+                                          address: { ...formData.address, city: e.target.value.trim() }
+                                        })
+                                      }
+                                    }}
+                                    className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                      errors['address.city'] ? 'ring-red-300' : 'ring-gray-300'
+                                    } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                                  >
+                                    <option value="">Select a city...</option>
+                                    {getCitiesByState(formData.address.state).map((city) => (
+                                      <option key={city} value={city}>
+                                        {city}
+                                      </option>
+                                    ))}
+                                    <option value="OTHER">Other (type below)</option>
+                                  </select>
+                                  {/* Show text input if "Other" is selected */}
+                                  {formData.address.city === 'OTHER' && (
+                                    <input
+                                      type="text"
+                                      placeholder="Type city name"
+                                      onChange={(e) => setFormData({
+                                        ...formData,
+                                        address: { ...formData.address, city: e.target.value.trim() }
+                                      })}
+                                      className="mt-2 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                                    />
+                                  )}
+                                </>
+                              ) : (
+                                <input
+                                  type="text"
+                                  disabled
+                                  placeholder="Select a state first"
+                                  className="block w-full rounded-md border-0 py-1.5 text-gray-400 bg-gray-50 shadow-sm ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 cursor-not-allowed"
+                                />
+                              )}
+                              {errors['address.city'] && (
+                                <p className="mt-1 text-sm text-red-600">{errors['address.city']}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Address Line 1 */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Address Line 1 *
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.address.address1}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                address: { ...formData.address, address1: e.target.value.trim() }
+                              })}
+                              className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                errors['address.address1'] ? 'ring-red-300' : 'ring-gray-300'
+                              } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                            />
+                            {errors['address.address1'] && (
+                              <p className="mt-1 text-sm text-red-600">{errors['address.address1']}</p>
+                            )}
+                          </div>
+
+                          {/* Address Line 2 */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Address Line 2
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.address.address2}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                address: { ...formData.address, address2: e.target.value.trim() }
+                              })}
+                              className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                            />
+                          </div>
+
+                          {/* ZIP/Postal Code */}
+                          <div className="sm:w-1/2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              ZIP/Postal Code *
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.address.zip}
+                              onChange={(e) => setFormData({
+                                ...formData,
+                                address: { ...formData.address, zip: e.target.value.trim() }
+                              })}
+                              className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                errors['address.zip'] ? 'ring-red-300' : 'ring-gray-300'
+                              } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                            />
+                            {errors['address.zip'] && (
+                              <p className="mt-1 text-sm text-red-600">{errors['address.zip']}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -591,7 +671,7 @@ export default function AddWarehouseModal({
                                 value={formData.returnAddress.address1}
                                 onChange={(e) => setFormData({
                                   ...formData,
-                                  returnAddress: { ...formData.returnAddress, address1: e.target.value }
+                                  returnAddress: { ...formData.returnAddress, address1: e.target.value.trim() }
                                 })}
                                 className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
                                   errors['returnAddress.address1'] ? 'ring-red-300' : 'ring-gray-300'
@@ -611,74 +691,13 @@ export default function AddWarehouseModal({
                                 value={formData.returnAddress.address2}
                                 onChange={(e) => setFormData({
                                   ...formData,
-                                  returnAddress: { ...formData.returnAddress, address2: e.target.value }
+                                  returnAddress: { ...formData.returnAddress, address2: e.target.value.trim() }
                                 })}
                                 className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
                               />
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  City *
-                                </label>
-                                <input
-                                  type="text"
-                                  value={formData.returnAddress.city}
-                                  onChange={(e) => setFormData({
-                                    ...formData,
-                                    returnAddress: { ...formData.returnAddress, city: e.target.value }
-                                  })}
-                                  className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
-                                    errors['returnAddress.city'] ? 'ring-red-300' : 'ring-gray-300'
-                                  } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
-                                />
-                                {errors['returnAddress.city'] && (
-                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.city']}</p>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  State/Province *
-                                </label>
-                                <input
-                                  type="text"
-                                  value={formData.returnAddress.state}
-                                  onChange={(e) => setFormData({
-                                    ...formData,
-                                    returnAddress: { ...formData.returnAddress, state: e.target.value }
-                                  })}
-                                  className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
-                                    errors['returnAddress.state'] ? 'ring-red-300' : 'ring-gray-300'
-                                  } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
-                                />
-                                {errors['returnAddress.state'] && (
-                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.state']}</p>
-                                )}
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  ZIP/Postal Code *
-                                </label>
-                                <input
-                                  type="text"
-                                  value={formData.returnAddress.zip}
-                                  onChange={(e) => setFormData({
-                                    ...formData,
-                                    returnAddress: { ...formData.returnAddress, zip: e.target.value }
-                                  })}
-                                  className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
-                                    errors['returnAddress.zip'] ? 'ring-red-300' : 'ring-gray-300'
-                                  } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
-                                />
-                                {errors['returnAddress.zip'] && (
-                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.zip']}</p>
-                                )}
-                              </div>
-                            </div>
-
+                            {/* Country - MOVED TO TOP */}
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Country *
@@ -706,6 +725,123 @@ export default function AddWarehouseModal({
                                   </option>
                                 ))}
                               </select>
+                            </div>
+
+                            {/* State & City - 2 column grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* State/Province - NOW A SELECT */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  State/Province *
+                                </label>
+                                <select
+                                  value={formData.returnAddress.state}
+                                  onChange={(e) => {
+                                    setFormData({
+                                      ...formData,
+                                      returnAddress: {
+                                        ...formData.returnAddress,
+                                        state: e.target.value.trim(),
+                                        city: '' // Reset city when state changes
+                                      }
+                                    })
+                                  }}
+                                  className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                    errors['returnAddress.state'] ? 'ring-red-300' : 'ring-gray-300'
+                                  } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                                >
+                                  <option value="">Select a state...</option>
+                                  {US_STATES.map((state) => (
+                                    <option key={state.code} value={state.code}>
+                                      {state.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {errors['returnAddress.state'] && (
+                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.state']}</p>
+                                )}
+                              </div>
+
+                              {/* City - NOW A SELECT */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  City *
+                                </label>
+                                {formData.returnAddress.state ? (
+                                  <>
+                                    <select
+                                      value={formData.returnAddress.city === 'OTHER' ? 'OTHER' : formData.returnAddress.city}
+                                      onChange={(e) => {
+                                        if (e.target.value === 'OTHER') {
+                                          setFormData({
+                                            ...formData,
+                                            returnAddress: { ...formData.returnAddress, city: 'OTHER' }
+                                          })
+                                        } else {
+                                          setFormData({
+                                            ...formData,
+                                            returnAddress: { ...formData.returnAddress, city: e.target.value.trim() }
+                                          })
+                                        }
+                                      }}
+                                      className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                        errors['returnAddress.city'] ? 'ring-red-300' : 'ring-gray-300'
+                                      } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                                    >
+                                      <option value="">Select a city...</option>
+                                      {getCitiesByState(formData.returnAddress.state).map((city) => (
+                                        <option key={city} value={city}>
+                                          {city}
+                                        </option>
+                                      ))}
+                                      <option value="OTHER">Other (type below)</option>
+                                    </select>
+                                    {/* Show text input if "Other" is selected */}
+                                    {formData.returnAddress.city === 'OTHER' && (
+                                      <input
+                                        type="text"
+                                        placeholder="Type city name"
+                                        onChange={(e) => setFormData({
+                                          ...formData,
+                                          returnAddress: { ...formData.returnAddress, city: e.target.value.trim() }
+                                        })}
+                                        className="mt-2 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                                      />
+                                    )}
+                                  </>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    disabled
+                                    placeholder="Select a state first"
+                                    className="block w-full rounded-md border-0 py-1.5 text-gray-400 bg-gray-50 shadow-sm ring-1 ring-inset ring-gray-300 sm:text-sm sm:leading-6 cursor-not-allowed"
+                                  />
+                                )}
+                                {errors['returnAddress.city'] && (
+                                  <p className="mt-1 text-sm text-red-600">{errors['returnAddress.city']}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* ZIP/Postal Code */}
+                            <div className="sm:w-1/2">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                ZIP/Postal Code *
+                              </label>
+                              <input
+                                type="text"
+                                value={formData.returnAddress.zip}
+                                onChange={(e) => setFormData({
+                                  ...formData,
+                                  returnAddress: { ...formData.returnAddress, zip: e.target.value.trim() }
+                                })}
+                                className={`block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ${
+                                  errors['returnAddress.zip'] ? 'ring-red-300' : 'ring-gray-300'
+                                } focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6`}
+                              />
+                              {errors['returnAddress.zip'] && (
+                                <p className="mt-1 text-sm text-red-600">{errors['returnAddress.zip']}</p>
+                              )}
                             </div>
                           </div>
                         )}

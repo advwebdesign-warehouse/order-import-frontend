@@ -146,7 +146,7 @@ export function useIntegrationHandlers({
   }
 
   // Specific handlers for backward compatibility
-  const handleSaveShopify = (data: Partial<ShopifyIntegration>) => {
+  const handleSaveShopify = async (data: Partial<ShopifyIntegration>): Promise<void> => {
     handleSaveIntegration('Shopify', data, setShowShopifyModal)
   }
 

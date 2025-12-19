@@ -20,6 +20,7 @@ import { Warehouse } from '../../warehouses/utils/warehouseTypes'
 import EcommerceWarehouseRouting from './EcommerceWarehouseRouting'
 import EcommerceInventorySync from './EcommerceInventorySync'
 import WarehouseRequiredWarning from './WarehouseRequiredWarning'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
 
 // Progress stages for visual feedback
 type SyncStage = 'idle' | 'starting-sync' | 'syncing-products' | 'syncing-orders' | 'success'
@@ -27,7 +28,7 @@ type SyncStage = 'idle' | 'starting-sync' | 'syncing-products' | 'syncing-orders
 interface ShopifyConfigModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (integration: Partial<ShopifyIntegration>) => void
+  onSave: (integration: Partial<ShopifyIntegration>) => Promise<void>
   onTest?: () => Promise<{ success: boolean; message: string }> // ✅ Test handler
   onSync?: (progressCallback?: (stage: 'starting' | 'products' | 'orders' | 'complete') => void) => Promise<void>
   existingIntegration?: ShopifyIntegration
@@ -59,6 +60,7 @@ export default function ShopifyConfigModal({
   // OAuth flow only
   const [storeUrl, setstoreUrl] = useState(existingIntegration?.config?.storeUrl || '')
   const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [isSavingConfig, setIsSavingConfig] = useState(false)
   const [showReconnect, setShowReconnect] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showInstructions, setShowInstructions] = useState(false)
@@ -96,11 +98,12 @@ export default function ShopifyConfigModal({
 
   // ⭐ NEW: Reload saved configuration when modal opens (THE KEY FIX!)
   useEffect(() => {
-    if (isConnected && existingIntegration) {
-      console.log('[Shopify Modal] Reloading saved configuration from root-level fields:', {
-        routingConfig: existingIntegration.routingConfig,
+    if (isOpen && existingIntegration) {
+      console.log('[Shopify Modal] Reloading saved configuration:', {
+        hasRoutingConfig: !!existingIntegration.routingConfig,
+        routingMode: existingIntegration.routingConfig?.mode,
         inventorySync: existingIntegration.inventorySync,
-        syncDirection: existingIntegration.syncDirection
+        managesInventory: existingIntegration.managesInventory
       })
 
       // Load from root-level fields (per integrationTypes.ts)
@@ -109,10 +112,12 @@ export default function ShopifyConfigModal({
       }
       setInventorySyncEnabled(existingIntegration.inventorySync || false)
       setSyncDirection(existingIntegration.syncDirection || 'one_way_to')
+      if (existingIntegration.config?.storeUrl) {
+        setstoreUrl(existingIntegration.config.storeUrl)
+      }
     }
-  }, [isConnected, existingIntegration])
+  }, [isOpen, existingIntegration, warehouses])
 
-  // Get stage display information
   const getStageInfo = (stage: SyncStage) => {
     switch (stage) {
       case 'starting-sync':
@@ -130,6 +135,11 @@ export default function ShopifyConfigModal({
 
   const currentStageInfo = getStageInfo(syncStage)
 
+  /**
+   * ✅ Save config and verify before OAuth
+   * No delays, no hacks - waits for actual backend confirmation
+   * ✅ FIX: Now passes inventorySync and syncDirection through OAuth URL
+   */
   const handleOAuthConnect = async () => {
     // ⭐ VALIDATION 1: Check warehouse configuration
     if (warehouses.length === 0) {
@@ -157,51 +167,101 @@ export default function ShopifyConfigModal({
       normalizedShop = `${normalizedShop}.myshopify.com`
     }
 
-    // Validate format
     if (!normalizedShop.match(/^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/)) {
       setErrors({ storeUrl: 'Must be a valid Shopify URL (e.g., your-store.myshopify.com)' })
       return
     }
 
     setIsAuthenticating(true)
+    setIsSavingConfig(true)
     setErrors({})
 
     try {
-      // ⭐ Save warehouse config AND inventory config to ROOT LEVEL before OAuth
+      console.log('[Shopify Modal] 💾 Saving configuration to backend...')
+
+      // ✅ Step 1: Save config to backend using onSave
+      await onSave({
+        routingConfig: warehouseConfig,
+        inventorySync: inventorySyncEnabled,
+        syncDirection: syncDirection,
+        managesInventory: inventorySyncEnabled,
+        config: {
+          storeUrl: normalizedShop,
+          accessToken: ''
+        }
+      })
+
+      console.log('[Shopify Modal] ✅ Config saved via onSave')
+
+      // ✅ Step 2: Verify the save by reading back from backend
       if (existingIntegration) {
-        onSave({
-          routingConfig: warehouseConfig,
-          inventorySync: inventorySyncEnabled,
-          syncDirection: syncDirection,
-          managesInventory: inventorySyncEnabled
+        console.log('[Shopify Modal] 🔍 Verifying save by reading from backend...')
+
+        const verified = await IntegrationAPI.getIntegrationById(existingIntegration.id)
+
+        if (!verified) {
+          throw new Error('Failed to verify configuration save')
+        }
+
+        console.log('[Shopify Modal] ✅ Verified backend has:', {
+          hasRoutingConfig: !!verified.routingConfig,
+          routingMode: verified.routingConfig?.mode,
+          assignmentsCount: verified.routingConfig?.assignments?.length || 0,
+          inventorySync: verified.inventorySync,
+          managesInventory: verified.managesInventory
         })
+
+        // ✅ Double-check that our config was actually saved
+        if (!verified.routingConfig || !verified.routingConfig.primaryWarehouseId) {
+          throw new Error('Backend did not save routing configuration')
+        }
+
+        if (warehouseConfig.mode === 'advanced' &&
+            (!verified.routingConfig.assignments || verified.routingConfig.assignments.length === 0)) {
+          throw new Error('Backend did not save warehouse assignments')
+        }
       }
 
-      // Build OAuth URL with warehouse config encoded
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
-      const authUrl = `${API_BASE}/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}`
+      setIsSavingConfig(false)
 
-      console.log('[Shopify Modal] Redirecting to OAuth with configs:', {
-        warehouseConfig,
+      // ✅ Step 3: NOW we can safely redirect to OAuth
+      // ⭐ FIX: Include inventorySync and syncDirection in the OAuth URL
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+
+      // Build inventory config object to pass through OAuth
+      const inventoryConfig = {
         inventorySync: inventorySyncEnabled,
-        syncDirection
-      })
+        syncDirection: syncDirection,
+        managesInventory: inventorySyncEnabled
+      }
+
+      const authUrl = `${API_BASE}/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}&inventoryConfig=${encodeURIComponent(JSON.stringify(inventoryConfig))}`
+
+      console.log('[Shopify Modal] 🚀 Configuration verified, redirecting to OAuth...')
+      console.log('[Shopify Modal] 📦 Passing inventory config:', inventoryConfig)
 
       // Redirect to OAuth - sync will happen automatically after connection
       window.location.href = authUrl
+
     } catch (error: any) {
-      console.error('OAuth initiation error:', error)
-      setErrors({ oauth: error.message || 'Failed to start OAuth flow' })
+      console.error('[Shopify Modal] ❌ Error during save or OAuth:', error)
+      setErrors({
+        oauth: error.message || 'Failed to save configuration. Please try again.'
+      })
       setIsAuthenticating(false)
+      setIsSavingConfig(false)
     }
   }
 
-  const handleDisconnect = () => {
-    onSave({ status: 'disconnected' })
-    onClose()
+  const handleDisconnect = async () => {
+    try {
+      await onSave({ status: 'disconnected' })
+      onClose()
+    } catch (error) {
+      console.error('[Shopify Modal] Disconnect error:', error)
+    }
   }
 
-  // ✅ Test connection implementation
   const handleTestConnection = async () => {
     if (!onTest) {
       console.warn('[Shopify Modal] No onTest handler provided')
@@ -220,24 +280,20 @@ export default function ShopifyConfigModal({
     try {
       const result = await onTest()
       setTestResult(result)
-
-      setTimeout(() => {
-        setTestResult(null)
-      }, 5000)
+      setTimeout(() => setTestResult(null), 5000)
     } catch (error: any) {
       console.error('[Shopify Modal] Test failed:', error)
       setTestResult({
         success: false,
         message: error.message || 'Connection test failed'
       })
-
-      setTimeout(() => {
-        setTestResult(null)
-      }, 5000)
+      setTimeout(() => setTestResult(null), 5000)
     }
   }
 
-  // ✅ Sync handler implementation
+  /**
+   * ✅ Save config before sync with verification
+   */
   const handleSync = async () => {
     if (!onSync) {
       console.warn('[Shopify Modal] No onSync handler provided')
@@ -251,25 +307,42 @@ export default function ShopifyConfigModal({
       return
     }
 
-    // ✅ AUTO-SAVE configuration before syncing
-    console.log('[Shopify Modal] Auto-saving configuration before sync...')
-    const updatedIntegration: Partial<ShopifyIntegration> = {
-      ...existingIntegration,
-      routingConfig: warehouseConfig,
-      inventorySync: inventorySyncEnabled,
-      syncDirection: syncDirection,
-      managesInventory: inventorySyncEnabled
-    }
-    onSave(updatedIntegration)
-    console.log('[Shopify Modal] ✅ Configuration auto-saved:', {
-      inventorySync: inventorySyncEnabled,
-      syncDirection
-    })
-
-    setTestResult(null) // Clear previous results
-    setSyncStage('starting-sync')
+    setIsSavingConfig(true)
 
     try {
+      console.log('[Shopify Modal] 💾 Saving configuration before sync...')
+
+      // ✅ Step 1: Save config
+      await onSave({
+        routingConfig: warehouseConfig,
+        inventorySync: inventorySyncEnabled,
+        syncDirection: syncDirection,
+        managesInventory: inventorySyncEnabled
+      })
+
+      console.log('[Shopify Modal] ✅ Config saved')
+
+      // ✅ Step 2: Verify save (optional but recommended)
+      if (existingIntegration) {
+        const verified = await IntegrationAPI.getIntegrationById(existingIntegration.id)
+
+        if (verified && verified.inventorySync !== inventorySyncEnabled) {
+          console.warn('[Shopify Modal] ⚠️ Backend config mismatch detected')
+          throw new Error('Configuration sync failed - please try again')
+        }
+
+        console.log('[Shopify Modal] ✅ Verified:', {
+          inventorySync: verified.inventorySync,
+          managesInventory: verified.managesInventory
+        })
+      }
+
+      setIsSavingConfig(false)
+
+      // ✅ Step 3: Start sync
+      setTestResult(null) // Clear previous results
+      setSyncStage('starting-sync')
+
       await onSync((stage: 'starting' | 'products' | 'orders' | 'complete') => {
         if (stage === 'starting') {
           setSyncStage('starting-sync')
@@ -286,20 +359,17 @@ export default function ShopifyConfigModal({
         setSyncStage('success')
       }
 
-      setTimeout(() => {
-        setSyncStage('idle')
-      }, 2000)
+      setTimeout(() => setSyncStage('idle'), 2000)
+
     } catch (error: any) {
-      console.error('[Shopify Modal] Sync failed:', error)
+      console.error('[Shopify Modal] ❌ Sync error:', error)
+      setIsSavingConfig(false)
+      setSyncStage('idle')
       setTestResult({
         success: false,
-        message: error.message || 'Sync failed'
+        message: error.message || 'Synchronization failed'
       })
-      setSyncStage('idle')
-
-      setTimeout(() => {
-        setTestResult(null)
-      }, 5000)
+      setTimeout(() => setTestResult(null), 5000)
     }
   }
 
@@ -364,6 +434,22 @@ export default function ShopifyConfigModal({
 
                 {/* Body - Scrollable */}
                 <div className="px-6 py-6 overflow-y-auto flex-1">
+                  {/* ✅ NEW: Saving indicator */}
+                  {isSavingConfig && (
+                    <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-4">
+                      <div className="flex items-center">
+                        <svg className="animate-spin h-5 w-5 text-blue-600 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-blue-800">Saving configuration...</p>
+                          <p className="text-xs text-blue-600 mt-1">Please wait while we save your settings to the backend</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {isConnected ? (
                     // Connected State
                     <>
@@ -664,7 +750,7 @@ export default function ShopifyConfigModal({
                     <button
                       type="button"
                       onClick={onClose}
-                      disabled={isAuthenticating || isSyncing}
+                      disabled={isAuthenticating || isSyncing || isSavingConfig}
                       className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                     {isConnected ? 'Close' : 'Cancel'}
@@ -675,16 +761,16 @@ export default function ShopifyConfigModal({
                     <button
                       type="button"
                       onClick={handleSync}
-                      disabled={isAuthenticating || isTesting || isSyncing}
+                      disabled={isAuthenticating || isTesting || isSyncing || isSavingConfig}
                       className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isSyncing ? (
+                      {isSyncing || isSavingConfig ? (
                         <>
                           <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          Syncing...
+                          {isSavingConfig ? 'Saving...' : 'Syncing...'}
                         </>
                       ) : (
                         'Sync Shopify'
@@ -697,16 +783,16 @@ export default function ShopifyConfigModal({
                       <button
                         type="button"
                         onClick={handleOAuthConnect}
-                        disabled={isAuthenticating || !storeUrl.trim() || warehouses.length === 0 || !warehouseConfig.primaryWarehouseId}
+                        disabled={isAuthenticating || !storeUrl.trim() || warehouses.length === 0 || !warehouseConfig.primaryWarehouseId || isSavingConfig}
                         className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isAuthenticating ? (
+                        {isAuthenticating || isSavingConfig ? (
                           <>
                             <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            Connecting...
+                            {isSavingConfig ? 'Saving Configuration...' : 'Connecting...'}
                           </>
                         ) : (
                           'Connect to Shopify'

@@ -1,11 +1,23 @@
 //file path: src/app/dashboard/integrations/hooks/useOAuthCallbacks.tsx
-// ✅ FIXED: Reads warehouse_config from URL parameters (sent by backend)
+// ✅ FIXED: Reads warehouse_config AND inventory_config from URL parameters (sent by backend)
 
 'use client'
 
 import { useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Integration, UPSIntegration, ShopifyIntegration } from '../types/integrationTypes'
+import {
+  Integration,
+  UPSIntegration,
+  ShopifyIntegration,
+  SyncDirection  // ✅ Import for type safety
+} from '../types/integrationTypes'
+
+// ✅ Interface for inventory config passed through OAuth
+interface OAuthInventoryConfig {
+  inventorySync: boolean
+  syncDirection: SyncDirection
+  managesInventory: boolean
+}
 
 // ✅ Updated interface
 interface UseOAuthCallbacksProps {
@@ -185,6 +197,7 @@ export function useOAuthCallbacks({
     const accessToken = searchParams.get('access_token')
     const storeIdParam = searchParams.get('store_id')
     const warehouseConfigParam = searchParams.get('warehouse_config')
+    const inventoryConfigParam = searchParams.get('inventory_config') // ✅ NEW: Parse inventory config
     const errorParam = searchParams.get('error')
 
     console.log('[Shopify OAuth] 🔍 URL Parameters:', {
@@ -192,7 +205,8 @@ export function useOAuthCallbacks({
       shop,
       accessToken: accessToken ? '***' : undefined,
       storeIdParam,
-      warehouseConfigParam,  // ← Check if this is present!
+      warehouseConfigParam: warehouseConfigParam ? 'present' : 'missing',
+      inventoryConfigParam: inventoryConfigParam ? 'present' : 'missing',  // ✅ NEW
       errorParam
     })
 
@@ -226,6 +240,7 @@ export function useOAuthCallbacks({
       console.log('[Shopify OAuth] Shop:', shop)
       console.log('[Shopify OAuth] Has access token:', !!accessToken)
       console.log('[Shopify OAuth] Has warehouse config:', !!warehouseConfigParam)
+      console.log('[Shopify OAuth] Has inventory config:', !!inventoryConfigParam)
 
       const integrationStoreId = storeIdParam || selectedStoreId
 
@@ -244,7 +259,7 @@ export function useOAuthCallbacks({
         return
       }
 
-      // ✅ ADDED: Parse warehouse config
+      // ✅ Parse warehouse config
       let warehouseConfig = null
       if (warehouseConfigParam) {
         try {
@@ -258,27 +273,50 @@ export function useOAuthCallbacks({
         console.warn('[Shopify OAuth] ⚠️ No warehouse config in URL parameters')
       }
 
+      // ✅ NEW: Parse inventory config
+      let inventoryConfig: OAuthInventoryConfig | null = null
+      if (inventoryConfigParam) {
+        try {
+          inventoryConfig = JSON.parse(inventoryConfigParam)
+          console.log('[Shopify OAuth] ✅ Inventory config received:', inventoryConfig)
+        } catch (error) {
+          console.error('[Shopify OAuth] ❌ Failed to parse inventory config:', error)
+          // Don't fail the OAuth - continue without inventory config
+        }
+      } else {
+        console.warn('[Shopify OAuth] ⚠️ No inventory config in URL parameters')
+      }
+
       // ✅ Use integrations array directly
       const existingIntegration = integrations.find(
         (i: Integration) => i.name === 'Shopify' && i.storeId === integrationStoreId
-      )
+      ) as ShopifyIntegration | undefined
 
       let integrationId: string
 
       if (existingIntegration) {
-        // Update existing integration
+        // ✅ Update existing integration - NOW INCLUDES INVENTORY CONFIG
         updateIntegration(existingIntegration.id, {
           config: {
             storeUrl: shop,
             accessToken: accessToken,
           },
           routingConfig: warehouseConfig,
+          // ✅ NEW: Apply inventory config (with fallback to existing values)
+          inventorySync: inventoryConfig?.inventorySync ?? existingIntegration.inventorySync ?? false,
+          syncDirection: inventoryConfig?.syncDirection ?? existingIntegration.syncDirection ?? 'one_way_to',
+          managesInventory: inventoryConfig?.managesInventory ?? existingIntegration.managesInventory ?? false,
           status: 'connected',
           enabled: true,
           connectedAt: new Date().toISOString()
         })
         integrationId = existingIntegration.id
         console.log('[Shopify OAuth] Updated existing integration:', integrationId)
+        console.log('[Shopify OAuth] ✅ Applied inventory settings:', {
+          inventorySync: inventoryConfig?.inventorySync ?? existingIntegration.inventorySync ?? false,
+          syncDirection: inventoryConfig?.syncDirection ?? existingIntegration.syncDirection ?? 'one_way_to',
+          managesInventory: inventoryConfig?.managesInventory ?? existingIntegration.managesInventory ?? false
+        })
       } else {
         // Create new integration
         integrationId = `shopify-${integrationStoreId}`
@@ -288,9 +326,11 @@ export function useOAuthCallbacks({
           storeId: storeIdParam,
           hasStoreUrl: !!shop,
           hasAccessToken: !!accessToken,
-          hasWarehouseConfig: !!warehouseConfig  // ⭐ Log if we have it
+          hasWarehouseConfig: !!warehouseConfig,  // ⭐ Log if we have it
+          hasInventoryConfig: !!inventoryConfig  // ✅ NEW
         })
 
+        // ✅ NEW: Create integration WITH inventory config
         const newIntegration: ShopifyIntegration = {
           id: integrationId,
           name: 'Shopify',
@@ -307,6 +347,10 @@ export function useOAuthCallbacks({
             accessToken: accessToken,
           },
           routingConfig: warehouseConfig,
+          // ✅ NEW: Include inventory config fields
+          inventorySync: inventoryConfig?.inventorySync ?? false,
+          syncDirection: inventoryConfig?.syncDirection ?? 'one_way_to',
+          managesInventory: inventoryConfig?.managesInventory ?? false,
           connectedAt: new Date().toISOString(),
           features: {
             orderSync: true,
@@ -321,7 +365,10 @@ export function useOAuthCallbacks({
           storeId: newIntegration.storeId,
           hasStoreUrl: !!newIntegration.config.storeUrl,
           hasAccessToken: !!newIntegration.config.accessToken,
-          hasWarehouseConfig: !!newIntegration.routingConfig
+          hasWarehouseConfig: !!newIntegration.routingConfig,
+          inventorySync: newIntegration.inventorySync,
+          syncDirection: newIntegration.syncDirection,
+          managesInventory: newIntegration.managesInventory
         })
 
         // ✅ Handle Promise return
@@ -344,7 +391,7 @@ export function useOAuthCallbacks({
             return
           }
 
-          // ✅ CRITICAL FIX: Use result.integration instead of newIntegration
+          // ✅ Use result.integration instead of newIntegration
           // The integration ID may have been updated by the backend
           const savedIntegration = result.integration || newIntegration
           console.log('[Shopify OAuth] ✅ Using saved integration with ID:', savedIntegration.id)
