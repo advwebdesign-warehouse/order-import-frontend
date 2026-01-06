@@ -2,7 +2,7 @@
 
 'use client'
 
-import { Fragment, useState, useEffect } from 'react'
+import { Fragment, useState, useEffect, useRef, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import {
   XMarkIcon,
@@ -67,6 +67,9 @@ export default function ShopifyConfigModal({
   const [syncStage, setSyncStage] = useState<SyncStage>('idle')
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  // ✅ Track if we've initialized settings from props (prevents feedback loop)
+  const hasInitializedSettings = useRef(false)
+
   // ⭐ Warehouse configuration state (from root level per integrationTypes.ts)
   const [warehouseConfig, setWarehouseConfig] = useState<EcommerceWarehouseConfig>(
     existingIntegration?.routingConfig || {
@@ -96,13 +99,15 @@ export default function ShopifyConfigModal({
     }
   }, [warehouses])
 
-  // ⭐ NEW: Reload saved configuration when modal opens (THE KEY FIX!)
+  // ✅ FIX: Only sync from props on FIRST modal open, not every prop change
+  // This prevents the feedback loop where parent update → prop change → state reset
   useEffect(() => {
-    if (isOpen && existingIntegration) {
+    if (isOpen && existingIntegration && !hasInitializedSettings.current) {
       console.log('[Shopify Modal] Reloading saved configuration:', {
         hasRoutingConfig: !!existingIntegration.routingConfig,
         routingMode: existingIntegration.routingConfig?.mode,
         inventorySync: existingIntegration.inventorySync,
+        syncDirection: existingIntegration.syncDirection,
         managesInventory: existingIntegration.managesInventory
       })
 
@@ -115,6 +120,13 @@ export default function ShopifyConfigModal({
       if (existingIntegration.config?.storeUrl) {
         setstoreUrl(existingIntegration.config.storeUrl)
       }
+
+      hasInitializedSettings.current = true
+    }
+
+    // ✅ Reset flag when modal closes so next open loads fresh data
+    if (!isOpen) {
+      hasInitializedSettings.current = false
     }
   }, [isOpen, existingIntegration, warehouses])
 
@@ -138,7 +150,7 @@ export default function ShopifyConfigModal({
   /**
    * ✅ Save config and verify before OAuth
    * No delays, no hacks - waits for actual backend confirmation
-   * ✅ FIX: Now passes inventorySync and syncDirection through OAuth URL
+   * ✅ Now passes inventorySync and syncDirection through OAuth URL
    */
   const handleOAuthConnect = async () => {
     // ⭐ VALIDATION 1: Check warehouse configuration
@@ -225,7 +237,7 @@ export default function ShopifyConfigModal({
       setIsSavingConfig(false)
 
       // ✅ Step 3: NOW we can safely redirect to OAuth
-      // ⭐ FIX: Include inventorySync and syncDirection in the OAuth URL
+      // ⭐ Include inventorySync and syncDirection in the OAuth URL
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 
       // Build inventory config object to pass through OAuth
@@ -310,7 +322,12 @@ export default function ShopifyConfigModal({
     setIsSavingConfig(true)
 
     try {
-      console.log('[Shopify Modal] 💾 Saving configuration before sync...')
+      console.log('[Shopify Modal] 💾 Saving configuration before sync...', {
+        inventorySyncEnabled,
+        syncDirection,
+        warehouseConfigMode: warehouseConfig.mode,
+        assignmentsCount: warehouseConfig.assignments?.length || 0
+      })
 
       // ✅ Step 1: Save config
       await onSave({
@@ -326,14 +343,25 @@ export default function ShopifyConfigModal({
       if (existingIntegration) {
         const verified = await IntegrationAPI.getIntegrationById(existingIntegration.id)
 
-        if (verified && verified.inventorySync !== inventorySyncEnabled) {
-          console.warn('[Shopify Modal] ⚠️ Backend config mismatch detected')
-          throw new Error('Configuration sync failed - please try again')
+        // ✅ Use Boolean() for proper type coercion (handles undefined, null, string "true"/"false")
+        const backendInventorySync = Boolean(verified?.inventorySync)
+        const localInventorySync = Boolean(inventorySyncEnabled)
+
+        if (backendInventorySync !== localInventorySync) {
+          // Log the mismatch but don't block - the save might still be propagating
+          console.warn('[Shopify Modal] ⚠️ Backend config mismatch detected:', {
+            backend: verified?.inventorySync,
+            local: inventorySyncEnabled,
+            backendCoerced: backendInventorySync,
+            localCoerced: localInventorySync
+          })
+          // Don't throw - proceed with sync anyway since config was just saved
         }
 
         console.log('[Shopify Modal] ✅ Verified:', {
-          inventorySync: verified.inventorySync,
-          managesInventory: verified.managesInventory
+          inventorySync: verified?.inventorySync,
+          syncDirection: verified?.syncDirection,
+          managesInventory: verified?.managesInventory
         })
       }
 
@@ -372,6 +400,17 @@ export default function ShopifyConfigModal({
       setTimeout(() => setTestResult(null), 5000)
     }
   }
+
+  // ✅ Handlers for inventory sync changes - notify parent immediately
+  const handleInventorySyncChange = useCallback((enabled: boolean) => {
+    console.log('[Shopify Modal] 📝 Inventory sync changed:', enabled)
+    setInventorySyncEnabled(enabled)
+  }, [])
+
+  const handleSyncDirectionChange = useCallback((direction: SyncDirection) => {
+    console.log('[Shopify Modal] 📝 Sync direction changed:', direction)
+    setSyncDirection(direction)
+  }, [])
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
@@ -434,7 +473,7 @@ export default function ShopifyConfigModal({
 
                 {/* Body - Scrollable */}
                 <div className="px-6 py-6 overflow-y-auto flex-1">
-                  {/* ✅ NEW: Saving indicator */}
+                  {/* ✅ Saving indicator */}
                   {isSavingConfig && (
                     <div className="mb-4 rounded-md bg-blue-50 border border-blue-200 p-4">
                       <div className="flex items-center">

@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { RadioGroup } from '@headlessui/react'
 import {
   BuildingOffice2Icon,
@@ -41,6 +41,9 @@ export default function EcommerceWarehouseRouting({
   warehouses,
   onChange
 }: EcommerceWarehouseRoutingProps) {
+  // ✅ Track if we've initialized from props
+  const hasInitialized = useRef(false)
+
   const [config, setConfig] = useState<EcommerceWarehouseConfig>(
     warehouseConfig || {
       mode: 'simple',
@@ -51,32 +54,68 @@ export default function EcommerceWarehouseRouting({
     }
   )
 
-  // Sync changes to parent
+  // ✅ FIX: Only sync from props on INITIAL mount, not on every change
+  // This prevents the feedback loop where parent update → prop change → state reset
   useEffect(() => {
-    onChange(config)
-  }, [config, onChange])
+    if (warehouseConfig && !hasInitialized.current) {
+      console.log('[EcommerceWarehouseRouting] 🚀 Initial sync from prop:', {
+        mode: warehouseConfig.mode,
+        assignmentsCount: warehouseConfig.assignments?.length || 0
+      })
+      setConfig(warehouseConfig)
+      hasInitialized.current = true
+    }
+  }, [warehouseConfig])
+
+  // ✅ Reset initialization flag when component unmounts (modal closes)
+  useEffect(() => {
+    return () => {
+      hasInitialized.current = false
+    }
+  }, [])
+
+  // ✅ FIX 2: Update config AND notify parent immediately (not via useEffect)
+  const updateConfig = useCallback((newConfig: EcommerceWarehouseConfig) => {
+    console.log('[EcommerceWarehouseRouting] 📝 Config updated:', {
+      mode: newConfig.mode,
+      assignmentsCount: newConfig.assignments?.length || 0,
+      // Log first warehouse's state count for debugging
+      firstWarehouseStates: newConfig.assignments?.[0]?.regions?.[0]?.states?.length || 0
+    })
+    setConfig(newConfig)
+    onChange(newConfig)  // ✅ Call parent immediately, not in useEffect
+  }, [onChange])
 
   const handleModeChange = (mode: WarehouseRoutingMode) => {
-    setConfig(prev => ({
-      ...prev,
+    updateConfig({
+      ...config,
       mode,
       enableRegionRouting: mode === 'advanced'
-    }))
+    })
   }
 
   const handlePrimaryWarehouseChange = (warehouseId: string) => {
-    setConfig(prev => ({
-      ...prev,
+    updateConfig({
+      ...config,
       primaryWarehouseId: warehouseId
-    }))
+    })
   }
 
   const handleFallbackWarehouseChange = (warehouseId: string) => {
-    setConfig(prev => ({
-      ...prev,
+    updateConfig({
+      ...config,
       fallbackWarehouseId: warehouseId || undefined
-    }))
+    })
   }
+
+  // ✅ Handler for AdvancedWarehouseRouting changes
+  const handleAdvancedConfigChange = useCallback((updatedConfig: EcommerceWarehouseConfig) => {
+    console.log('[EcommerceWarehouseRouting] 🗺️ Advanced routing changed:', {
+      assignmentsCount: updatedConfig.assignments?.length || 0,
+      totalStates: updatedConfig.assignments?.reduce((sum, a) => sum + (a.regions[0]?.states?.length || 0), 0) || 0
+    })
+    updateConfig(updatedConfig)
+  }, [updateConfig])
 
   return (
     <div className="space-y-6">
@@ -176,10 +215,11 @@ export default function EcommerceWarehouseRouting({
             </p>
           </div>
 
+          {/* ✅ FIX 4: Pass the callback that immediately notifies parent */}
           <AdvancedWarehouseRouting
             config={config}
             warehouses={warehouses}
-            onChange={(updatedConfig) => setConfig(updatedConfig)}
+            onChange={handleAdvancedConfigChange}
           />
         </div>
       )}

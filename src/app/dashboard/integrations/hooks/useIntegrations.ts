@@ -1,7 +1,7 @@
 //file path: src/app/dashboard/integrations/hooks/useIntegrations.ts
 
 /**
- * ✅ IMPROVED: Now uses IntegrationAPI methods for all test integrations
+ * ✅ Now uses IntegrationAPI methods for all test integrations
  *
  * Changed from direct fetch() calls to IntegrationAPI methods:
  * - testUSPS() → Uses IntegrationAPI.testUSPS()
@@ -102,7 +102,7 @@ export function useIntegrations() {
   }, [integrations])
 
   /**
-   * ✅ IMPROVED: Update integration with ref fallback
+   * ✅ Update integration with ref fallback
    */
   const updateIntegration = async (integrationId: string, partialData: Partial<Integration>) => {
     try {
@@ -116,23 +116,62 @@ export function useIntegrations() {
         throw new Error(`Integration not found: ${integrationId}`)
       }
 
-      // Merge existing with partial data
+      // ✅ Build the data to send to API - ONLY partial data, not full merge
+      // This prevents stale frontend data from overwriting newer backend data
+      const apiUpdateData: Partial<Integration> = { ...partialData }
+
+      // ✅ Deep merge config if provided (only the config object, not full integration)
+      if (partialData.config) {
+        apiUpdateData.config = {
+          ...existingIntegration.config,
+          ...partialData.config
+        }
+      }
+
+      // ✅ Deep merge routingConfig if provided (only routingConfig, not full integration)
+      // Use 'in' operator and type assertions to handle union types safely)
+      if ('routingConfig' in partialData && (partialData as any).routingConfig) {
+        (apiUpdateData as any).routingConfig = {
+          ...(existingIntegration as any).routingConfig,
+          ...(partialData as any).routingConfig,
+          // Use new assignments if provided, otherwise keep existing
+          assignments: (partialData as any).routingConfig.assignments !== undefined
+            ? (partialData as any).routingConfig.assignments
+            : (existingIntegration as any).routingConfig?.assignments || []
+        }
+      }
+
+      // ✅ CRITICAL: Log ALL data being sent, including inventory fields
+      console.log('[updateIntegration] 📦 API update data:', {
+        hasConfig: !!apiUpdateData.config,
+        hasRoutingConfig: !!(apiUpdateData as any).routingConfig,
+        routingMode: (apiUpdateData as any).routingConfig?.mode,
+        assignmentsCount: (apiUpdateData as any).routingConfig?.assignments?.length || 0,
+        // ✅ NEW: Log inventory fields explicitly
+        inventorySync: (apiUpdateData as any).inventorySync,
+        syncDirection: (apiUpdateData as any).syncDirection,
+        managesInventory: (apiUpdateData as any).managesInventory,
+        allKeys: Object.keys(apiUpdateData)
+      })
+
+      // ✅ CRITICAL FIX: Send ONLY partial data to API, not full merged object
+      // This prevents race conditions where stale frontend data overwrites newer backend data
+      await IntegrationAPI.updateIntegration(integrationId, apiUpdateData as Integration)
+
+      // ✅ After successful API call, update local state optimistically
+      // Build full merged object for local state only
       const updatedIntegration = {
         ...existingIntegration,
         ...partialData,
-        config: partialData.config
-          ? { ...existingIntegration.config, ...partialData.config }
-          : existingIntegration.config
+        config: apiUpdateData.config || existingIntegration.config,
+        routingConfig: (apiUpdateData as any).routingConfig || (existingIntegration as any).routingConfig
       } as Integration
 
-      // Optimistic update (update both state and ref)
+      // Update both state and ref
       setIntegrations(prev => prev.map(i => i.id === integrationId ? updatedIntegration : i))
       integrationsRef.current = integrationsRef.current.map(i =>
         i.id === integrationId ? updatedIntegration : i
       )
-
-      // Save to API
-      await IntegrationAPI.updateIntegration(integrationId, updatedIntegration)
 
       console.log('[updateIntegration] ✅ Integration updated successfully')
       return { success: true }
@@ -148,7 +187,7 @@ export function useIntegrations() {
   }
 
   /**
-   * ✅ IMPROVED: Add integration and update ref immediately
+   * ✅ Add integration and update ref immediately
    */
   const addIntegration = async (integration: Integration) => {
     try {
@@ -190,7 +229,7 @@ export function useIntegrations() {
         return [...prev, integrationWithCorrectId]
       })
 
-      // ✅ CRITICAL: Update ref immediately (no waiting for re-render)
+      // ✅ Update ref immediately (no waiting for re-render)
       const exists = integrationsRef.current.find(i => i.id === savedIntegration.id)
       if (exists) {
         integrationsRef.current = integrationsRef.current.map(i =>

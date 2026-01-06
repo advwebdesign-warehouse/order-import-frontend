@@ -5,7 +5,7 @@
 import { IntegrationFactory } from '@/lib/integrations/integrationFactory'
 import { Integration, ShopifyIntegration, USPSIntegration, UPSIntegration } from '../types/integrationTypes'
 
-// ✅ FIXED: Updated interface with proper Integration import
+// ✅ Updated interface with proper Integration import
 interface UseIntegrationHandlersProps {
   accountId: string
   integrations: Integration[]
@@ -33,8 +33,9 @@ export function useIntegrationHandlers({
   /**
    * Generic save handler using factory pattern
    * Works with ANY integration type
+   * ✅ Now async and awaits updateIntegration to ensure data persists
    */
-  const handleSaveIntegration = (
+  const handleSaveIntegration = async (
     integrationName: string,
     data: any,
     modalSetter: (show: boolean) => void
@@ -52,7 +53,8 @@ export function useIntegrationHandlers({
 
       if (isDisconnecting) {
         // For disconnect, clear sensitive data
-        updateIntegration(existingIntegration.id, {
+        // ✅ Await the update
+        await updateIntegration(existingIntegration.id, {
           status: 'disconnected',
           enabled: false,
           config: {
@@ -67,8 +69,8 @@ export function useIntegrationHandlers({
           } as any // ✅ Type assertion to handle dynamic config clearing
         })
       } else {
-        // For normal updates
-        updateIntegration(existingIntegration.id, {
+        // ✅ Await the update to ensure it completes before closing modal
+        await updateIntegration(existingIntegration.id, {
           status: 'connected',
           enabled: true,
           ...data,
@@ -94,7 +96,8 @@ export function useIntegrationHandlers({
         ...data,
       }
 
-      addIntegration(newIntegration)
+      // ✅ Await addIntegration too
+      await addIntegration(newIntegration)
     }
 
     modalSetter(false)
@@ -147,15 +150,15 @@ export function useIntegrationHandlers({
 
   // Specific handlers for backward compatibility
   const handleSaveShopify = async (data: Partial<ShopifyIntegration>): Promise<void> => {
-    handleSaveIntegration('Shopify', data, setShowShopifyModal)
+    await handleSaveIntegration('Shopify', data, setShowShopifyModal)
   }
 
-  const handleSaveUsps = (data: Partial<USPSIntegration>) => {
-    handleSaveIntegration('USPS', data, setShowUspsModal)
+  const handleSaveUsps = async (data: Partial<USPSIntegration>): Promise<void> => {
+    await handleSaveIntegration('USPS', data, setShowUspsModal)
   }
 
-  const handleSaveUps = (data: Partial<UPSIntegration>) => {
-    handleSaveIntegration('UPS', data, setShowUpsModal)
+  const handleSaveUps = async (data: Partial<UPSIntegration>): Promise<void> => {
+    await handleSaveIntegration('UPS', data, setShowUpsModal)
   }
 
   return {
