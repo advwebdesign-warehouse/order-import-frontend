@@ -5,7 +5,8 @@ import { IntegrationAPI } from '@/lib/api/integrationApi'
 
 /**
  * ✅ CLEAN ARCHITECTURE: Uses IntegrationAPI for all backend calls
- * No manual fetch calls, consistent with rest of codebase
+ * ✅ INCREMENTAL SYNC: By default, only syncs orders modified since lastSyncedAt
+ * ✅ FIELD PRESERVATION: Never overwrites local fields during sync
  */
 export class ShopifyService {
   /**
@@ -34,10 +35,11 @@ export class ShopifyService {
 
       if (onProgress) onProgress('Connection successful! Syncing data...')
 
-      // ✅ Sync data using IntegrationAPI
+      // ✅ Initial sync should be a FULL sync to get all orders
       const result = await IntegrationAPI.syncShopify({
         storeId: integration.storeId,
-        syncType: 'all' // Sync both orders and products
+        syncType: 'all',
+        fullSync: true  // ✅ Full sync on initial connection
       })
 
       if (!result.success) {
@@ -72,7 +74,6 @@ export class ShopifyService {
     accessToken: string
   ): Promise<{ success: boolean; error?: string; message?: string; data?: any }> {
     try {
-      // ✅ Use IntegrationAPI
       const result = await IntegrationAPI.testShopify({
         storeUrl,
         accessToken
@@ -88,11 +89,9 @@ export class ShopifyService {
 
   /**
    * Update last sync time for integration
-   * Uses IntegrationAPI.updateIntegration
    */
    static async updateLastSyncTime(integrationId: string): Promise<void> {
      try {
-       // ✅ Use IntegrationAPI - only update the timestamp
        await IntegrationAPI.updateIntegration(integrationId, {
          lastSyncedAt: new Date().toISOString()
        })
@@ -103,34 +102,75 @@ export class ShopifyService {
    }
 
    /**
-    * Manual sync (called from UI)
-    * Uses IntegrationAPI
+    * Manual sync (called from UI button)
+    *
+    * ✅ INCREMENTAL BY DEFAULT: Only fetches orders modified since lastSyncedAt
+    * This means your local fulfillmentStatus changes won't be overwritten
+    *
+    * @param storeId - Store ID
+    * @param syncType - What to sync: 'all' | 'orders' | 'products'
+    * @param onProgress - Progress callback
+    * @param fullSync - If true, fetches ALL orders (use sparingly)
     */
    static async manualSync(
      storeId: string,
      syncType: 'all' | 'orders' | 'products' = 'all',
-     onProgress?: (message: string) => void
-   ): Promise<{ orders: number; products: number }> {
+     onProgress?: (message: string) => void,
+    fullSync: boolean = false  // ✅ NEW: Default to incremental sync
+  ): Promise<{ orders: number; products: number; ordersNew?: number; ordersUpdated?: number }> {
      try {
-       if (onProgress) onProgress('Starting sync...')
+       const syncMode = fullSync ? 'full' : 'incremental'
+       if (onProgress) onProgress(`Starting ${syncMode} sync...`)
 
-       // ✅ Use IntegrationAPI
+       console.log(`[Shopify Service Frontend] 📦 Starting ${syncMode} sync for store: ${storeId}`)
+
+       // ✅ Use IntegrationAPI with fullSync option
        const result = await IntegrationAPI.syncShopify({
          storeId,
-         syncType
+         syncType,
+         fullSync
        })
 
        if (!result.success) {
          throw new Error(result.error || 'Sync failed')
        }
 
-       const message = `✅ Synced ${result.data.orders} orders and ${result.data.products} products`
+       const message = fullSync
+         ? `✅ Full sync: ${result.data.orders} orders (${result.data.ordersNew || 0} new, ${result.data.ordersUpdated || 0} updated)`
+         : `✅ Synced ${result.data.ordersNew || 0} new orders, ${result.data.ordersUpdated || 0} updated`
+
        if (onProgress) onProgress(message)
 
-       return result.data
+       return {
+         orders: result.data.orders,
+         products: result.data.products,
+         ordersNew: result.data.ordersNew,
+         ordersUpdated: result.data.ordersUpdated
+       }
      } catch (error: any) {
        if (onProgress) onProgress(`❌ ${error.message}`)
        throw error
      }
+   }
+
+   /**
+    * Force full sync - Re-download ALL orders from Shopify
+    *
+    * ⚠️ USE WITH CAUTION: This will update all orders from Shopify
+    * However, it will NOT overwrite local fields like:
+    * - fulfillmentStatus
+    * - warehouseId
+    * - trackingNumber
+    * - trackingCarrier
+    * - shippingLabel
+    */
+   static async forceFullSync(
+     storeId: string,
+     syncType: 'all' | 'orders' | 'products' = 'all',
+     onProgress?: (message: string) => void
+   ): Promise<{ orders: number; products: number; ordersNew?: number; ordersUpdated?: number }> {
+     console.log('[Shopify Service Frontend] 🔄 FORCE FULL SYNC requested')
+
+     return this.manualSync(storeId, syncType, onProgress, true)
    }
  }

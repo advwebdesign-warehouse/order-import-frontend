@@ -53,6 +53,7 @@ export interface Warehouse {
  * Handles all API calls related to integrations
  * ✅ Added proper type annotations using shippingTypes
  * ✅ Added getIntegrationWarehouses for integration-based warehouse linking
+ * ✅ UPDATED: syncShopify now supports fullSync parameter for incremental sync
  */
 export class IntegrationAPI {
   /**
@@ -437,16 +438,49 @@ export class IntegrationAPI {
   }
 
   /**
-   * ✅ NEW: Sync Shopify data (orders and/or products)
+   * ✅ UPDATED: Sync Shopify data (orders and/or products)
    * Backend route: POST /integrations/shopify/sync
+   *
+   * @param data.storeId - The store ID to sync
+   * @param data.syncType - What to sync: 'all' | 'orders' | 'products' (default: 'all')
+   * @param data.fullSync - If true, fetches ALL orders. If false (default),
+   *                        only fetches orders updated since lastSyncedAt
+   *
+   * ✅ INCREMENTAL SYNC: By default only syncs orders modified since last sync
+   * ✅ FIELD PRESERVATION: Never overwrites local fields (fulfillmentStatus, warehouseId, etc.)
    */
    static async syncShopify(data: {
      storeId: string
-     syncType: 'all' | 'orders' | 'products'
+     syncType?: 'all' | 'orders' | 'products'
+     fullSync?: boolean  // ✅ NEW: Option to force full sync
    }) {
      return apiRequest('/integrations/shopify/sync', {
        method: 'POST',
-       body: JSON.stringify(data)
+       body: JSON.stringify({
+         storeId: data.storeId,
+         syncType: data.syncType || 'all',
+         fullSync: data.fullSync || false
+       })
+     })
+   }
+
+   /**
+    * ✅ NEW: Force full sync - Re-sync ALL orders from Shopify
+    * Backend route: POST /integrations/shopify/sync/full
+    *
+    * Use this when you want to completely refresh all orders from Shopify
+    * NOTE: This will NOT overwrite local fields (fulfillmentStatus, warehouseId, etc.)
+    */
+   static async fullSyncShopify(data: {
+     storeId: string
+     syncType?: 'all' | 'orders' | 'products'
+   }) {
+     return apiRequest('/integrations/shopify/sync/full', {
+       method: 'POST',
+       body: JSON.stringify({
+         storeId: data.storeId,
+         syncType: data.syncType || 'all'
+       })
      })
    }
 
@@ -463,13 +497,13 @@ export class IntegrationAPI {
   /**
    * Sync Shopify orders
    * Backend route: POST /integrations/:id/shopify/orders/sync
-   */
+
   static async syncShopifyOrders(integrationId: string) {
     return apiRequest(`/integrations/${integrationId}/shopify/orders/sync`, {
       method: 'POST'
     })
   }
-
+*/
   // ============================================================================
   // WOOCOMMERCE-SPECIFIC ENDPOINTS
   // Backend routes at /api/integrations/woocommerce/*
