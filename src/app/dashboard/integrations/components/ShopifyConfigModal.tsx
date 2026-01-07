@@ -102,8 +102,17 @@ export default function ShopifyConfigModal({
   // ✅ FIX: Only sync from props on FIRST modal open, not every prop change
   // This prevents the feedback loop where parent update → prop change → state reset
   useEffect(() => {
+    // ✅ Log every time this effect runs
+    console.log('[Shopify Modal] useEffect triggered:', {
+      isOpen,
+      hasExistingIntegration: !!existingIntegration,
+      hasInitialized: hasInitializedSettings.current,
+      propsInventorySync: existingIntegration?.inventorySync,
+      localInventorySyncEnabled: inventorySyncEnabled
+    })
+
     if (isOpen && existingIntegration && !hasInitializedSettings.current) {
-      console.log('[Shopify Modal] Reloading saved configuration:', {
+      console.log('[Shopify Modal] 📥 LOADING from props (first time):', {
         hasRoutingConfig: !!existingIntegration.routingConfig,
         routingMode: existingIntegration.routingConfig?.mode,
         inventorySync: existingIntegration.inventorySync,
@@ -122,10 +131,15 @@ export default function ShopifyConfigModal({
       }
 
       hasInitializedSettings.current = true
+      console.log('[Shopify Modal] ✅ Initialization complete, flag set to true')
+    } else if (isOpen && existingIntegration && hasInitializedSettings.current) {
+      // ✅ Log when we SKIP loading (this is the expected behavior after first load)
+      console.log('[Shopify Modal] ⏭️ SKIPPING props reload (already initialized)')
     }
 
     // ✅ Reset flag when modal closes so next open loads fresh data
     if (!isOpen) {
+      console.log('[Shopify Modal] 🚪 Modal closed, resetting initialization flag')
       hasInitializedSettings.current = false
     }
   }, [isOpen, existingIntegration, warehouses])
@@ -307,13 +321,21 @@ export default function ShopifyConfigModal({
    * ✅ Save config before sync with verification
    */
   const handleSync = async () => {
+    // ✅ FIRST LOG - Confirm button was clicked
+    console.log('[Shopify Modal] 🔘 Sync Shopify button clicked!', {
+      hasOnSync: !!onSync,
+      isConnected,
+      inventorySyncEnabled,
+      syncDirection
+    })
     if (!onSync) {
-      console.warn('[Shopify Modal] No onSync handler provided')
+      console.warn('[Shopify Modal] ❌ No onSync handler provided - ABORTING')
       setTestResult({ success: false, message: 'Sync function not available' })
       return
     }
 
     if (!isConnected) {
+      console.warn('[Shopify Modal] ❌ Not connected - ABORTING')
       setTestResult({ success: false, message: 'Please connect your Shopify store first' })
       setTimeout(() => setTestResult(null), 3000)
       return
@@ -322,6 +344,7 @@ export default function ShopifyConfigModal({
     setIsSavingConfig(true)
 
     try {
+      // ✅ Log BEFORE save to confirm we reach this point
       console.log('[Shopify Modal] 💾 Saving configuration before sync...', {
         inventorySyncEnabled,
         syncDirection,
@@ -329,15 +352,19 @@ export default function ShopifyConfigModal({
         assignmentsCount: warehouseConfig.assignments?.length || 0
       })
 
-      // ✅ Step 1: Save config
-      await onSave({
+      // ✅ Step 1: Save config - this MUST include inventory fields
+      const saveData = {
         routingConfig: warehouseConfig,
         inventorySync: inventorySyncEnabled,
         syncDirection: syncDirection,
         managesInventory: inventorySyncEnabled
-      })
+      }
 
-      console.log('[Shopify Modal] ✅ Config saved')
+      console.log('[Shopify Modal] 📤 Calling onSave with:', saveData)
+
+      await onSave(saveData)
+
+      console.log('[Shopify Modal] ✅ Config saved successfully')
 
       // ✅ Step 2: Verify save (optional but recommended)
       if (existingIntegration) {

@@ -91,7 +91,7 @@ export function getOAuthRedirectUri(): string {
 }
 
 /**
- * ✅ FIXED: OAuth State Store with Global Persistence
+ * ✅ OAuth State Store with Global Persistence
  *
  * This ensures the state persists across Next.js serverless function invocations.
  * In production with multiple servers, consider using Redis or a database.
@@ -99,11 +99,21 @@ export function getOAuthRedirectUri(): string {
  * Note: "shop" parameter is kept for Shopify OAuth compatibility (Shopify's term),
  * but we refer to it as "store" in logging for consistency with our app.
  */
+
+// ✅ NEW: Inventory config interface
+interface InventoryConfig {
+  inventorySync: boolean
+  syncDirection: string
+  managesInventory: boolean
+}
+
+// ✅ UPDATED: StateData now includes inventoryConfig
 interface StateData {
   shop: string
   timestamp: number
   storeId?: string
   warehouseConfig?: any
+  inventoryConfig?: InventoryConfig  // ✅ NEW: Added inventory config
 }
 
 // ✅ Use global variable to persist across serverless invocations
@@ -126,14 +136,22 @@ const getStateStore = (): Map<string, StateData> => {
  * @param shop - Store domain from Shopify (e.g., store.myshopify.com)
  * @param storeId - Internal store ID (optional)
  * @param warehouseConfig - Warehouse routing configuration (optional)
+ * @param inventoryConfig - Inventory sync configuration (optional) ✅ NEW
  */
-export function saveOAuthState(state: string, shop: string, storeId?: string, warehouseConfig?: any) {
+ export function saveOAuthState(
+   state: string,
+   shop: string,
+   storeId?: string,
+   warehouseConfig?: any,
+   inventoryConfig?: InventoryConfig  // ✅ NEW: Added parameter
+ ) {
   const stateStore = getStateStore()
 
   stateStore.set(state, {
     shop,
     storeId,
     warehouseConfig,
+    inventoryConfig,  // ✅ NEW: Save inventory config
     timestamp: Date.now(),
   })
 
@@ -142,6 +160,9 @@ export function saveOAuthState(state: string, shop: string, storeId?: string, wa
     shop,
     storeId,
     hasWarehouseConfig: !!warehouseConfig,
+    hasInventoryConfig: !!inventoryConfig,  // ✅ NEW: Log inventory config
+    inventorySync: inventoryConfig?.inventorySync,  // ✅ NEW: Log specific values
+    syncDirection: inventoryConfig?.syncDirection,
     totalStates: stateStore.size
   })
 
@@ -162,7 +183,7 @@ export function saveOAuthState(state: string, shop: string, storeId?: string, wa
 }
 
 /**
- * ✅ Get OAuth state with warehouse config support
+ * ✅ UPDATED: Get OAuth state with inventory config support
  * @param state - State token to retrieve
  * @returns StateData or undefined if not found
  */
@@ -198,6 +219,9 @@ export function getOAuthState(state: string): StateData | undefined {
       shop: stateData.shop,
       storeId: stateData.storeId,
       hasWarehouseConfig: !!stateData.warehouseConfig,
+      hasInventoryConfig: !!stateData.inventoryConfig,  // ✅ NEW
+      inventorySync: stateData.inventoryConfig?.inventorySync,  // ✅ NEW
+      syncDirection: stateData.inventoryConfig?.syncDirection,  // ✅ NEW
       ageSeconds
     })
   }

@@ -20,10 +20,12 @@ export async function GET(request: NextRequest) {
     const shop = searchParams.get('shop');
     const storeId = searchParams.get('storeId');
     const warehouseConfig = searchParams.get('warehouseConfig');
+    const inventoryConfig = searchParams.get('inventoryConfig'); // ✅ NEW: Accept inventory config
 
     console.log('[OAuth Initiation] Shop:', shop);
     console.log('[OAuth Initiation] Store ID:', storeId);
     console.log('[OAuth Initiation] Warehouse Config:', warehouseConfig ? 'Provided' : 'Not provided');
+    console.log('[OAuth Initiation] Inventory Config:', inventoryConfig ? 'Provided' : 'Not provided'); // ✅ NEW
 
     if (!shop) {
       return NextResponse.json(
@@ -60,7 +62,20 @@ export async function GET(request: NextRequest) {
         console.log('[OAuth Initiation] Primary warehouse:', parsedWarehouseConfig.primaryWarehouseId);
       } catch (error) {
         console.warn('[OAuth Initiation] Failed to parse warehouse config');
-        // Don't fail OAuth flow, just log warning
+      }
+    }
+
+    // ✅ NEW: Parse inventory config
+    let parsedInventoryConfig = undefined;
+    if (inventoryConfig && typeof inventoryConfig === 'string') {
+      try {
+        parsedInventoryConfig = JSON.parse(inventoryConfig);
+        console.log('[OAuth Initiation] ✅ Inventory config parsed successfully');
+        console.log('[OAuth Initiation] Inventory sync enabled:', parsedInventoryConfig.inventorySync);
+        console.log('[OAuth Initiation] Sync direction:', parsedInventoryConfig.syncDirection);
+        console.log('[OAuth Initiation] Manages inventory:', parsedInventoryConfig.managesInventory);
+      } catch (error) {
+        console.warn('[OAuth Initiation] Failed to parse inventory config');
       }
     }
 
@@ -72,7 +87,7 @@ export async function GET(request: NextRequest) {
     const state = randomBytes(32).toString('hex');
 
     // Save state with shop and storeId
-    saveOAuthState(state, normalizedShop, storeId || undefined, parsedWarehouseConfig);
+    saveOAuthState(state, normalizedShop, storeId || undefined, parsedWarehouseConfig, parsedInventoryConfig);
 
     console.log('[OAuth Initiation] ✅ State saved with warehouse config');
     console.log('[OAuth Initiation] Generated state:', state.substring(0, 10) + '...');

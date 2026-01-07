@@ -6,8 +6,7 @@ import { getOAuthState, deleteOAuthState } from '@/lib/utils/shopifyAuth';
 
 /**
  * Shopify OAuth Callback Handler
- * ✅ FIXED: Simplified to only handle OAuth token exchange
- * The frontend will create/update the integration after redirect
+ * ✅ UPDATED: Now passes BOTH warehouse AND inventory config to frontend
  */
 export async function GET(request: NextRequest) {
   console.log('=================================');
@@ -40,8 +39,8 @@ export async function GET(request: NextRequest) {
       return redirectWithError('Invalid OAuth state');
     }
 
-    // ⭐ Extract warehouse config from state
-    const { storeId, warehouseConfig } = stateData;
+    // ⭐ Extract BOTH warehouse AND inventory config from state
+    const { storeId, warehouseConfig, inventoryConfig } = stateData;
 
     // Validate storeId exists
     if (!storeId) {
@@ -52,12 +51,12 @@ export async function GET(request: NextRequest) {
 
     console.log('[OAuth Callback] Store ID:', storeId);
     console.log('[OAuth Callback] Warehouse Config available:', !!warehouseConfig);
+    console.log('[OAuth Callback] Inventory Config available:', !!inventoryConfig); // ✅ NEW
 
     // Clean up state
     deleteOAuthState(state);
 
-    // ✅ FIXED: Get Shopify credentials from environment variables
-    // The integration doesn't exist yet when callback runs, so we can't get credentials from it
+    // ✅ Get Shopify credentials from environment variables
     const apiKey = process.env.SHOPIFY_CLIENT_ID;
     const apiSecret = process.env.SHOPIFY_CLIENT_SECRET;
 
@@ -100,6 +99,16 @@ export async function GET(request: NextRequest) {
     if (warehouseConfig) {
       redirectUrl.searchParams.set('warehouse_config', JSON.stringify(warehouseConfig));
       console.log('[OAuth Callback] ✅ Warehouse config included in redirect');
+    }
+
+    // ✅ NEW: Add inventory config if present
+    if (inventoryConfig) {
+      redirectUrl.searchParams.set('inventory_config', JSON.stringify(inventoryConfig));
+      console.log('[OAuth Callback] ✅ Inventory config included in redirect:', {
+        inventorySync: inventoryConfig.inventorySync,
+        syncDirection: inventoryConfig.syncDirection,
+        managesInventory: inventoryConfig.managesInventory
+      });
     }
 
     return NextResponse.redirect(redirectUrl);
