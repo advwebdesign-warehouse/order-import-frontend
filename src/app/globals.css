@@ -4,7 +4,9 @@
 @tailwind components;
 @tailwind utilities;
 
-
+/* ============================================
+   ANIMATIONS
+   ============================================ */
 
 @keyframes fade-in {
   from {
@@ -20,11 +22,184 @@
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
+
 @keyframes slideProgress {
   0% {
     transform: translateX(-50%);
   }
   100% {
     transform: translateX(0%);
+  }
+}
+
+/* ============================================
+   SCROLLBAR UTILITIES
+   Reusable across all tables and scrollable areas
+   ============================================ */
+
+/* Thin scrollbar - good for tables */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* ============================================
+   SCROLLBAR ON TOP
+   Flips the scrollbar to appear at the top of the container
+   Usage: Add .scrollbar-top to the scroll container
+          Add .scrollbar-top-content to the inner content wrapper
+   ============================================ */
+
+.scrollbar-top {
+  transform: rotateX(180deg);
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.scrollbar-top::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.scrollbar-top::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.scrollbar-top::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.scrollbar-top::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.scrollbar-top-content {
+  transform: rotateX(180deg);
+}
+
+/* Hidden scrollbar but still scrollable */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* Auto-show scrollbar on hover */
+.scrollbar-auto {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-auto:hover {
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.scrollbar-auto::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.scrollbar-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-auto::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.scrollbar-auto:hover::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+.scrollbar-auto:hover::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+}
+
+/* ============================================
+   TABLE UTILITIES
+   Sticky columns and shadows for data tables
+   ============================================ */
+
+/* Sticky column shadows */
+.sticky-shadow-left {
+  box-shadow: 2px 0 5px -2px rgba(0, 0, 0, 0.1);
+}
+
+.sticky-shadow-right {
+  box-shadow: -2px 0 5px -2px rgba(0, 0, 0, 0.1);
+}
+
+/* Table wrapper for horizontal scroll */
+.table-scroll-container {
+  @apply overflow-x-auto scrollbar-thin;
+}
+
+/* Ensure proper table layout */
+.data-table {
+  @apply min-w-full divide-y divide-gray-300;
+}
+
+.data-table thead {
+  @apply bg-gray-50;
+}
+
+.data-table tbody {
+  @apply bg-white divide-y divide-gray-200;
+}
+
+.data-table th {
+  @apply px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide;
+}
+
+.data-table td {
+  @apply px-4 py-4 whitespace-nowrap text-sm;
+}
+
+.data-table tbody tr:hover {
+  @apply bg-gray-50;
+}
+
+/* ============================================
+   PRINT UTILITIES
+   Clean printing for picking lists, packing slips
+   ============================================ */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Reset backgrounds for printing */
+  .print-clean {
+    background: white !important;
+    box-shadow: none !important;
   }
 }

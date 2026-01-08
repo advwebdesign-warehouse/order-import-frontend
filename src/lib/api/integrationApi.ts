@@ -487,13 +487,13 @@ export class IntegrationAPI {
    /**
     * Sync Shopify products
     * Backend route: POST /integrations/:id/shopify/products/sync
-    */
+
   static async syncShopifyProducts(integrationId: string) {
     return apiRequest(`/integrations/${integrationId}/shopify/products/sync`, {
       method: 'POST'
     })
   }
-
+    */
   /**
    * Sync Shopify orders
    * Backend route: POST /integrations/:id/shopify/orders/sync

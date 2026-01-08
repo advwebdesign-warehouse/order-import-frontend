@@ -51,7 +51,17 @@ import {
 } from '../utils/productUtils'
 import { Store } from '../../stores/utils/storeTypes'
 
-// ✅ lastSyncAtAdded stores prop
+// ✅ Sticky column configuration
+const STICKY_LEFT_COLUMNS = ['select', 'sku']
+const STICKY_RIGHT_COLUMNS = ['actions']
+
+// ✅ Column widths for sticky positioning
+const COLUMN_WIDTHS: Record<string, number> = {
+  select: 50,
+  sku: 150,
+  actions: 100,
+}
+
 interface ProductsTableProps {
   products: Product[]
   columns: ProductColumnConfig[]
@@ -100,6 +110,55 @@ export default function ProductsTable({
     }
   }
 
+  // ✅ Calculate sticky position for a column
+  const getStickyStyle = (columnId: string, isHeader: boolean = false): React.CSSProperties => {
+    const visibleColumns = columns.filter(col => col.visible)
+
+    if (STICKY_LEFT_COLUMNS.includes(columnId)) {
+      let leftOffset = 0
+      for (const col of visibleColumns) {
+        if (col.id === columnId) break
+        if (STICKY_LEFT_COLUMNS.includes(col.id)) {
+          leftOffset += COLUMN_WIDTHS[col.id] || 100
+        }
+      }
+      return {
+        position: 'sticky',
+        left: leftOffset,
+        zIndex: isHeader ? 20 : 10,
+      }
+    }
+
+    if (STICKY_RIGHT_COLUMNS.includes(columnId)) {
+      return {
+        position: 'sticky',
+        right: 0,
+        zIndex: isHeader ? 20 : 10,
+      }
+    }
+
+    return {}
+  }
+
+  // ✅ Get CSS classes for sticky columns
+  const getStickyClasses = (columnId: string, isHeader: boolean = false): string => {
+    const isLeftSticky = STICKY_LEFT_COLUMNS.includes(columnId)
+    const isRightSticky = STICKY_RIGHT_COLUMNS.includes(columnId)
+
+    if (!isLeftSticky && !isRightSticky) return ''
+
+    let classes = isHeader ? 'bg-gray-50' : 'bg-white group-hover:bg-gray-50'
+
+    if (isLeftSticky) {
+      classes += ' shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]'
+    }
+    if (isRightSticky) {
+      classes += ' shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]'
+    }
+
+    return classes
+  }
+
   const SortableHeader = ({ column }: { column: ProductColumnConfig }) => {
     const {
       attributes,
@@ -110,15 +169,19 @@ export default function ProductsTable({
       isDragging,
     } = useSortable({ id: column.id })
 
-    const style = {
+    const dragStyle = {
       transform: CSS.Transform.toString(transform),
       transition,
     }
+
+    const stickyStyle = getStickyStyle(column.id, true)
+    const style = { ...dragStyle, ...stickyStyle }
 
     if (!column.visible) return null
 
     const isActive = sortConfig.field === column.field
     const isAsc = isActive && sortConfig.direction === 'asc'
+    const stickyClasses = getStickyClasses(column.id, true)
 
     const handleSortClick = (e: React.MouseEvent) => {
       e.preventDefault()
@@ -134,7 +197,7 @@ export default function ProductsTable({
         <th
           ref={setNodeRef}
           style={style}
-          className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide select-none ${
+          className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide select-none bg-gray-50 ${stickyClasses} ${
             isDragging ? 'opacity-50' : ''
           }`}
           {...attributes}
@@ -163,7 +226,7 @@ export default function ProductsTable({
       <th
         ref={setNodeRef}
         style={style}
-        className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide select-none ${
+        className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide select-none whitespace-nowrap ${stickyClasses} ${
           isDragging ? 'opacity-50' : ''
         }`}
         {...attributes}
@@ -252,10 +315,11 @@ export default function ProductsTable({
 
       case 'name':
         return (
-          <div className="min-w-0 flex-1">
+          <div className="min-w-[200px] max-w-[300px]">
             <button
               onClick={() => onViewProduct(product)}
               className="text-sm font-medium text-gray-900 hover:text-gray-700 cursor-pointer text-left"
+              title={product.name}
             >
               {product.name}
             </button>
@@ -288,26 +352,35 @@ export default function ProductsTable({
 
       case 'visibility':
         return (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[product.visibility as keyof typeof VISIBILITY_COLORS]}`}>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[product.visibility as keyof typeof VISIBILITY_COLORS]|| 'bg-gray-100 text-gray-800'}`}>
             {formatVisibility(product.visibility)}
           </span>
         )
 
-        // ✅ lastSyncAtPlatform column
         case 'platform':
-          return (
-            <div className="text-sm">
-              {product.platform ? (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  {product.platform}
-                </span>
-              ) : (
-                <span className="text-gray-400">-</span>
-              )}
-            </div>
-          )
+        return (
+          <div className="flex items-center">
+            {product.platform === 'Shopify' && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Shopify
+              </span>
+            )}
+            {product.platform === 'Woocommerce' && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                WooCommerce
+              </span>
+            )}
+            {product.platform === 'manual' && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                Manual
+              </span>
+            )}
+            {!product.platform && (
+              <span className="text-gray-400 text-sm">-</span>
+            )}
+          </div>
+        )
 
-        // ✅ lastSyncAtStore column
         case 'store':
           return (
             <div className="text-sm text-gray-700">
@@ -319,7 +392,6 @@ export default function ProductsTable({
             </div>
           )
 
-      // Stock-related columns - only render if stock management is enabled
       case 'stockStatus':
         const stockLevel = getStockLevel(product)
         return (
@@ -442,21 +514,21 @@ export default function ProductsTable({
 
       case 'createdAt':
         return (
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-700 whitespace-nowrap">
             {formatDate(product.createdAt)}
           </div>
         )
 
       case 'updatedAt':
         return (
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-700 whitespace-nowrap">
             {formatDate(product.updatedAt)}
           </div>
         )
 
       case 'publishedAt':
         return (
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-700 whitespace-nowrap">
             {product.publishedAt ? formatDate(product.publishedAt) : 'Unpublished'}
           </div>
         )
@@ -515,15 +587,18 @@ export default function ProductsTable({
 
   return (
     <div className="mt-8 flow-root">
-      <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-        <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-          <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+    {/* ✅ Scroll container with scrollbar on TOP */}
+    <div className="shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg max-w-full">
+      {/* Outer wrapper - scrollbar-top class flips scrollbar to top */}
+      <div className="overflow-x-auto scrollbar-top">
+        {/* Inner wrapper - scrollbar-top-content flips content back to normal */}
+        <div className="scrollbar-top-content">
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
             >
-              <table className="min-w-full divide-y divide-gray-300">
+              <table className="divide-y divide-gray-300">
                 <thead className="bg-gray-50">
                   <tr>
                     <SortableContext items={columns.map(col => col.id)} strategy={horizontalListSortingStrategy}>
@@ -537,21 +612,39 @@ export default function ProductsTable({
                   {products.map((product) => (
                     <tr
                       key={product.id}
-                      className={`hover:bg-gray-50 ${product.parentId ? 'bg-blue-50/30' : ''}`}
+                      className={`group hover:bg-gray-50 ${product.parentId ? 'bg-blue-50/30' : ''}`}
                     >
-                      {columns.filter(col => col.visible).map((column) => (
-                        <td key={`${product.id}-${column.id}`} className="px-6 py-4 whitespace-nowrap">
+                    {columns.filter(col => col.visible).map((column) => {
+                      const stickyStyle = getStickyStyle(column.id, false)
+                      const isLeftSticky = STICKY_LEFT_COLUMNS.includes(column.id)
+                      const isRightSticky = STICKY_RIGHT_COLUMNS.includes(column.id)
+                      const isSticky = isLeftSticky || isRightSticky
+
+                      return (
+                        <td
+                          key={`${product.id}-${column.id}`}
+                          style={stickyStyle}
+                          className={`px-4 py-4 whitespace-nowrap text-sm ${
+                            isSticky ? (
+                              product.parentId
+                                ? 'bg-blue-50 group-hover:bg-blue-100'
+                                : 'bg-white group-hover:bg-gray-50'
+                            ) : ''
+                          } ${isLeftSticky ? 'shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''
+                          } ${isRightSticky ? 'shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`}
+                        >
                           {renderCellContent(column, product)}
                         </td>
-                      ))}
+                      )
+                    })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </DndContext>
+            </div>
           </div>
         </div>
-      </div>
 
       {products.length === 0 && (
         <div className="text-center py-12">
