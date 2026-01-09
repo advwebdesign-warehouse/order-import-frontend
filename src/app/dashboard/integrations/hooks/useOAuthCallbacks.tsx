@@ -11,6 +11,7 @@ import {
   ShopifyIntegration,
   SyncDirection  // ✅ Import for type safety
 } from '../types/integrationTypes'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
 
 // ✅ Interface for inventory config passed through OAuth
 interface OAuthInventoryConfig {
@@ -197,7 +198,7 @@ export function useOAuthCallbacks({
     const accessToken = searchParams.get('access_token')
     const storeIdParam = searchParams.get('store_id')
     const warehouseConfigParam = searchParams.get('warehouse_config')
-    const inventoryConfigParam = searchParams.get('inventory_config') // ✅ NEW: Parse inventory config
+    const inventoryConfigParam = searchParams.get('inventory_config') // Parse inventory config
     const errorParam = searchParams.get('error')
 
     console.log('[Shopify OAuth] 🔍 URL Parameters:', {
@@ -206,7 +207,7 @@ export function useOAuthCallbacks({
       accessToken: accessToken ? '***' : undefined,
       storeIdParam,
       warehouseConfigParam: warehouseConfigParam ? 'present' : 'missing',
-      inventoryConfigParam: inventoryConfigParam ? 'present' : 'missing',  // ✅ NEW
+      inventoryConfigParam: inventoryConfigParam ? 'present' : 'missing',
       errorParam
     })
 
@@ -273,7 +274,7 @@ export function useOAuthCallbacks({
         console.warn('[Shopify OAuth] ⚠️ No warehouse config in URL parameters')
       }
 
-      // ✅ NEW: Parse inventory config
+      // Parse inventory config
       let inventoryConfig: OAuthInventoryConfig | null = null
       if (inventoryConfigParam) {
         try {
@@ -302,7 +303,7 @@ export function useOAuthCallbacks({
             accessToken: accessToken,
           },
           routingConfig: warehouseConfig,
-          // ✅ NEW: Apply inventory config (with fallback to existing values)
+          // Apply inventory config (with fallback to existing values)
           inventorySync: inventoryConfig?.inventorySync ?? existingIntegration.inventorySync ?? false,
           syncDirection: inventoryConfig?.syncDirection ?? existingIntegration.syncDirection ?? 'one_way_to',
           managesInventory: inventoryConfig?.managesInventory ?? existingIntegration.managesInventory ?? false,
@@ -327,10 +328,10 @@ export function useOAuthCallbacks({
           hasStoreUrl: !!shop,
           hasAccessToken: !!accessToken,
           hasWarehouseConfig: !!warehouseConfig,  // ⭐ Log if we have it
-          hasInventoryConfig: !!inventoryConfig  // ✅ NEW
+          hasInventoryConfig: !!inventoryConfig
         })
 
-        // ✅ NEW: Create integration WITH inventory config
+        // Create integration WITH inventory config
         const newIntegration: ShopifyIntegration = {
           id: integrationId,
           name: 'Shopify',
@@ -347,7 +348,7 @@ export function useOAuthCallbacks({
             accessToken: accessToken,
           },
           routingConfig: warehouseConfig,
-          // ✅ NEW: Include inventory config fields
+          // Include inventory config fields
           inventorySync: inventoryConfig?.inventorySync ?? false,
           syncDirection: inventoryConfig?.syncDirection ?? 'one_way_to',
           managesInventory: inventoryConfig?.managesInventory ?? false,
@@ -445,61 +446,54 @@ export function useOAuthCallbacks({
   }, [searchParams, integrations, selectedStoreId, stores, updateIntegration, addIntegration, setNotification, setTestResults])
 
   /**
-   * ✅ Auto-sync function to avoid duplication
-   * ⭐ Accept integration directly instead of searching (avoids race condition)
+   * ✅ UPDATED: Auto-sync function using IntegrationAPI
+   * Now calls backend API directly with fullSync: false (incremental sync)
    */
   const triggerAutoSync = async (integration: Integration, integrationStoreId: string) => {
     setTimeout(async () => {
       try {
-        // Using accountId from props (API-based)
-        console.log('[Auto-Sync] ✅ AccountId from props:', accountId)
+        console.log('[Auto-Sync] ✅ Starting auto-sync via IntegrationAPI')
+        console.log('[Auto-Sync] Store ID:', integrationStoreId)
+        console.log('[Auto-Sync] Integration ID:', integration.id)
+        console.log('[Auto-Sync] fullSync: false (incremental)')
 
         if (!accountId || accountId === 'default') {
           console.error('[Auto-Sync] ❌ Invalid accountId:', accountId)
           throw new Error('Account ID not available. Please refresh and try again.')
         }
 
-        // ⭐ Use integration passed as parameter (no searching needed!)
         if (!integration) {
           console.error('[Auto-Sync] ❌ No integration provided')
           throw new Error('Integration object is required')
         }
 
-        console.log('[Auto-Sync] ✅ Using integration:', integration.id)
-
-        // Dynamically import the service (avoid SSR issues)
-        const { ShopifyService } = await import('@/lib/shopify/shopifyService')
-
         // Get the store name
         const store = stores.find((s: any) => s.id === integrationStoreId)
 
-        console.log('[Auto-Sync] Starting sync for storeid:', integrationStoreId)
+        console.log('[Auto-Sync] Starting sync for store:', store?.name || integrationStoreId)
 
-        // Trigger auto-sync
-        // ✅ autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
-        // Warehouse assignment is handled by backend based on integration's warehouseConfig
-        await ShopifyService.autoSyncOnConnection(
-          integration as any,
-          accountId,
-          (message) => {
-            console.log('[Auto-Sync]', message)
-          }
-        )
+        // ✅ FIXED: Call backend API directly with fullSync: false
+        // This ensures incremental sync and field preservation
+        const result = await IntegrationAPI.syncShopify({
+          storeId: integrationStoreId,
+          syncType: 'all',
+          fullSync: false  // ✅ CRITICAL: Always use incremental sync for auto-sync
+        })
 
         // Update integration with lastSyncAt
-        // ⭐ Use integration.id instead of integrationId variable
         updateIntegration(integration.id, {
           lastSyncAt: new Date().toISOString()
         })
 
         console.log('[Auto-Sync] ✅ Sync completed successfully')
 
-        // Show final success notification
+        // Show final success notification with details
+        const data = result?.data || {}
         setNotification({
           show: true,
           type: 'success',
           title: 'Sync Complete',
-          message: '✅ Successfully synced orders and products from Shopify'
+          message: `Synced ${data.orders || 0} orders (${data.ordersNew || 0} new, ${data.ordersUpdated || 0} updated) and ${data.products || 0} products`
         })
       } catch (error: any) {
         console.error('[Auto-Sync] ❌ Error:', error)

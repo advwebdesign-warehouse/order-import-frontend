@@ -18,6 +18,7 @@ import BrowseIntegrationsModal from './components/BrowseIntegrationsModal'
 import { Integration } from './types/integrationTypes'
 import { storeApi } from '@/app/services/storeApi'
 import { WarehouseAPI } from '@/lib/api/warehouseApi'
+import { IntegrationAPI } from '@/lib/api/integrationApi'  // ✅ Import IntegrationAPI
 import Notification from '@/app/dashboard/shared/components/Notification'
 import WarehouseRequiredWarning from './components/WarehouseRequiredWarning'
 import { checkStoreWarehouseById } from './utils/storeWarehouseUtils'
@@ -51,7 +52,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
   const [selectedStoreId, setSelectedStoreId] = useState<string>('')
   const [hasWarehouses, setHasWarehouses] = useState<boolean>(true)
 
-  // ✅ NEW: Warehouse state
+  // ✅ Warehouse state
   const [warehouses, setWarehouses] = useState<any[]>([])
   const [warehousesLoading, setWarehousesLoading] = useState(true)
   const [warehousesError, setWarehousesError] = useState<string | null>(null)
@@ -122,7 +123,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
     loadStores()
   }, [])
 
-  // ✅ NEW: Load warehouses when accountId is available
+  // ✅ Load warehouses when accountId is available
   useEffect(() => {
     if (accountId) {
       loadWarehouses()
@@ -178,7 +179,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
   }
 
   /**
-   * ✅ NEW: Load warehouses from API
+   * ✅ Load warehouses from API
    */
   const loadWarehouses = async () => {
     try {
@@ -436,7 +437,10 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
     }
   }
 
-  // ✅ Shopify sync handler with progress stages
+  /**
+   * ✅ UPDATED: Shopify sync handler - Uses IntegrationAPI directly
+   * Now calls backend API with fullSync: false (incremental sync)
+   */
   const handleShopifySync = async (
     integrationId: string,
     onProgress?: (stage: 'starting' | 'products' | 'orders' | 'complete') => void
@@ -452,16 +456,12 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
     setSyncingId(shopifyIntegration.id)
 
     try {
-      console.log('[handleShopifySync] Starting Shopify sync...')
+      console.log('[handleShopifySync] 🔄 Starting Shopify sync via IntegrationAPI...')
+      console.log('[handleShopifySync] Store ID:', selectedStoreId)
+      console.log('[handleShopifySync] fullSync: false (incremental)')
 
       // Stage 1: Starting
       onProgress?.('starting')
-
-      // Dynamically import ShopifyService
-      const { ShopifyService } = await import('@/lib/shopify/shopifyService')
-
-      console.log('[handleShopifySync] Starting sync for store:', selectedStoreId)
-      // warehouseId removed - warehouse assignment handled by backend via integration config
 
       // Show initial notification
       setNotification({
@@ -474,49 +474,46 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
       // Stage 2: Syncing products
       onProgress?.('products')
 
-      // Small delay to show the progress
-      await new Promise(resolve => setTimeout(resolve, 800))
+      // ✅ FIXED: Call backend API directly with fullSync: false
+      // This ensures incremental sync and field preservation
+      const result = await IntegrationAPI.syncShopify({
+        storeId: selectedStoreId,
+        syncType: 'all',
+        fullSync: false  // ✅ CRITICAL: Always use incremental sync
+      })
 
       // Stage 3: Syncing orders
       onProgress?.('orders')
-
-      // Trigger sync with the integration we already have
-      // Note: accountId is handled automatically by API via JWT token
-      // ✅ autoSyncOnConnection now takes 3 parameters (integration, accountId, onProgress)
-      // Warehouse assignment is handled by backend based on integration's warehouseConfig
-      await ShopifyService.autoSyncOnConnection(
-        shopifyIntegration as any,
-        accountId, // From useIntegrations hook - API automatically scopes via JWT
-        (message) => {
-          console.log('[Shopify Sync]', message)
-        }
-      )
 
       // Update integration with last sync time
       await updateIntegration(shopifyIntegration.id, {
         lastSyncAt: new Date().toISOString()
       })
 
-      console.log('[handleShopifySync] ✅ Sync completed successfully')
-
       // Stage 4: Complete
       onProgress?.('complete')
 
+      console.log('[handleShopifySync] ✅ Sync completed:', result)
+
+      // Show success notification with details
+      const data = result?.data || {}
       setNotification({
         show: true,
         type: 'success',
         title: 'Sync Complete',
-        message: '✅ Successfully synced orders and products from Shopify'
+        message: `Synced ${data.orders || 0} orders (${data.ordersNew || 0} new, ${data.ordersUpdated || 0} updated) and ${data.products || 0} products`
       })
     } catch (error: any) {
-      console.error('[handleShopifySync] Error:', error)
+      console.error('[handleShopifySync] ❌ Error:', error)
+      onProgress?.('complete') // Reset progress
 
       setNotification({
         show: true,
         type: 'error',
         title: 'Sync Failed',
-        message: error.message || 'Failed to sync Shopify data. Please try again.'
+        message: error.message || 'Failed to sync with Shopify'
       })
+
       throw error
     } finally {
       setSyncingId(null)
