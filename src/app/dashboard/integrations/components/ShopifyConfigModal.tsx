@@ -14,11 +14,14 @@ import {
   ShopifyIntegration,
   EcommerceWarehouseConfig,
   SyncDirection,
-  Integration
+  Integration,
+  ProductSyncConfig,
+  DEFAULT_PRODUCT_SYNC_CONFIG
 } from '../types/integrationTypes'
 import { Warehouse } from '../../warehouses/utils/warehouseTypes'
 import EcommerceWarehouseRouting from './EcommerceWarehouseRouting'
 import EcommerceInventorySync from './EcommerceInventorySync'
+import EcommerceProductSyncDestinations from './EcommerceProductSyncDestinations'
 import WarehouseRequiredWarning from './WarehouseRequiredWarning'
 import { IntegrationAPI } from '@/lib/api/integrationApi'
 
@@ -89,6 +92,11 @@ export default function ShopifyConfigModal({
     existingIntegration?.syncDirection || 'one_way_to'
   )
 
+  // ⭐ NEW: Product sync destinations configuration
+  const [productSyncConfig, setProductSyncConfig] = useState<ProductSyncConfig>(
+    existingIntegration?.config?.productSyncConfig || DEFAULT_PRODUCT_SYNC_CONFIG
+  )
+
   // ⭐ Update warehouse config when warehouses change
   useEffect(() => {
     if (warehouses.length > 0 && !warehouseConfig.primaryWarehouseId) {
@@ -99,7 +107,7 @@ export default function ShopifyConfigModal({
     }
   }, [warehouses])
 
-  // ✅ FIX: Only sync from props on FIRST modal open, not every prop change
+  // ✅ Only sync from props on FIRST modal open, not every prop change
   // This prevents the feedback loop where parent update → prop change → state reset
   useEffect(() => {
     // ✅ Log every time this effect runs
@@ -117,7 +125,8 @@ export default function ShopifyConfigModal({
         routingMode: existingIntegration.routingConfig?.mode,
         inventorySync: existingIntegration.inventorySync,
         syncDirection: existingIntegration.syncDirection,
-        managesInventory: existingIntegration.managesInventory
+        managesInventory: existingIntegration.managesInventory,
+        hasProductSyncConfig: !!existingIntegration.config?.productSyncConfig
       })
 
       // Load from root-level fields (per integrationTypes.ts)
@@ -126,6 +135,12 @@ export default function ShopifyConfigModal({
       }
       setInventorySyncEnabled(existingIntegration.inventorySync || false)
       setSyncDirection(existingIntegration.syncDirection || 'one_way_to')
+
+      // ⭐ NEW: Load product sync config
+      if (existingIntegration.config?.productSyncConfig) {
+        setProductSyncConfig(existingIntegration.config.productSyncConfig)
+      }
+
       if (existingIntegration.config?.storeUrl) {
         setstoreUrl(existingIntegration.config.storeUrl)
       }
@@ -213,7 +228,8 @@ export default function ShopifyConfigModal({
         managesInventory: inventorySyncEnabled,
         config: {
           storeUrl: normalizedShop,
-          accessToken: ''
+          accessToken: '',
+          productSyncConfig: productSyncConfig
         }
       })
 
@@ -234,7 +250,8 @@ export default function ShopifyConfigModal({
           routingMode: verified.routingConfig?.mode,
           assignmentsCount: verified.routingConfig?.assignments?.length || 0,
           inventorySync: verified.inventorySync,
-          managesInventory: verified.managesInventory
+          managesInventory: verified.managesInventory,
+          hasProductSyncConfig: !!verified.config?.productSyncConfig
         })
 
         // ✅ Double-check that our config was actually saved
@@ -261,10 +278,11 @@ export default function ShopifyConfigModal({
         managesInventory: inventorySyncEnabled
       }
 
-      const authUrl = `${API_BASE}/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}&inventoryConfig=${encodeURIComponent(JSON.stringify(inventoryConfig))}`
+      const authUrl = `${API_BASE}/integrations/shopify/auth?shop=${encodeURIComponent(normalizedShop)}&storeId=${encodeURIComponent(selectedStoreId)}&warehouseConfig=${encodeURIComponent(JSON.stringify(warehouseConfig))}&inventoryConfig=${encodeURIComponent(JSON.stringify(inventoryConfig))}&productSyncConfig=${encodeURIComponent(JSON.stringify(productSyncConfig))}`
 
       console.log('[Shopify Modal] 🚀 Configuration verified, redirecting to OAuth...')
       console.log('[Shopify Modal] 📦 Passing inventory config:', inventoryConfig)
+      console.log('[Shopify Modal] 📦 Passing product sync config:', productSyncConfig)
 
       // Redirect to OAuth - sync will happen automatically after connection
       window.location.href = authUrl
@@ -326,7 +344,8 @@ export default function ShopifyConfigModal({
       hasOnSync: !!onSync,
       isConnected,
       inventorySyncEnabled,
-      syncDirection
+      syncDirection,
+      productSyncConfig
     })
     if (!onSync) {
       console.warn('[Shopify Modal] ❌ No onSync handler provided - ABORTING')
@@ -349,15 +368,20 @@ export default function ShopifyConfigModal({
         inventorySyncEnabled,
         syncDirection,
         warehouseConfigMode: warehouseConfig.mode,
-        assignmentsCount: warehouseConfig.assignments?.length || 0
+        assignmentsCount: warehouseConfig.assignments?.length || 0,
+        productSyncConfig
       })
 
-      // ✅ Step 1: Save config - this MUST include inventory fields
+      // ✅ Step 1: Save config - this MUST include inventory fields AND product sync config
       const saveData = {
         routingConfig: warehouseConfig,
         inventorySync: inventorySyncEnabled,
         syncDirection: syncDirection,
-        managesInventory: inventorySyncEnabled
+        managesInventory: inventorySyncEnabled,
+        config: {
+          ...existingIntegration?.config,
+          productSyncConfig: productSyncConfig  // ⭐ Include product sync config
+        }
       }
 
       console.log('[Shopify Modal] 📤 Calling onSave with:', saveData)
@@ -388,7 +412,8 @@ export default function ShopifyConfigModal({
         console.log('[Shopify Modal] ✅ Verified:', {
           inventorySync: verified?.inventorySync,
           syncDirection: verified?.syncDirection,
-          managesInventory: verified?.managesInventory
+          managesInventory: verified?.managesInventory,
+          productSyncConfig: verified?.config?.productSyncConfig
         })
       }
 
@@ -437,6 +462,12 @@ export default function ShopifyConfigModal({
   const handleSyncDirectionChange = useCallback((direction: SyncDirection) => {
     console.log('[Shopify Modal] 📝 Sync direction changed:', direction)
     setSyncDirection(direction)
+  }, [])
+
+  // ⭐ NEW: Handler for product sync config changes
+  const handleProductSyncConfigChange = useCallback((config: ProductSyncConfig) => {
+    console.log('[Shopify Modal] 📝 Product sync config changed:', config)
+    setProductSyncConfig(config)
   }, [])
 
   return (
@@ -564,6 +595,17 @@ export default function ShopifyConfigModal({
                                 onChange={setWarehouseConfig}
                               />
 
+                              {/* ⭐ NEW: Product Sync Destinations */}
+                              <div className="border-t border-gray-200 pt-6">
+                                <EcommerceProductSyncDestinations
+                                  productSyncConfig={productSyncConfig}
+                                  warehouseConfig={warehouseConfig}
+                                  warehouses={warehouses}
+                                  integrationName="Shopify"
+                                  onChange={handleProductSyncConfigChange}
+                                />
+                              </div>
+
                               {/* ⭐ Product & Inventory Sync - Uses proper Integration[] type */}
                               <div className="border-t border-gray-200 pt-6">
                               <EcommerceInventorySync
@@ -682,6 +724,17 @@ export default function ShopifyConfigModal({
                             warehouses={warehouses}
                             onChange={setWarehouseConfig}
                           />
+
+                          {/* ⭐ NEW: Product Sync Destinations */}
+                          <div className="border-t border-gray-200 pt-6">
+                            <EcommerceProductSyncDestinations
+                              productSyncConfig={productSyncConfig}
+                              warehouseConfig={warehouseConfig}
+                              warehouses={warehouses}
+                              integrationName="Shopify"
+                              onChange={handleProductSyncConfigChange}
+                            />
+                          </div>
 
                             {/* ⭐ Product & Inventory Sync - Uses proper Integration[] type */}
                           <div className="border-t border-gray-200 pt-6">

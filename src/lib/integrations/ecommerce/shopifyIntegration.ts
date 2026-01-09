@@ -1,17 +1,19 @@
 //file path: src/lib/integrations/ecommerce/shopifyIntegration.ts
-// UPDATED: Now uses API routes for sync operations to avoid CORS errors
+// ✅ FIXED: Now uses IntegrationAPI for sync operations (proper auth + backend URL)
 
 import { EcommerceIntegrationService, IntegrationConfig, SyncResult, TestConnectionResult } from '../base/baseIntegration'
 import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient'
+import { IntegrationAPI } from '@/lib/api/integrationApi'
 
 /**
  * Shopify Integration Implementation
- * ✅ UPDATED: Extends EcommerceIntegrationService (renamed class)
+ * ✅ Extends EcommerceIntegrationService
  *
- * UPDATED: Uses API routes for sync operations (no CORS!)
- * - testConnection: Uses client directly (only for testing)
- * - syncProducts: Calls /api/integrations/shopify/sync
- * - syncOrders: Calls /api/integrations/shopify/sync
+ * ✅ FIXED: Uses IntegrationAPI for sync operations
+ * - IntegrationAPI.syncShopify() uses apiRequest which:
+ *   - Calls the correct backend URL (API_BASE)
+ *   - Includes credentials: 'include' for httpOnly cookies
+ *   - Handles errors properly
  */
 export class ShopifyIntegration extends EcommerceIntegrationService  {
   private client: ShopifyGraphQLClient | null = null
@@ -60,50 +62,33 @@ export class ShopifyIntegration extends EcommerceIntegrationService  {
 
   /**
    * Sync products from Shopify
-   * UPDATED: Uses API route (server-side) to avoid CORS errors
+   * ✅ FIXED: Uses IntegrationAPI.syncShopify() for proper backend API call
    */
    async syncProducts(): Promise<SyncResult> {
      try {
-       console.log('[ShopifyIntegration] Starting product sync via API route...')
+       console.log('[ShopifyIntegration] Starting product sync via IntegrationAPI...')
+       console.log('[ShopifyIntegration] Store ID:', this.config.storeId)
 
-       // ✅ CALL YOUR API ROUTE (not Shopify directly!)
-       const response = await fetch('/api/integrations/shopify/sync', {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json'
-         },
-         body: JSON.stringify({
-           shop: this.config.config.storeUrl,
-           accessToken: this.config.config.accessToken,
-           accountId: this.config.accountId,
-           syncType: 'products',
-           storeId: this.config.storeId,
-           forceFullSync: false
-         })
+       // ✅ FIXED: Use IntegrationAPI which handles auth and correct URL
+       const result = await IntegrationAPI.syncShopify({
+         storeId: this.config.storeId,
+         syncType: 'products',
+         fullSync: false
        })
 
-       if (!response.ok) {
-         const errorData = await response.json().catch(() => ({ error: response.statusText }))
-         throw new Error(errorData.error || `API error: ${response.statusText}`)
-       }
-
-       const result = await response.json()
+      console.log('[ShopifyIntegration] Sync result:', result)
 
        if (!result.success) {
          throw new Error(result.error || 'Product sync failed')
        }
 
-       console.log(`[ShopifyIntegration] ✅ Synced ${result.productCount} products via API route`)
-
-       // API route handles saving to storage
-      if (result.data?.products && result.data.products.length > 0) {
-        console.log(`[ShopifyIntegration] ✅ Saved ${result.data.products.length} products`)
-      }
+       const productCount = result.data?.products || 0
+       console.log(`[ShopifyIntegration] ✅ Synced ${productCount} products via IntegrationAPI`)
 
        return {
          success: true,
-         count: result.productCount || 0,
-         data: result.data?.products || []
+         count: productCount,
+         data: result.data
        }
      } catch (error: any) {
        console.error('[ShopifyIntegration] Product sync failed:', error)
@@ -117,47 +102,30 @@ export class ShopifyIntegration extends EcommerceIntegrationService  {
 
    /**
     * Sync orders from Shopify
-    * Now actually calls API route (no CORS!)
+    * ✅ FIXED: Uses IntegrationAPI.syncShopify() for proper backend API call
     */
    async syncOrders(): Promise<SyncResult> {
      try {
-       console.log('[ShopifyIntegration] Starting order sync via API route...')
+      console.log('[ShopifyIntegration] Starting order sync via IntegrationAPI...')
 
-       // ✅ CALL YOUR API ROUTE (not Shopify directly!)
-       const response = await fetch('/api/integrations/shopify/sync', {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json'
-         },
-         body: JSON.stringify({
-           shop: this.config.config.storeUrl,
-           accessToken: this.config.config.accessToken,
-           accountId: this.config.accountId,
-           syncType: 'orders',
-           storeId: this.config.storeId,
-           warehouseId: this.config.config.warehouseId,
-           forceFullSync: false
-         })
-       })
-
-       if (!response.ok) {
-         const errorData = await response.json().catch(() => ({ error: response.statusText }))
-         throw new Error(errorData.error || `API error: ${response.statusText}`)
-       }
-
-       const result = await response.json()
+      // ✅ FIXED: Use IntegrationAPI which handles auth and correct URL
+      const result = await IntegrationAPI.syncShopify({
+        storeId: this.config.storeId,
+        syncType: 'orders',
+        fullSync: false
+      })
 
        if (!result.success) {
          throw new Error(result.error || 'Order sync failed')
        }
 
-       console.log(`[ShopifyIntegration] ✅ Synced ${result.orderCount} orders via API route`)
+       const orderCount = result.data?.orders || 0
+       console.log(`[ShopifyIntegration] ✅ Synced ${orderCount} orders via IntegrationAPI`)
 
-       // API route already saved to localStorage, just return result
        return {
          success: true,
-         count: result.orderCount || 0,
-         data: result.data?.orders || []
+         count: orderCount,
+         data: result.data
        }
      } catch (error: any) {
        console.error('[ShopifyIntegration] Order sync failed:', error)

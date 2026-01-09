@@ -23,6 +23,36 @@ export type ProductImportMode = 'products_only' | 'with_quantities'
  */
 export type SyncDirection = 'one_way_from' | 'one_way_to' | 'two_way' | 'manual'
 
+// ============================================================================
+// ⭐ NEW: Product Sync Destinations Configuration
+// ============================================================================
+
+/**
+ * Product sync modes determine which warehouses receive synced products
+ */
+export type ProductSyncMode =
+  | 'all_routing_warehouses'  // Sync to all warehouses in routing config
+  | 'primary_only'            // Only sync to primary warehouse (default)
+  | 'specific_warehouses'     // User-selected warehouses
+
+/**
+  * Configuration for product sync destinations
+  * Stored in integration.config.productSyncConfig
+  */
+export interface ProductSyncConfig {
+  mode: ProductSyncMode
+  // Only used when mode === 'specific_warehouses'
+  selectedWarehouseIds?: string[]
+}
+
+/**
+ * Default product sync config
+ */
+export const DEFAULT_PRODUCT_SYNC_CONFIG: ProductSyncConfig = {
+  mode: 'primary_only',
+  selectedWarehouseIds: undefined
+}
+
 /**
  * E-commerce inventory synchronization configuration
  */
@@ -160,6 +190,8 @@ export interface ShopifyIntegration extends BaseIntegration {
       mode: ProductImportMode
       primaryWarehouseId?: string
     }
+    // ⭐ NEW: Product sync destinations
+    productSyncConfig?: ProductSyncConfig
   }
   features: {
     orderSync: boolean
@@ -189,6 +221,8 @@ export interface WooCommerceIntegration extends BaseIntegration {
       mode: ProductImportMode
       primaryWarehouseId?: string
     }
+    // ⭐ NEW: Product sync destinations
+    productSyncConfig?: ProductSyncConfig
   }
   // ✅ Flexible warehouse routing for e-commerce orders
   routingConfig?: EcommerceWarehouseConfig
@@ -211,6 +245,8 @@ export interface EtsyIntegration extends BaseIntegration {
       mode: ProductImportMode
       primaryWarehouseId?: string
     }
+    // ⭐ NEW: Product sync destinations
+    productSyncConfig?: ProductSyncConfig
   }
   // ✅ Flexible warehouse routing for e-commerce orders
   routingConfig?: EcommerceWarehouseConfig
@@ -235,6 +271,8 @@ export interface EbayIntegration extends BaseIntegration {
       mode: ProductImportMode
       primaryWarehouseId?: string
     }
+    // ⭐ NEW: Product sync destinations
+    productSyncConfig?: ProductSyncConfig
   }
   // ✅ Flexible warehouse routing for e-commerce orders
   routingConfig?: EcommerceWarehouseConfig
@@ -318,6 +356,75 @@ export function setInventoryConfig<T extends ShopifyIntegration | WooCommerceInt
     managesInventory: inventoryConfig.managesInventory,
     syncDirection: inventoryConfig.syncDirection
   }
+}
+
+/**
+ * ⭐ NEW: Get target warehouses for product sync based on configuration
+ * Used by backend to determine which warehouses should receive synced products
+ */
+export function getProductSyncTargetWarehouses(
+  productSyncConfig: ProductSyncConfig | undefined,
+  warehouseConfig: EcommerceWarehouseConfig | undefined
+): string[] {
+  const targetWarehouses: string[] = []
+
+  // Fallback if no configs provided
+  if (!warehouseConfig) {
+    return []
+  }
+
+  if (!productSyncConfig) {
+    // Default to primary warehouse only
+    if (warehouseConfig.primaryWarehouseId) {
+      return [warehouseConfig.primaryWarehouseId]
+    }
+    return []
+  }
+
+  const mode = productSyncConfig.mode || 'primary_only'
+
+  switch (mode) {
+    case 'all_routing_warehouses':
+      // Include primary warehouse
+      if (warehouseConfig.primaryWarehouseId) {
+        targetWarehouses.push(warehouseConfig.primaryWarehouseId)
+      }
+      // Include fallback warehouse
+      if (warehouseConfig.fallbackWarehouseId &&
+          !targetWarehouses.includes(warehouseConfig.fallbackWarehouseId)) {
+        targetWarehouses.push(warehouseConfig.fallbackWarehouseId)
+      }
+      // Include all warehouses from advanced assignments
+      if (warehouseConfig.mode === 'advanced' && warehouseConfig.assignments) {
+        warehouseConfig.assignments.forEach(assignment => {
+          if (assignment.isActive && !targetWarehouses.includes(assignment.warehouseId)) {
+            targetWarehouses.push(assignment.warehouseId)
+          }
+        })
+      }
+      break
+
+    case 'specific_warehouses':
+      // Use user-selected warehouses
+      if (productSyncConfig.selectedWarehouseIds && productSyncConfig.selectedWarehouseIds.length > 0) {
+        return productSyncConfig.selectedWarehouseIds
+      }
+      // Fallback to primary if no selection
+      if (warehouseConfig.primaryWarehouseId) {
+        return [warehouseConfig.primaryWarehouseId]
+      }
+      break
+
+    case 'primary_only':
+    default:
+      // Only primary warehouse
+      if (warehouseConfig.primaryWarehouseId) {
+        return [warehouseConfig.primaryWarehouseId]
+      }
+      break
+  }
+
+  return targetWarehouses
 }
 
 // ============================================================================
