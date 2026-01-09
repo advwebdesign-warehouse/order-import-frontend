@@ -3,7 +3,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useCurrentAccountId } from '@/hooks/useAccountInitialization'
 import ProductsToolbar from './components/ProductsToolbar'
 import ProductsFilters from './components/ProductsFilters'
@@ -200,8 +200,21 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   // ✅ lastSyncAtStore management
   const { stores } = useStores()
 
-  // Custom hooks for state management
-  const { products, loading, refetchProducts } = useProducts(selectedWarehouseId)
+  // ✅ IMPORTANT: Load ALL products first (no warehouse filter)
+  const { products: allProducts, loading: loadingAllProducts, refetchProducts } = useProducts()
+
+  // ✅ Then filter by warehouse client-side for display
+  const products = useMemo(() => {
+    if (!selectedWarehouseId) {
+      return allProducts
+    }
+    return allProducts.filter(product =>
+      product.warehouseStock?.some(stock => stock.warehouseId === selectedWarehouseId)
+    )
+  }, [allProducts, selectedWarehouseId])
+
+  // Use loadingAllProducts as the main loading state
+  const loading = loadingAllProducts
 
   const {
     searchTerm,
@@ -455,6 +468,11 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const showIntegrationSpecificUI = hasIntegrations && integrationCount === 1
   const singleIntegration = showIntegrationSpecificUI ? ecommerceIntegrations[0] : null
 
+  // ✅ NEW: Determine if we're in a "warehouse with no products" state
+  const hasProductsGlobally = allProducts.length > 0
+  const isWarehouseSelected = selectedWarehouseId !== ''
+  const warehouseHasNoProducts = isWarehouseSelected && products.length === 0 && hasProductsGlobally
+
   return (
     <div className="px-4 sm:px-6 lg:px-8">
     {/* ✅ DELETE CONFIRMATION MODAL */}
@@ -698,8 +716,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         </div>
       )}
 
-      {/* Warehouse Selector */}
-      {products.length > 0 && (
+      {/* ✅ UPDATED: Warehouse Selector - Always show when we have products globally */}
+      {hasIntegrations && hasProductsGlobally && (
         <div className="mb-6">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
@@ -767,7 +785,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         </div>
       )}
 
-      {products.length > 0 && (
+      {/* ✅ UPDATED: Always show Toolbar and Filters when we have products globally */}
+      {hasIntegrations && hasProductsGlobally && (
         <>
           <ProductsToolbar
             selectedProductsCount={selectedProducts.size}
@@ -776,7 +795,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             onResetLayout={handleResetLayout}
             columns={columns}
             onColumnVisibilityChange={handleColumnVisibilityChange}
-            totalProducts={products.length}
+            totalProducts={allProducts.length}
             filteredProducts={filteredProducts.length}
             itemsPerPage={productsPerPage}
             onItemsPerPageChange={setProductsPerPage}
@@ -795,8 +814,48 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             filterOptions={filterOptions}
           />
 
+          {/* ✅ NEW: Empty State for Warehouse with No Products */}
+          {warehouseHasNoProducts && (
+            <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-6">
+              <div className="text-center">
+                <svg
+                  className="mx-auto h-12 w-12 text-blue-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                  />
+                </svg>
+                <h3 className="mt-2 text-lg font-medium text-gray-900">No Products in This Warehouse</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  There are no products assigned to <strong>{warehouseDisplayName}</strong>.
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  You can assign products to this warehouse or select "All Warehouses" to see all products.
+                </p>
+                <div className="mt-6">
+                  <button
+                    onClick={() => handleWarehouseChange('')}
+                    className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    View All Products
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ✅ Select All Banner - Shows when all current page items are selected */}
-          {areAllCurrentPageSelected(currentProducts) && selectedProducts.size > 0 && (
+          {!warehouseHasNoProducts && areAllCurrentPageSelected(currentProducts) && selectedProducts.size > 0 && (
             <SelectAllBanner
               currentPageCount={currentProducts.length}
               totalCount={filteredProducts.length}
@@ -807,31 +866,37 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             />
           )}
 
-          <ProductsTable
-            products={currentProducts}
-            columns={columns}
-            sortConfig={sortConfig}
-            selectedProducts={selectedProducts}
-            onSort={handleSort}
-            onSelectProduct={handleSelectProduct}
-            onSelectAll={() => handleSelectAll(currentProducts)}
-            onViewProduct={handleViewProduct}
-            onEditProduct={handleEditProduct}
-            onDuplicateProduct={handleDuplicateProduct}
-            onColumnReorder={handleColumnReorder}
-            stores={stores}
-          />
+          {/* ✅ Only show table when warehouse has products */}
+          {!warehouseHasNoProducts && (
+            <>
+              <ProductsTable
+                products={currentProducts}
+                columns={columns}
+                sortConfig={sortConfig}
+                selectedProducts={selectedProducts}
+                onSort={handleSort}
+                onSelectProduct={handleSelectProduct}
+                onSelectAll={() => handleSelectAll(currentProducts)}
+                onViewProduct={handleViewProduct}
+                onEditProduct={handleEditProduct}
+                onDuplicateProduct={handleDuplicateProduct}
+                onColumnReorder={handleColumnReorder}
+                stores={stores}
+              />
 
-          <ProductsPagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={sortedProducts.length}
-            itemsPerPage={productsPerPage}
-            onPageChange={setCurrentPage}
-          />
-          </>
-        )}
+              <ProductsPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={sortedProducts.length}
+                itemsPerPage={productsPerPage}
+                onPageChange={setCurrentPage}
+              />
+            </>
+          )}
+        </>
+      )}
     </div>
   )
 }
+
 export default withAuth(ProductsPageContent)
