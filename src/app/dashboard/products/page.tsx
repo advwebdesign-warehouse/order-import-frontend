@@ -717,7 +717,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       )}
 
       {/* ✅ UPDATED: Warehouse Selector - Always show when we have products globally */}
-      {hasIntegrations && hasProductsGlobally && (
+      {hasIntegrations && (
         <div className="mb-6">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
@@ -786,7 +786,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       )}
 
       {/* ✅ UPDATED: Always show Toolbar and Filters when we have products globally */}
-      {hasIntegrations && hasProductsGlobally && (
+      {hasIntegrations && (
         <>
           <ProductsToolbar
             selectedProductsCount={selectedProducts.size}

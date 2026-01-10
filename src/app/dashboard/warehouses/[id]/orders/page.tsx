@@ -108,6 +108,15 @@ function WarehouseOrdersPageContent({ accountId }: WarehouseOrdersPageProps) {
   // Get orders data
   const { orders, loading, error, refreshOrders, updateOrdersFulfillmentStatus, updateStatus, updateFulfillmentStatus } = useOrders()
 
+  // ✅ Wrapper functions to match OrdersTable expected types (Promise<void>)
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    await updateStatus(orderId, newStatus)
+  }
+
+  const handleUpdateOrderFulfillmentStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    await updateFulfillmentStatus(orderId, newStatus)
+  }
+
   // Get fulfillment state
   const {
     pickedItems: pickedItemsArray,
@@ -748,8 +757,8 @@ function WarehouseOrdersPageContent({ accountId }: WarehouseOrdersPageProps) {
           onShipOrder={handleShipOrder}
           onColumnVisibilityChange={handleColumnVisibilityChange}
           onColumnReorder={handleColumnReorder}
-          onUpdateStatus={updateStatus}
-          onUpdateFulfillmentStatus={updateFulfillmentStatus}
+          onUpdateStatus={handleUpdateOrderStatus}
+          onUpdateFulfillmentStatus={handleUpdateOrderFulfillmentStatus}
           fulfillmentStatusOptions={fulfillmentStatusOptions}
         />
       </div>

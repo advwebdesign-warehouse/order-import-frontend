@@ -240,6 +240,15 @@ function OrdersPageContent({ accountId }: { accountId: string }) {
     refreshOrders
   } = useOrders()
 
+  // ✅ Wrapper functions to match OrdersTable expected types (Promise<void>)
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    await updateStatus(orderId, newStatus)
+  }
+
+  const handleUpdateOrderFulfillmentStatus = async (orderId: string, newStatus: string): Promise<void> => {
+    await updateFulfillmentStatus(orderId, newStatus)
+  }
+
   const warehouseFilteredOrders = useMemo(() => {
     if (!selectedWarehouseId || selectedWarehouseId === '') {
       return orders
@@ -876,8 +885,8 @@ function OrdersPageContent({ accountId }: { accountId: string }) {
         onPrintPickingList={handlePrintPickingListForOrder}
         onShipOrder={handleShipOrder}
         onColumnReorder={handleColumnReorder}
-        onUpdateStatus={updateStatus}
-        onUpdateFulfillmentStatus={updateFulfillmentStatus}
+        onUpdateStatus={handleUpdateOrderStatus}
+        onUpdateFulfillmentStatus={handleUpdateOrderFulfillmentStatus}
         fulfillmentStatusOptions={fulfillmentStatusOptions}
       />
 
