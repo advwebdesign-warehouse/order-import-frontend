@@ -6,9 +6,9 @@ import { ShopifyGraphQLClient } from '@/lib/shopify/shopifyGraphQLClient'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    // ✅ Support both shopUrl and storeUrl for backwards compatibility
-    const { shopUrl, storeUrl, accessToken } = body
-    const shop = shopUrl || storeUrl
+    // ✅ Support both storeUrl for backwards compatibility
+    const { storeUrl, accessToken } = body
+    const shop = storeUrl
 
     console.log('[Shopify Test] ========================================')
     console.log('[Shopify Test] Testing connection')
@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
     if (!shop || !accessToken) {
       console.error('[Shopify Test] ❌ Missing credentials:', {
         hasShop: !!shop,
-        hasShopUrl: !!shopUrl,
         hasStoreUrl: !!storeUrl,
         hasAccessToken: !!accessToken,
         shop: shop,

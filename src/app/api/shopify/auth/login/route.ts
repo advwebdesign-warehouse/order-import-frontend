@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
       // Check if Shopify integration exists for this shop
       const existingShopify = integrations.integrations.find(
-        (i: any) => i.name === 'Shopify' && i.config?.shopUrl === shop
+        (i: any) => i.name === 'Shopify' && i.config?.storeUrl === shop
       )
 
       if (!existingShopify) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
           description: 'Sync orders, products, and inventory with your Shopify store',
           icon: '/logos/shopify-logo.svg',
           config: {
-            shopUrl: shop,
+            storeUrl: shop,
             // OAuth will add accessToken later
           },
           features: {
