@@ -1,5 +1,6 @@
 //file path: src/app/dashboard/integrations/hooks/useOAuthCallbacks.tsx
-// ✅ FIXED: Reads warehouse_config AND inventory_config from URL parameters (sent by backend)
+// Reads warehouse_config AND inventory_config from URL parameters (sent by backend)
+// ✅ NEW: Auto-syncs Shopify locations to create warehouses after OAuth
 
 'use client'
 
@@ -318,6 +319,12 @@ export function useOAuthCallbacks({
           syncDirection: inventoryConfig?.syncDirection ?? existingIntegration.syncDirection ?? 'one_way_to',
           managesInventory: inventoryConfig?.managesInventory ?? existingIntegration.managesInventory ?? false
         })
+
+        // ✅ NEW: Sync Shopify locations to create warehouses
+        syncShopifyLocations(integrationId)
+
+        // For existing integrations, trigger auto-sync immediately
+        triggerAutoSync(existingIntegration, integrationStoreId)
       } else {
         // Create new integration
         integrationId = `shopify-${integrationStoreId}`
@@ -397,6 +404,9 @@ export function useOAuthCallbacks({
           const savedIntegration = result.integration || newIntegration
           console.log('[Shopify OAuth] ✅ Using saved integration with ID:', savedIntegration.id)
 
+          // ✅ NEW: Sync Shopify locations to create warehouses
+          syncShopifyLocations(savedIntegration.id)
+
           // Continue with auto-sync after successful add
           // ✅ Pass savedIntegration (not newIntegration!) to ensure correct ID
           triggerAutoSync(savedIntegration, integrationStoreId)
@@ -446,7 +456,48 @@ export function useOAuthCallbacks({
   }, [searchParams, integrations, selectedStoreId, stores, updateIntegration, addIntegration, setNotification, setTestResults])
 
   /**
-   * ✅ UPDATED: Auto-sync function using IntegrationAPI
+   * ✅ NEW: Sync Shopify locations to auto-create warehouses
+   * Calls the backend API to fetch locations from Shopify and create warehouses
+   */
+  const syncShopifyLocations = async (integrationId: string) => {
+    try {
+      console.log('[Shopify OAuth] 🏭 Syncing Shopify locations to create warehouses...')
+      console.log('[Shopify OAuth] Integration ID:', integrationId)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/integrations/shopify/${integrationId}/sync-locations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies for authentication
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[Shopify OAuth] ❌ Failed to sync locations:', errorData)
+        // Don't throw - this is not critical for OAuth success
+        return
+      }
+
+      const result = await response.json()
+      console.log('[Shopify OAuth] ✅ Location sync result:', result)
+
+      if (result.created > 0) {
+        setNotification({
+          show: true,
+          type: 'success',
+          title: 'Warehouses Created',
+          message: `Created ${result.created} warehouse(s) from Shopify locations`
+        })
+      }
+    } catch (error) {
+      console.error('[Shopify OAuth] ❌ Error syncing locations:', error)
+      // Don't throw - this is not critical for OAuth success
+    }
+  }
+
+  /**
+   * Auto-sync function using IntegrationAPI
    * Now calls backend API directly with fullSync: false (incremental sync)
    */
   const triggerAutoSync = async (integration: Integration, integrationStoreId: string) => {
@@ -472,7 +523,7 @@ export function useOAuthCallbacks({
 
         console.log('[Auto-Sync] Starting sync for store:', store?.name || integrationStoreId)
 
-        // ✅ FIXED: Call backend API directly with fullSync: false
+        // Call backend API directly with fullSync: false
         // This ensures incremental sync and field preservation
         const result = await IntegrationAPI.syncShopify({
           storeId: integrationStoreId,
