@@ -53,7 +53,7 @@ export interface Warehouse {
  * Handles all API calls related to integrations
  * ✅ Added proper type annotations using shippingTypes
  * ✅ Added getIntegrationWarehouses for integration-based warehouse linking
- * ✅ UPDATED: syncShopify now supports fullSync parameter for incremental sync
+ * syncShopify now supports fullSync parameter for incremental sync
  */
 export class IntegrationAPI {
   /**
@@ -93,7 +93,7 @@ export class IntegrationAPI {
   }
 
   // ============================================================================
-  // ✅ NEW: INTEGRATION-WAREHOUSE LINKING
+  // INTEGRATION-WAREHOUSE LINKING
   // ============================================================================
 
   /**
@@ -438,7 +438,7 @@ export class IntegrationAPI {
   }
 
   /**
-   * ✅ UPDATED: Sync Shopify data (orders and/or products)
+   * Sync Shopify data (orders and/or products)
    * Backend route: POST /integrations/shopify/sync
    *
    * @param data.storeId - The store ID to sync
@@ -452,7 +452,7 @@ export class IntegrationAPI {
    static async syncShopify(data: {
      storeId: string
      syncType?: 'all' | 'orders' | 'products'
-     fullSync?: boolean  // ✅ NEW: Option to force full sync
+     fullSync?: boolean  // Option to force full sync
    }) {
      return apiRequest('/integrations/shopify/sync', {
        method: 'POST',
@@ -465,7 +465,7 @@ export class IntegrationAPI {
    }
 
    /**
-    * ✅ NEW: Force full sync - Re-sync ALL orders from Shopify
+    * Force full sync - Re-sync ALL orders from Shopify
     * Backend route: POST /integrations/shopify/sync/full
     *
     * Use this when you want to completely refresh all orders from Shopify
@@ -481,6 +481,19 @@ export class IntegrationAPI {
          storeId: data.storeId,
          syncType: data.syncType || 'all'
        })
+     })
+   }
+
+   /**
+    * ✅ NEW: Sync linked GravityHub warehouses TO Shopify as fulfillment locations
+    * Backend route: POST /integrations/shopify/:integrationId/sync-warehouses
+    *
+    * This pushes warehouses that are linked to this integration to Shopify
+    * so they appear under "App and custom fulfillment locations" in Shopify admin
+    */
+   static async syncWarehousesToShopify(integrationId: string) {
+     return apiRequest(`/integrations/shopify/${integrationId}/sync-warehouses`, {
+       method: 'POST'
      })
    }
 

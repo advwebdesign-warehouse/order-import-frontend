@@ -1,6 +1,6 @@
 //file path: src/app/dashboard/integrations/hooks/useOAuthCallbacks.tsx
 // Reads warehouse_config AND inventory_config from URL parameters (sent by backend)
-// ✅ NEW: Auto-syncs Shopify locations to create warehouses after OAuth
+// ✅ NEW: Syncs linked GravityHub warehouses TO Shopify as fulfillment locations after OAuth
 
 'use client'
 
@@ -321,7 +321,7 @@ export function useOAuthCallbacks({
         })
 
         // ✅ NEW: Sync Shopify locations to create warehouses
-        syncShopifyLocations(integrationId)
+        syncWarehousesToShopify(integrationId)
 
         // For existing integrations, trigger auto-sync immediately
         triggerAutoSync(existingIntegration, integrationStoreId)
@@ -405,7 +405,7 @@ export function useOAuthCallbacks({
           console.log('[Shopify OAuth] ✅ Using saved integration with ID:', savedIntegration.id)
 
           // ✅ NEW: Sync Shopify locations to create warehouses
-          syncShopifyLocations(savedIntegration.id)
+          syncWarehousesToShopify(savedIntegration.id)
 
           // Continue with auto-sync after successful add
           // ✅ Pass savedIntegration (not newIntegration!) to ensure correct ID
@@ -456,42 +456,37 @@ export function useOAuthCallbacks({
   }, [searchParams, integrations, selectedStoreId, stores, updateIntegration, addIntegration, setNotification, setTestResults])
 
   /**
-   * ✅ NEW: Sync Shopify locations to auto-create warehouses
-   * Calls the backend API to fetch locations from Shopify and create warehouses
+   * ✅ NEW: Sync GravityHub warehouses to Shopify as fulfillment locations
+   * Calls the backend API to push linked warehouses to Shopify
    */
-  const syncShopifyLocations = async (integrationId: string) => {
+  const syncWarehousesToShopify = async (integrationId: string) => {
     try {
-      console.log('[Shopify OAuth] 🏭 Syncing Shopify locations to create warehouses...')
+      console.log('[Shopify OAuth] 🏭 Syncing warehouses to Shopify as fulfillment locations...')
       console.log('[Shopify OAuth] Integration ID:', integrationId)
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/integrations/shopify/${integrationId}/sync-locations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include cookies for authentication
-      })
+      // ✅ Use IntegrationAPI for consistent error handling and auth
+      const result = await IntegrationAPI.syncWarehousesToShopify(integrationId)
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('[Shopify OAuth] ❌ Failed to sync locations:', errorData)
-        // Don't throw - this is not critical for OAuth success
-        return
-      }
+      console.log('[Shopify OAuth] ✅ Warehouse sync result:', result)
 
-      const result = await response.json()
-      console.log('[Shopify OAuth] ✅ Location sync result:', result)
-
-      if (result.created > 0) {
+      if (result.synced > 0) {
         setNotification({
           show: true,
           type: 'success',
-          title: 'Warehouses Created',
-          message: `Created ${result.created} warehouse(s) from Shopify locations`
+          title: 'Warehouses Synced to Shopify',
+          message: `Synced ${result.synced} warehouse(s) to Shopify as fulfillment locations`
+        })
+      } else if (result.errors && result.errors.length > 0) {
+        // Some warehouses couldn't be matched
+        setNotification({
+          show: true,
+          type: 'warning',
+          title: 'Warehouse Sync Incomplete',
+          message: `Could not match all warehouses to Shopify locations. Check Shopify admin to create matching locations.`
         })
       }
     } catch (error) {
-      console.error('[Shopify OAuth] ❌ Error syncing locations:', error)
+      console.error('[Shopify OAuth] ❌ Error syncing warehouses to Shopify:', error)
       // Don't throw - this is not critical for OAuth success
     }
   }
