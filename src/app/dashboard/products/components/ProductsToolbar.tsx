@@ -14,6 +14,7 @@ interface ProductsToolbarProps {
   onBulkAction: (action: string) => void
   onExport: () => void
   onResetLayout: () => void
+  onImport?: () => void // ✅ NEW: Import handler
   columns: ProductColumnConfig[]
   onColumnVisibilityChange: (columnId: string, visible: boolean) => void
   totalProducts: number
@@ -22,6 +23,7 @@ interface ProductsToolbarProps {
   onItemsPerPageChange: (value: number) => void
   optionsOpen?: boolean
   onOptionsOpenChange?: (open: boolean) => void
+  hasEcommerceIntegrations?: boolean // ✅ NEW: Show import button only if integrations exist
 }
 
 export default function ProductsToolbar({
@@ -29,6 +31,7 @@ export default function ProductsToolbar({
   onBulkAction,
   onExport,
   onResetLayout,
+  onImport, // ✅ NEW
   columns,
   onColumnVisibilityChange,
   totalProducts,
@@ -36,7 +39,8 @@ export default function ProductsToolbar({
   itemsPerPage,
   onItemsPerPageChange,
   optionsOpen,
-  onOptionsOpenChange
+  onOptionsOpenChange,
+  hasEcommerceIntegrations = false // ✅ NEW
 }: ProductsToolbarProps) {
 
   // ✅ DEBUG: Log when component renders
@@ -88,6 +92,17 @@ export default function ProductsToolbar({
               className="inline-flex items-center gap-x-2 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
             >
               Delete Products ({selectedProductsCount})
+            </button>
+          )}
+
+          {/* ✅ NEW: Import from Shopify Button */}
+          {hasEcommerceIntegrations && onImport && (
+            <button
+              onClick={onImport}
+              className="inline-flex items-center gap-x-2 rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              Import from Shopify
             </button>
           )}
 
