@@ -11,7 +11,7 @@ import {
   BuildingOffice2Icon,
   CheckIcon
 } from '@heroicons/react/24/outline'
-import type { Integration } from '@/app/dashboard/integrations/types/integrationTypes'
+import { type Integration, isEcommerceIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 import type { Warehouse } from '@/app/dashboard/warehouses/utils/warehouseTypes'
 
 interface ImportProductsModalProps {
@@ -28,6 +28,17 @@ export interface ImportOptions {
   selectedWarehouseIds?: string[]
   updateExisting: boolean
   createInventory: boolean
+}
+
+// Helper function to get integration display name
+// All e-commerce integrations now have storeUrl in config
+function getIntegrationDisplayName(integration: Integration): string {
+  if (!isEcommerceIntegration(integration)) {
+    return integration.name
+  }
+
+  // All e-commerce integrations have storeUrl
+  return `${integration.name} - ${integration.config.storeUrl}`
 }
 
 export default function ImportProductsModal({
@@ -47,13 +58,13 @@ export default function ImportProductsModal({
 
   // Get selected integration details
   const integration = ecommerceIntegrations.find(i => i.id === selectedIntegration)
-  const primaryWarehouse = integration?.routingConfig?.primaryWarehouseId
-    ? warehouses.find(w => w.id === integration.routingConfig.primaryWarehouseId)
+  const primaryWarehouse = integration && isEcommerceIntegration(integration) && integration.routingConfig?.primaryWarehouseId
+    ? warehouses.find(w => w.id === integration.routingConfig?.primaryWarehouseId)  // ✅
     : warehouses[0]
 
   // Get routing warehouses from integration
   const getRoutingWarehouses = useCallback((): string[] => {
-    if (!integration?.routingConfig) return []
+    if (!integration || !isEcommerceIntegration(integration) || !integration.routingConfig) return []
 
     const warehouseIds: string[] = []
 
@@ -204,7 +215,7 @@ export default function ImportProductsModal({
                       <option value="">Choose an integration...</option>
                       {ecommerceIntegrations.map(integration => (
                         <option key={integration.id} value={integration.id}>
-                          {integration.name} - {integration.config?.storeUrl || integration.config?.shop}
+                          {getIntegrationDisplayName(integration)}
                         </option>
                       ))}
                     </select>

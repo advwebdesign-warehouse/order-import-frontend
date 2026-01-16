@@ -16,6 +16,7 @@ import { useProductFilters } from './hooks/useProductFilters'
 import { useProductSelection } from './hooks/useProductSelection'
 import { useProductColumns } from './hooks/useProductColumns'
 import { useProductSync } from './hooks/useProductSync'
+import { useIntegrations } from '../integrations/hooks/useIntegrations'
 
 // Shared components
 import SelectAllBanner from '../shared/components/SelectAllBanner'
@@ -23,6 +24,7 @@ import { ColumnConfig } from '../shared/components/ColumnSettings'
 import { usePagination } from '../shared/hooks/usePagination'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
 import { withAuth } from '../shared/components/withAuth'
+import ImportProductsModal, { ImportOptions } from './components/ImportProductsModal'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
@@ -148,6 +150,10 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
 
   // ✅ lastSyncAtState for screen options panel
   const [optionsOpen, setOptionsOpen] = useState(false)
+
+  // ✅ Import modal state
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   // ✅ Load integrations on mount
   useEffect(() => {
@@ -425,6 +431,60 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       includeVariants: true,
       warehouseId: '',
     })
+  }
+
+  const handleImport = async (integrationId: string, options: ImportOptions) => {
+    setImporting(true)
+
+    try {
+      console.log('[Products Page] Starting import from integration:', integrationId)
+      console.log('[Products Page] Import options:', options)
+
+      const response = await fetch(`/api/products/import/${integrationId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(options)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Import failed')
+      }
+
+      const result = await response.json()
+
+      console.log('[Products Page] Import successful:', result)
+      console.log(`[Products Page] Imported ${result.count} products to ${result.warehouses} warehouses`)
+
+      // Refresh products list
+      await refetchProducts()
+
+      // Close modal
+      setShowImportModal(false)
+
+      // Show success message
+      setDeleteMessage({
+        type: 'success',
+        text: `Successfully imported ${result.count} products!`
+      })
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setDeleteMessage(null), 5000)
+
+    } catch (error: any) {
+      console.error('[Products Page] Import failed:', error)
+      setDeleteMessage({
+        type: 'error',
+        text: error.message || 'Failed to import products'
+      })
+
+      // Clear error message after 5 seconds
+      setTimeout(() => setDeleteMessage(null), 5000)
+    } finally {
+      setImporting(false)
+    }
   }
 
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
@@ -793,6 +853,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             onBulkAction={handleBulkAction}
             onExport={handleExport}
             onResetLayout={handleResetLayout}
+            onImport={() => setShowImportModal(true)}
+            hasEcommerceIntegrations={ecommerceIntegrations.length > 0}
             columns={columns}
             onColumnVisibilityChange={handleColumnVisibilityChange}
             totalProducts={allProducts.length}
@@ -895,6 +957,16 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
           )}
         </>
       )}
+
+      {/* ✅ Import Products Modal */}
+      <ImportProductsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImport}
+        ecommerceIntegrations={ecommerceIntegrations}
+        warehouses={warehouses}
+        isImporting={importing}
+      />
     </div>
   )
 }

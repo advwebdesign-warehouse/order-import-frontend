@@ -238,6 +238,7 @@ export interface EtsyIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'Etsy'
   config: {
+    storeUrl: string
     apiKey: string
     sharedSecret: string
     // Product import configuration stored in config
@@ -262,6 +263,7 @@ export interface EbayIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'eBay'
   config: {
+    storeUrl: string
     appId: string
     certId: string
     devId: string
