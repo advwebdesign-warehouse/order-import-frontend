@@ -694,7 +694,7 @@ export function useIntegrations() {
 
     // Test operations
     testIntegration,
-
+ 
     // Sync operations (for shipping integrations)
     syncShippingServices,
     syncShippingBoxes,
