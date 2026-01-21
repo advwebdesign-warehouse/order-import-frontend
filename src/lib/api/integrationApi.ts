@@ -442,7 +442,7 @@ export class IntegrationAPI {
    * Backend route: POST /integrations/shopify/sync
    *
    * @param data.storeId - The store ID to sync
-   * @param data.syncType - What to sync: 'all' | 'orders' | 'products' (default: 'all')
+   * @param data.syncType - What to sync: 'all' | 'orders' | 'products' (default: 'orders')
    * @param data.fullSync - If true, fetches ALL orders. If false (default),
    *                        only fetches orders updated since lastSyncedAt
    *
@@ -458,7 +458,7 @@ export class IntegrationAPI {
        method: 'POST',
        body: JSON.stringify({
          storeId: data.storeId,
-         syncType: data.syncType || 'all',
+         syncType: data.syncType || 'orders',
          fullSync: data.fullSync || false
        })
      })
@@ -479,7 +479,7 @@ export class IntegrationAPI {
        method: 'POST',
        body: JSON.stringify({
          storeId: data.storeId,
-         syncType: data.syncType || 'all'
+         syncType: data.syncType || 'orders'
        })
      })
    }
