@@ -23,14 +23,8 @@ export async function GET(request: NextRequest) {
 
   // Verify cron secret
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
 
-  if (!cronSecret) {
-    console.error('[CRON Frontend] CRON_SECRET not configured')
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-  }
-
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     console.warn('[CRON Frontend] Unauthorized cron attempt')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -44,7 +38,7 @@ export async function GET(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cronSecret}` // Pass cron secret to backend
+        'Authorization': `Bearer ${process.env.CRON_SECRET}` // Pass cron secret to backend
       }
     })
 
