@@ -1,6 +1,7 @@
 //file path: src/app/dashboard/integrations/components/ShopifyConfigModal.tsx
 // ✅ SIMPLIFIED: Removed product import from integration setup
 // Products are now imported ONLY from the Products page
+// ✅ INVENTORY SYNC: Always enabled with one-way TO Shopify direction (warehouse is source of truth)
 
 'use client'
 
@@ -20,7 +21,6 @@ import {
 } from '../types/integrationTypes'
 import { Warehouse } from '../../warehouses/utils/warehouseTypes'
 import EcommerceWarehouseRouting from './EcommerceWarehouseRouting'
-import EcommerceInventorySync from './EcommerceInventorySync'
 import WarehouseRequiredWarning from './WarehouseRequiredWarning'
 import { IntegrationAPI } from '@/lib/api/integrationApi'
 
@@ -83,13 +83,11 @@ export default function ShopifyConfigModal({
     }
   )
 
-  // ⭐ Inventory sync configuration (from root level per integrationTypes.ts)
-  const [inventorySyncEnabled, setInventorySyncEnabled] = useState(
-    existingIntegration?.inventorySync || false
-  )
-  const [syncDirection, setSyncDirection] = useState<SyncDirection>(
-    existingIntegration?.syncDirection || 'one_way_to'
-  )
+  // ⭐ Inventory sync configuration - HARDCODED
+  // Always enabled with one-way TO Shopify (warehouse is source of truth)
+  // No product sync through integration - products are imported manually from Products page
+  const inventorySyncEnabled = true
+  const syncDirection: SyncDirection = 'one_way_to'
 
   // ⭐ Update warehouse config when warehouses change
   useEffect(() => {
@@ -108,26 +106,21 @@ export default function ShopifyConfigModal({
     console.log('[Shopify Modal] useEffect triggered:', {
       isOpen,
       hasExistingIntegration: !!existingIntegration,
-      hasInitialized: hasInitializedSettings.current,
-      propsInventorySync: existingIntegration?.inventorySync,
-      localInventorySyncEnabled: inventorySyncEnabled
+      hasInitialized: hasInitializedSettings.current
     })
 
     if (isOpen && existingIntegration && !hasInitializedSettings.current) {
       console.log('[Shopify Modal] 📥 LOADING from props (first time):', {
         hasRoutingConfig: !!existingIntegration.routingConfig,
-        routingMode: existingIntegration.routingConfig?.mode,
-        inventorySync: existingIntegration.inventorySync,
-        syncDirection: existingIntegration.syncDirection,
-        managesInventory: existingIntegration.managesInventory
+        routingMode: existingIntegration.routingConfig?.mode
       })
 
       // Load from root-level fields (per integrationTypes.ts)
       if (existingIntegration.routingConfig) {
         setWarehouseConfig(existingIntegration.routingConfig)
       }
-      setInventorySyncEnabled(existingIntegration.inventorySync || false)
-      setSyncDirection(existingIntegration.syncDirection || 'one_way_to')
+
+      // ⭐ Note: Inventory sync is hardcoded to always enabled with one_way_to direction
 
       if (existingIntegration.config?.storeUrl) {
         setstoreUrl(existingIntegration.config.storeUrl)
@@ -434,16 +427,8 @@ export default function ShopifyConfigModal({
     }
   }
 
-  // ✅ Handlers for inventory sync changes - notify parent immediately
-  const handleInventorySyncChange = useCallback((enabled: boolean) => {
-    console.log('[Shopify Modal] 📝 Inventory sync changed:', enabled)
-    setInventorySyncEnabled(enabled)
-  }, [])
-
-  const handleSyncDirectionChange = useCallback((direction: SyncDirection) => {
-    console.log('[Shopify Modal] 📝 Sync direction changed:', direction)
-    setSyncDirection(direction)
-  }, [])
+  // ⭐ Inventory sync is hardcoded (always enabled, always one_way_to)
+  // No handlers needed since values are constants
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
@@ -570,20 +555,8 @@ export default function ShopifyConfigModal({
                                 onChange={setWarehouseConfig}
                               />
 
-                              {/* ⭐ Product & Inventory Sync - Uses proper Integration[] type */}
-                              <div className="border-t border-gray-200 pt-6">
-                              <EcommerceInventorySync
-                                inventorySyncEnabled={inventorySyncEnabled}
-                                syncDirection={syncDirection}
-                                onInventorySyncChange={setInventorySyncEnabled}
-                                onSyncDirectionChange={setSyncDirection}
-                                integrationName="Shopify"
-                                primaryWarehouseId={warehouseConfig.primaryWarehouseId}
-                                warehouses={warehouses}
-                                allIntegrations={allIntegrations}
-                                currentIntegrationId={existingIntegration?.id}
-                                />
-                              </div>
+                              {/* ⭐ Inventory sync is always enabled with one-way TO Shopify direction */}
+                              {/* Products are imported manually from Products page, not through integration sync */}
                             </div>
                           )}
                         </div>
@@ -689,20 +662,8 @@ export default function ShopifyConfigModal({
                             onChange={setWarehouseConfig}
                           />
 
-                            {/* ⭐ Product & Inventory Sync - Uses proper Integration[] type */}
-                          <div className="border-t border-gray-200 pt-6">
-                            <EcommerceInventorySync
-                              inventorySyncEnabled={inventorySyncEnabled}
-                              syncDirection={syncDirection}
-                              onInventorySyncChange={setInventorySyncEnabled}
-                              onSyncDirectionChange={setSyncDirection}
-                              integrationName="Shopify"
-                              primaryWarehouseId={warehouseConfig.primaryWarehouseId}
-                              warehouses={warehouses}
-                              allIntegrations={allIntegrations}
-                              currentIntegrationId={existingIntegration?.id}
-                            />
-                          </div>
+                          {/* ⭐ Inventory sync is always enabled with one-way TO Shopify direction */}
+                          {/* Products are imported manually from Products page, not through integration sync */}
 
                           {errors.warehouse && (
                             <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">

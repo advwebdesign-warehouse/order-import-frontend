@@ -478,7 +478,7 @@ function IntegrationsContent({ accountId }: IntegrationsContentProps) {
       // This ensures incremental sync and field preservation
       const result = await IntegrationAPI.syncShopify({
         storeId: selectedStoreId,
-        syncType: 'all',
+        syncType: 'orders',
         fullSync: false  // ✅ CRITICAL: Always use incremental sync
       })
 

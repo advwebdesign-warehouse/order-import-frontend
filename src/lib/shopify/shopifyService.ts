@@ -7,11 +7,15 @@ import { IntegrationAPI } from '@/lib/api/integrationApi'
  * ✅ CLEAN ARCHITECTURE: Uses IntegrationAPI for all backend calls
  * ✅ INCREMENTAL SYNC: By default, only syncs orders modified since lastSyncedAt
  * ✅ FIELD PRESERVATION: Never overwrites local fields during sync
+ * ✅ ORDERS ONLY: Integration sync only syncs orders, products imported manually
  */
 export class ShopifyService {
   /**
    * Auto-sync on connection (called after OAuth completes)
    * This just calls the backend API - all the heavy lifting happens there
+   *
+   * ⭐ IMPORTANT: Only syncs ORDERS, never products
+   * Products must be imported manually from the Products page
    */
   static async autoSyncOnConnection(
     integration: ShopifyIntegration,
@@ -35,10 +39,10 @@ export class ShopifyService {
 
       if (onProgress) onProgress('Connection successful! Syncing data...')
 
-      // ✅ Initial sync should be a FULL sync to get all orders
+      // ✅ Initial sync: ORDERS ONLY with full sync to get all orders
       const result = await IntegrationAPI.syncShopify({
         storeId: integration.storeId,
-        syncType: 'all',
+        syncType: 'orders',  // ✅ ONLY sync orders, never products
         fullSync: true  // ✅ Full sync on initial connection
       })
 
@@ -46,7 +50,7 @@ export class ShopifyService {
         throw new Error(result.error || 'Sync failed')
       }
 
-      const message = `✅ Synced ${result.data.orders} orders and ${result.data.products} products`
+      const message = `✅ Synced ${result.data.orders} orders (${result.data.ordersNew || 0} new)`
 
       if (onProgress) onProgress(message)
       console.log('[Shopify Service Frontend] ✅ Auto-sync complete:', result.data)
@@ -107,16 +111,17 @@ export class ShopifyService {
     * ✅ INCREMENTAL BY DEFAULT: Only fetches orders modified since lastSyncedAt
     * This means your local fulfillmentStatus changes won't be overwritten
     *
+    * ⭐ IMPORTANT: Only syncs ORDERS, never products
+    * Products must be imported manually from the Products page
+    *
     * @param storeId - Store ID
-    * @param syncType - What to sync: 'all' | 'orders' | 'products'
     * @param onProgress - Progress callback
     * @param fullSync - If true, fetches ALL orders (use sparingly)
     */
    static async manualSync(
      storeId: string,
-     syncType: 'all' | 'orders' | 'products' = 'all',
      onProgress?: (message: string) => void,
-    fullSync: boolean = false  // ✅ NEW: Default to incremental sync
+    fullSync: boolean = false  // ✅ Default to incremental sync
   ): Promise<{ orders: number; products: number; ordersNew?: number; ordersUpdated?: number }> {
      try {
        const syncMode = fullSync ? 'full' : 'incremental'
@@ -127,7 +132,7 @@ export class ShopifyService {
        // ✅ Use IntegrationAPI with fullSync option
        const result = await IntegrationAPI.syncShopify({
          storeId,
-         syncType,
+         syncType: 'orders',  // ✅ ONLY sync orders, never products
          fullSync
        })
 
@@ -143,7 +148,7 @@ export class ShopifyService {
 
        return {
          orders: result.data.orders,
-         products: result.data.products,
+         products: 0,  // ✅ Never syncs products
          ordersNew: result.data.ordersNew,
          ordersUpdated: result.data.ordersUpdated
        }
@@ -163,14 +168,15 @@ export class ShopifyService {
     * - trackingNumber
     * - trackingCarrier
     * - shippingLabel
+    *
+    * ⭐ IMPORTANT: Only syncs ORDERS, never products
     */
    static async forceFullSync(
      storeId: string,
-     syncType: 'all' | 'orders' | 'products' = 'all',
      onProgress?: (message: string) => void
    ): Promise<{ orders: number; products: number; ordersNew?: number; ordersUpdated?: number }> {
      console.log('[Shopify Service Frontend] 🔄 FORCE FULL SYNC requested')
 
-     return this.manualSync(storeId, syncType, onProgress, true)
+     return this.manualSync(storeId, onProgress, true)
    }
  }
