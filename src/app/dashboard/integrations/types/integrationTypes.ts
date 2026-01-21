@@ -182,6 +182,7 @@ export interface UPSIntegration extends BaseIntegration {
 export interface ShopifyIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'Shopify'
+  provider: 'shopify'
   config: {
     storeUrl: string
     accessToken: string
@@ -212,6 +213,7 @@ export interface ShopifyIntegration extends BaseIntegration {
 export interface WooCommerceIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'WooCommerce'
+  provider: 'woocommerce'
   config: {
     storeUrl: string
     consumerKey: string
@@ -237,6 +239,7 @@ export interface WooCommerceIntegration extends BaseIntegration {
 export interface EtsyIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'Etsy'
+  provider: 'etsy'
   config: {
     storeUrl: string
     apiKey: string
@@ -262,6 +265,7 @@ export interface EtsyIntegration extends BaseIntegration {
 export interface EbayIntegration extends BaseIntegration {
   type: 'ecommerce'
   name: 'eBay'
+  provider: 'ebay'
   config: {
     storeUrl: string
     appId: string

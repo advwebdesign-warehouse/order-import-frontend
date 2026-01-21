@@ -104,7 +104,7 @@ export function useIntegrations() {
   /**
    * ✅ Update integration with ref fallback
    */
-  const updateIntegration = async (integrationId: string, partialData: Partial<Integration>) => {
+  const updateIntegration = async (integrationId: string, partialData: any) => {
     try {
       console.log('[updateIntegration] 🔄 Updating integration:', integrationId)
 
@@ -118,7 +118,7 @@ export function useIntegrations() {
 
       // ✅ Build the data to send to API - ONLY partial data, not full merge
       // This prevents stale frontend data from overwriting newer backend data
-      const apiUpdateData: Partial<Integration> = { ...partialData }
+      const apiUpdateData: any = { ...partialData }
 
       // ✅ Deep merge config if provided (only the config object, not full integration)
       if (partialData.config) {
@@ -156,7 +156,7 @@ export function useIntegrations() {
 
       // ✅ CRITICAL FIX: Send ONLY partial data to API, not full merged object
       // This prevents race conditions where stale frontend data overwrites newer backend data
-      await IntegrationAPI.updateIntegration(integrationId, apiUpdateData as Integration)
+      await IntegrationAPI.updateIntegration(integrationId, apiUpdateData)
 
       // ✅ After successful API call, update local state optimistically
       // Build full merged object for local state only
@@ -189,8 +189,62 @@ export function useIntegrations() {
   /**
    * ✅ Add integration and update ref immediately
    */
-  const addIntegration = async (integration: Integration) => {
+  const addIntegration = async (integration: any) => {
+    // 🔍 FIRST THING: Log parameter as received (JSON snapshot!)
+    console.log('[addIntegration] 🎯 Parameter AS RECEIVED (JSON snapshot):', JSON.parse(JSON.stringify({
+      type: integration.type,
+      typeType: typeof integration.type,
+      provider: integration.provider,
+      providerType: typeof integration.provider,
+      name: integration.name,
+      allKeys: Object.keys(integration)
+    })))
+
     try {
+      console.log('[addIntegration] 🔍 Validating integration data...')
+      console.log('[addIntegration] Data check:', {
+        name: integration.name,
+        nameType: typeof integration.name,
+        nameValid: !!integration.name && typeof integration.name === 'string',
+
+        type: integration.type,
+        typeType: typeof integration.type,
+        typeValid: ['ecommerce', 'shipping', 'accounting'].includes(integration.type),
+
+        provider: integration.provider,
+        providerType: typeof integration.provider,
+        providerValid: !!integration.provider && typeof integration.provider === 'string',
+
+        hasConfig: !!integration.config,
+        configType: typeof integration.config,
+        configIsObject: typeof integration.config === 'object' && !Array.isArray(integration.config),
+        configKeys: integration.config ? Object.keys(integration.config) : 'NO CONFIG',
+
+        storeId: integration.storeId,
+        accountId: integration.accountId,
+
+        allKeys: Object.keys(integration),
+        fullData: integration  // ✅ Log everything for debugging
+      })
+
+      // ✅ Validate before sending
+      if (!integration.name || typeof integration.name !== 'string') {
+        throw new Error('Validation failed: name must be a non-empty string')
+      }
+      if (!integration.type || typeof integration.type !== 'string') {
+        throw new Error('Validation failed: type must be a non-empty string')
+      }
+      if (!['ecommerce', 'shipping', 'accounting'].includes(integration.type)) {
+        throw new Error(`Validation failed: type must be 'ecommerce', 'shipping', or 'accounting' (got: '${integration.type}')`)
+      }
+      if (!integration.provider || typeof integration.provider !== 'string') {
+        throw new Error('Validation failed: provider must be a non-empty string')
+      }
+      if (!integration.config || typeof integration.config !== 'object' || Array.isArray(integration.config)) {
+        throw new Error('Validation failed: config must be an object (not null, not array)')
+      }
+
+      console.log('[addIntegration] ✅ Validation passed')
       console.log('[addIntegration] 🔄 Adding integration:', integration.name, 'for store:', integration.storeId)
 
       // Check if integration already exists
@@ -217,7 +271,7 @@ export function useIntegrations() {
       console.log('[addIntegration] ✅ Integration saved with ID:', savedIntegration.id)
 
       // Now add to state with the correct ID from backend
-      const integrationWithCorrectId = { ...integration, id: savedIntegration.id } as Integration
+      const integrationWithCorrectId = { ...integration, id: savedIntegration.id }
 
       // ✅ Update BOTH state and ref
       setIntegrations(prev => {
@@ -245,6 +299,25 @@ export function useIntegrations() {
 
     } catch (err) {
       console.error('[addIntegration] ❌ Error:', err)
+
+      // ✅ Enhanced error details
+      if (err instanceof Error) {
+        console.error('[addIntegration] Error details:', {
+          message: err.message,
+          name: err.name,
+          stack: err.stack?.split('\n').slice(0, 5).join('\n')  // First 5 lines of stack
+        })
+      }
+
+      // ✅ Log what data failed
+      console.error('[addIntegration] Failed integration data:', {
+        name: integration.name,
+        type: integration.type,
+        provider: integration.provider,
+        hasConfig: !!integration.config,
+        configKeys: integration.config ? Object.keys(integration.config) : 'none'
+      })
+
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Failed to add integration'

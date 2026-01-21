@@ -1,6 +1,6 @@
 //file path: src/app/dashboard/integrations/hooks/useOAuthCallbacks.tsx
 // Reads warehouse_config AND inventory_config from URL parameters (sent by backend)
-// ✅ NEW: Syncs linked GravityHub warehouses TO Shopify as fulfillment locations after OAuth
+// Syncs linked GravityHub warehouses TO Shopify as fulfillment locations after OAuth
 
 'use client'
 
@@ -320,7 +320,7 @@ export function useOAuthCallbacks({
           managesInventory: inventoryConfig?.managesInventory ?? existingIntegration.managesInventory ?? false
         })
 
-        // ✅ NEW: Sync Shopify locations to create warehouses
+        // Sync Shopify locations to create warehouses
         syncWarehousesToShopify(integrationId)
 
         // For existing integrations, trigger auto-sync immediately
@@ -339,7 +339,7 @@ export function useOAuthCallbacks({
         })
 
         // Create integration WITH inventory config
-        const newIntegration: ShopifyIntegration = {
+        const newIntegration: any = {
           id: integrationId,
           name: 'Shopify',
           type: 'ecommerce',
@@ -368,6 +368,17 @@ export function useOAuthCallbacks({
           }
         }
 
+        // 🔍 DEBUG: Check object IMMEDIATELY after creation
+        console.log('[DEBUG] 🎯 newIntegration IMMEDIATELY after creation:', {
+          type: newIntegration.type,
+          typeExists: 'type' in newIntegration,
+          typeOf: typeof newIntegration.type,
+          provider: newIntegration.provider,
+          providerExists: 'provider' in newIntegration,
+          providerOf: typeof newIntegration.provider,
+          allKeys: Object.keys(newIntegration)
+        })
+
         console.log('[Shopify OAuth] 💾 Saving new integration:', {
           id: newIntegration.id,
           storeId: newIntegration.storeId,
@@ -377,6 +388,19 @@ export function useOAuthCallbacks({
           inventorySync: newIntegration.inventorySync,
           syncDirection: newIntegration.syncDirection,
           managesInventory: newIntegration.managesInventory
+        })
+
+        // 🔍 DEBUG: Check object right before passing to addIntegration
+        console.log('[DEBUG] 🔍 newIntegration object RIGHT BEFORE addIntegration:', {
+          type: newIntegration.type,
+          typeExists: 'type' in newIntegration,
+          provider: newIntegration.provider,
+          providerExists: 'provider' in newIntegration,
+          name: newIntegration.name,
+          nameExists: 'name' in newIntegration,
+          hasConfig: 'config' in newIntegration,
+          allKeys: Object.keys(newIntegration),
+          fullObject: newIntegration
         })
 
         // ✅ Handle Promise return
@@ -404,7 +428,7 @@ export function useOAuthCallbacks({
           const savedIntegration = result.integration || newIntegration
           console.log('[Shopify OAuth] ✅ Using saved integration with ID:', savedIntegration.id)
 
-          // ✅ NEW: Sync Shopify locations to create warehouses
+          // Sync Shopify locations to create warehouses
           syncWarehousesToShopify(savedIntegration.id)
 
           // Continue with auto-sync after successful add
@@ -456,7 +480,7 @@ export function useOAuthCallbacks({
   }, [searchParams, integrations, selectedStoreId, stores, updateIntegration, addIntegration, setNotification, setTestResults])
 
   /**
-   * ✅ NEW: Sync GravityHub warehouses to Shopify as fulfillment locations
+   * Sync GravityHub warehouses to Shopify as fulfillment locations
    * Calls the backend API to push linked warehouses to Shopify
    */
   const syncWarehousesToShopify = async (integrationId: string) => {
