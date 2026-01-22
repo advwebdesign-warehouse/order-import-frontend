@@ -2,7 +2,7 @@
 
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import {
   EyeIcon,
   PencilIcon,
@@ -10,7 +10,8 @@ import {
   ChevronUpIcon,
   ChevronDownIcon,
   Bars3Icon,
-  LinkIcon
+  LinkIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline'
 import {
   DndContext,
@@ -74,6 +75,7 @@ interface ProductsTableProps {
   onEditProduct: (product: Product) => void
   onDuplicateProduct: (product: Product) => void
   onColumnReorder: (columns: ProductColumnConfig[]) => void
+  onUpdateQuantity?: (productId: string, newQuantity: number) => Promise<void> // ✅ NEW: Inline quantity update
   stores?: Store[] // ✅ lastSyncAtAdded stores for rendering store names
 }
 
@@ -89,8 +91,73 @@ export default function ProductsTable({
   onEditProduct,
   onDuplicateProduct,
   onColumnReorder,
+  onUpdateQuantity,
   stores = [] // ✅ lastSyncAtDefault empty array
 }: ProductsTableProps) {
+
+  // ✅ State to track which SKU was just copied
+  const [copiedSku, setCopiedSku] = useState<string | null>(null)
+
+  // ✅ State for inline quantity editing
+  const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null)
+  const [editingQuantityValue, setEditingQuantityValue] = useState<string>('')
+  const [isUpdatingQuantity, setIsUpdatingQuantity] = useState(false)
+
+  // ✅ Copy SKU to clipboard
+  const handleCopySku = async (sku: string) => {
+    try {
+      await navigator.clipboard.writeText(sku)
+      setCopiedSku(sku)
+
+      // Clear the "copied" indicator after 2 seconds
+      setTimeout(() => {
+        setCopiedSku(null)
+      }, 2000)
+    } catch (error) {
+      console.error('Failed to copy SKU:', error)
+    }
+  }
+
+  // ✅ Start editing quantity
+  const handleStartEditQuantity = (product: Product) => {
+    setEditingQuantityId(product.id)
+    setEditingQuantityValue(product.stockQuantity.toString())
+  }
+
+  // ✅ Cancel editing quantity
+  const handleCancelEditQuantity = () => {
+    setEditingQuantityId(null)
+    setEditingQuantityValue('')
+    setIsUpdatingQuantity(false)
+  }
+
+  // ✅ Save edited quantity
+  const handleSaveQuantity = async (productId: string) => {
+    const newQuantity = parseInt(editingQuantityValue, 10)
+
+    // Validate
+    if (isNaN(newQuantity) || newQuantity < 0) {
+      alert('Please enter a valid quantity (0 or greater)')
+      return
+    }
+
+    // If no handler provided, just update local state
+    if (!onUpdateQuantity) {
+      console.warn('onUpdateQuantity handler not provided - quantity update not saved')
+      handleCancelEditQuantity()
+      return
+    }
+
+    try {
+      setIsUpdatingQuantity(true)
+      await onUpdateQuantity(productId, newQuantity)
+      handleCancelEditQuantity()
+    } catch (error) {
+      console.error('Failed to update quantity:', error)
+      alert('Failed to update quantity. Please try again.')
+      setIsUpdatingQuantity(false)
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -296,14 +363,21 @@ export default function ProductsTable({
         )
 
       case 'sku':
+        const isSkuCopied = copiedSku === product.sku
         return (
           <div>
-            <button
-              onClick={() => onViewProduct(product)}
-              className="text-sm font-mono font-medium text-gray-900 hover:text-gray-700 cursor-pointer"
+            <div
+              onClick={() => handleCopySku(product.sku)}
+              className="group/sku inline-flex items-center gap-1.5 text-sm font-mono font-medium text-gray-900 hover:text-indigo-600 cursor-pointer transition-colors"
+              title="Click to copy SKU"
             >
-              {product.sku}
-            </button>
+              <span>{product.sku}</span>
+              {isSkuCopied ? (
+                <CheckIcon className="h-3.5 w-3.5 text-green-600 animate-in fade-in zoom-in duration-200" />
+              ) : (
+                <DocumentDuplicateIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/sku:opacity-100 transition-opacity" />
+              )}
+            </div>
             {product.parentSku && (
               <div className="flex items-center text-xs text-gray-500 mt-1">
                 <LinkIcon className="h-3 w-3 mr-1" />
@@ -409,16 +483,59 @@ export default function ProductsTable({
         )
 
       case 'stockQuantity':
+        const isEditingThisQuantity = editingQuantityId === product.id
+
         return (
           <div className="text-sm">
-            <div className="font-medium text-gray-900">
-              {product.stockQuantity}
+          {isEditingThisQuantity ? (
+            // ✅ Edit mode: Show input field
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                value={editingQuantityValue}
+                onChange={(e) => setEditingQuantityValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleSaveQuantity(product.id)
+                  } else if (e.key === 'Escape') {
+                    handleCancelEditQuantity()
+                  }
+                }}
+                onBlur={() => {
+                  // Save on blur (click outside)
+                  if (!isUpdatingQuantity) {
+                    handleSaveQuantity(product.id)
+                  }
+                }}
+                autoFocus
+                disabled={isUpdatingQuantity}
+                className="w-20 px-2 py-1 text-sm font-medium text-gray-900 border border-indigo-500 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              {isUpdatingQuantity && (
+                <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+              )}
             </div>
-            {product.stockThreshold && (
-              <div className="text-xs text-gray-500">
-                Threshold: {product.stockThreshold}
+          ) : (
+            // ✅ View mode: Click to edit
+            <div>
+              <div
+                onClick={() => handleStartEditQuantity(product)}
+                onDoubleClick={() => handleStartEditQuantity(product)}
+                className="inline-flex items-center gap-1.5 font-medium text-gray-900 hover:text-indigo-600 cursor-pointer transition-colors group/qty"
+                title="Click to edit quantity"
+              >
+                <span>{product.stockQuantity}</span>
+                <PencilIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/qty:opacity-100 transition-opacity" />
               </div>
-            )}
+              {product.stockThreshold && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Threshold: {product.stockThreshold}
+                </div>
+              )}
+            </div>
+          )}
           </div>
         )
 

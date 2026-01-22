@@ -6,7 +6,7 @@ import {
   ArrowDownTrayIcon,
   PlusIcon
 } from '@heroicons/react/24/outline'
-import { ProductColumnConfig } from '../utils/productTypes'
+import { ProductColumnConfig, ProductFilterState } from '../utils/productTypes'
 import ScreenOptions from '../../shared/components/ScreenOptions'
 
 interface ProductsToolbarProps {
@@ -14,16 +14,19 @@ interface ProductsToolbarProps {
   onBulkAction: (action: string) => void
   onExport: () => void
   onResetLayout: () => void
-  onImport?: () => void // ✅ NEW: Import handler
+  onImport?: () => void // Import handler
   columns: ProductColumnConfig[]
   onColumnVisibilityChange: (columnId: string, visible: boolean) => void
   totalProducts: number
+  totalProductsInContext: number // Total in current warehouse/context
   filteredProducts: number
   itemsPerPage: number
   onItemsPerPageChange: (value: number) => void
   optionsOpen?: boolean
   onOptionsOpenChange?: (open: boolean) => void
-  hasEcommerceIntegrations?: boolean // ✅ NEW: Show import button only if integrations exist
+  hasEcommerceIntegrations?: boolean // Show import button only if integrations exist
+  searchTerm?: string // For detecting if search filter is active
+  filters?: ProductFilterState // For detecting if filters are active
 }
 
 export default function ProductsToolbar({
@@ -31,17 +34,47 @@ export default function ProductsToolbar({
   onBulkAction,
   onExport,
   onResetLayout,
-  onImport, // ✅ NEW
+  onImport,
   columns,
   onColumnVisibilityChange,
   totalProducts,
   filteredProducts,
+  totalProductsInContext,
   itemsPerPage,
   onItemsPerPageChange,
   optionsOpen,
   onOptionsOpenChange,
-  hasEcommerceIntegrations = false // ✅ NEW
+  hasEcommerceIntegrations = false,
+  searchTerm = '',
+  filters
 }: ProductsToolbarProps) {
+
+  // ✅ Helper: Check if any real filters (not warehouse/store context) are active
+  const hasActiveFilters = (): boolean => {
+    // Check search term
+    if (searchTerm && searchTerm.trim() !== '') return true
+
+    // Check if any filter properties are set (excluding context selectors)
+    if (!filters) return false
+
+    return (
+      filters.status !== '' ||
+      filters.visibility !== '' ||
+      filters.type !== '' ||
+      filters.stockStatus !== '' ||
+      filters.category !== '' ||
+      filters.vendor !== '' ||
+      filters.brand !== '' ||
+      filters.priceMin !== '' ||
+      filters.priceMax !== '' ||
+      filters.tags.length > 0 ||
+      filters.hasVariants !== '' ||
+      filters.parentOnly === true ||
+      filters.storeId !== '' ||
+      filters.platform !== ''
+      // Note: warehouseId, integrationId are NOT filters - they're context
+    )
+  }
 
   // ✅ DEBUG: Log when component renders
   console.log('[ProductsToolbar] Rendered with selectedProductsCount:', selectedProductsCount)
@@ -76,9 +109,11 @@ export default function ProductsToolbar({
           <h1 className="text-2xl font-semibold leading-6 text-gray-900">Products Management</h1>
           <p className="mt-2 text-sm text-gray-700">
             Manage your product catalog including variants and parent-child relationships.
-            {totalProducts !== filteredProducts && (
+            {/* Only show "Showing X of Y" when ACTUAL filters are applied (not warehouse selection) */}
+            {/* Use totalProductsInContext (warehouse total) instead of totalProducts (global total) */}
+            {totalProductsInContext !== filteredProducts && filteredProducts > 0 && hasActiveFilters() && (
               <span className="ml-2 text-indigo-600">
-                Showing {filteredProducts} of {totalProducts} products
+                Showing {filteredProducts} of {totalProductsInContext} products
               </span>
             )}
           </p>
@@ -95,7 +130,7 @@ export default function ProductsToolbar({
             </button>
           )}
 
-          {/* ✅ NEW: Import from Shopify Button */}
+          {/* Import from Shopify Button */}
           {hasEcommerceIntegrations && onImport && (
             <button
               onClick={onImport}

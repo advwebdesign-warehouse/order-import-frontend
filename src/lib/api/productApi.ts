@@ -32,7 +32,7 @@ export class ProductAPI {
   }
 
   /**
-   * ✅ NEW: Bulk delete multiple products in a single request
+   * Bulk delete multiple products in a single request
    * @param productIds - Array of product IDs to delete
    * @returns Object with deletedCount and notFoundCount
    */
@@ -44,7 +44,7 @@ export class ProductAPI {
   }
 
   /**
-   * ✅ NEW: Import products from an e-commerce integration
+   * Import products from an e-commerce integration
    * @param integrationId - Integration ID to import from
    * @param options - Import options (warehouse destination, update existing, etc.)
    * @returns Import result with count and warehouse info
@@ -53,6 +53,20 @@ export class ProductAPI {
     return apiRequest(`/products/import/${integrationId}`, {
       method: 'POST',
       body: JSON.stringify(options)
+    })
+  }
+
+  /**
+   * ✅ NEW: Update warehouse-specific inventory
+   * @param productId - Product ID
+   * @param warehouseId - Warehouse ID
+   * @param quantity - New quantity for this warehouse
+   * @returns Updated inventory record
+   */
+  static async updateWarehouseInventory(productId: string, warehouseId: string, quantity: number) {
+    return apiRequest(`/products/${productId}/warehouse/${warehouseId}/inventory`, {
+      method: 'PUT',
+      body: JSON.stringify({ quantity })
     })
   }
 }

@@ -329,6 +329,34 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     // TODO: Implement product duplication
   }
 
+  // ✅ Handle inline quantity update
+  const handleUpdateQuantity = async (productId: string, newQuantity: number) => {
+    try {
+      console.log(`[Products Page] Updating product ${productId} quantity to ${newQuantity}`)
+      console.log(`[Products Page] Selected warehouse: ${selectedWarehouseId || 'All Warehouses'}`)
+
+      if (selectedWarehouseId) {
+        // Update warehouse-specific inventory
+        console.log(`[Products Page] Updating warehouse ${selectedWarehouseId} inventory`)
+        await ProductAPI.updateWarehouseInventory(productId, selectedWarehouseId, newQuantity)
+      } else {
+        // Update global product quantity (when viewing "All Warehouses")
+        console.log(`[Products Page] Updating global product quantity`)
+        await ProductAPI.updateProduct(productId, {
+          stockQuantity: newQuantity
+        })
+      }
+
+      // Refresh products list to show updated quantity
+      await refetchProducts()
+
+      console.log(`✅ Successfully updated quantity to ${newQuantity}`)
+    } catch (error) {
+      console.error('[Products Page] Failed to update quantity:', error)
+      throw error // Re-throw to show error in table component
+    }
+  }
+
   // ✅ lastSyncAtImplement bulk delete
   const handleBulkAction = async (action: string) => {
     if (selectedProducts.size === 0) {
@@ -915,12 +943,15 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             hasEcommerceIntegrations={ecommerceIntegrations.length > 0}
             columns={columns}
             onColumnVisibilityChange={handleColumnVisibilityChange}
-            totalProducts={allProducts.length}
+            totalProducts={allProducts.length} // Global total (for export, etc.)
+            totalProductsInContext={products.length} // ✅ Total in selected warehouse (or global if "All Warehouses")
             filteredProducts={filteredProducts.length}
             itemsPerPage={productsPerPage}
             onItemsPerPageChange={setProductsPerPage}
             optionsOpen={optionsOpen}
             onOptionsOpenChange={setOptionsOpen}
+            searchTerm={searchTerm}
+            filters={filters}
           />
 
           <ProductsFilters
@@ -983,7 +1014,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             </div>
           )}
 
-          {/* ✅ NEW: Empty state for warehouse with no products AND no linked integrations */}
+          {/* Empty state for warehouse with no products AND no linked integrations */}
           {warehouseHasNoProducts && !warehouseHasLinkedIntegrations(selectedWarehouseId) && (
             <div className="mt-6 rounded-lg bg-yellow-50 border border-yellow-200 p-6">
               <div className="text-center">
@@ -1060,6 +1091,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
                 onEditProduct={handleEditProduct}
                 onDuplicateProduct={handleDuplicateProduct}
                 onColumnReorder={handleColumnReorder}
+                onUpdateQuantity={handleUpdateQuantity}
                 stores={stores}
               />
 
