@@ -1,5 +1,5 @@
-// File: app/dashboard/products/page.tsx
-// ✅ lastSyncAtAdded actual delete implementation
+//file path: app/dashboard/products/page.tsx
+// ✅ Updated to check if warehouse has linked integrations before showing sync button
 
 'use client'
 
@@ -41,6 +41,7 @@ import { Product } from './utils/productTypes'
 
 // ✅  Import IntegrationAPI and Integration type
 import { IntegrationAPI, Integration } from '@/lib/api/integrationApi'
+import { isEcommerceIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 
 // ✅ lastSyncAtImport ProductAPI for delete functionality
 import { ProductAPI } from '@/lib/api/productApi'
@@ -206,7 +207,32 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   // ✅ lastSyncAtStore management
   const { stores } = useStores()
 
-  // ✅ IMPORTANT: Load ALL products first (no warehouse filter)
+  // Helper function to check if a warehouse has linked integrations
+  const warehouseHasLinkedIntegrations = (warehouseId: string): boolean => {
+    if (!warehouseId) return true // "All Warehouses" view always has access
+
+    return ecommerceIntegrations.some(integration => {
+      // ✅ Use type guard to ensure integration is e-commerce type
+      if (!isEcommerceIntegration(integration)) return false
+
+      const routingConfig = integration.routingConfig
+      if (!routingConfig) return false
+
+      // Check if warehouse is in primary, fallback, or assignments
+      if (routingConfig.primaryWarehouseId === warehouseId) return true
+      if (routingConfig.fallbackWarehouseId === warehouseId) return true
+
+      if (routingConfig.mode === 'advanced' && routingConfig.assignments) {
+        return routingConfig.assignments.some((assignment) =>
+          assignment.warehouseId === warehouseId && assignment.isActive
+        )
+      }
+
+      return false
+    })
+  }
+
+  // Load ALL products first (no warehouse filter)
   const { products: allProducts, loading: loadingAllProducts, refetchProducts } = useProducts()
 
   // ✅ Then filter by warehouse client-side for display
@@ -440,20 +466,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       console.log('[Products Page] Starting import from integration:', integrationId)
       console.log('[Products Page] Import options:', options)
 
-      const response = await fetch(`/api/products/import/${integrationId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(options)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Import failed')
-      }
-
-      const result = await response.json()
+      // ✅ FIXED: Use ProductAPI instead of fetch
+      const result = await ProductAPI.importProducts(integrationId, options)
 
       console.log('[Products Page] Import successful:', result)
       console.log(`[Products Page] Imported ${result.count} products to ${result.warehouses} warehouses`)
@@ -528,7 +542,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const showIntegrationSpecificUI = hasIntegrations && integrationCount === 1
   const singleIntegration = showIntegrationSpecificUI ? ecommerceIntegrations[0] : null
 
-  // ✅ NEW: Determine if we're in a "warehouse with no products" state
+  // Determine if we're in a "warehouse with no products" state
   const hasProductsGlobally = allProducts.length > 0
   const isWarehouseSelected = selectedWarehouseId !== ''
   const warehouseHasNoProducts = isWarehouseSelected && products.length === 0 && hasProductsGlobally
@@ -725,7 +739,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       )}
 
       {/* Empty State - Has Integrations but No Products */}
-      {hasIntegrations && products.length === 0 && !loading && (
+      {hasIntegrations && allProducts.length === 0 && !loading && warehouseHasLinkedIntegrations(selectedWarehouseId) && (
         <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 p-6">
           <div className="text-center">
             <svg
@@ -776,7 +790,51 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         </div>
       )}
 
-      {/* ✅ UPDATED: Warehouse Selector - Always show when we have products globally */}
+      {/* Empty state for warehouse with no linked integrations */}
+      {hasIntegrations && allProducts.length === 0 && !loading && !warehouseHasLinkedIntegrations(selectedWarehouseId) && (
+        <div className="mb-6 rounded-lg bg-yellow-50 border border-yellow-200 p-6">
+          <div className="text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-yellow-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-semibold text-gray-900">No Integrations Linked to This Warehouse</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              {warehouseDisplayName} doesn't have any e-commerce integrations configured yet.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 items-center">
+              <button
+                onClick={() => window.location.href = '/dashboard/integrations'}
+                className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Configure Integration Routing
+              </button>
+              <button
+                onClick={() => handleWarehouseChange('')}
+                className="text-sm text-indigo-600 hover:text-indigo-500"
+              >
+                or view all warehouses
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Warehouse Selector - Always show when we have products globally */}
       {hasIntegrations && (
         <div className="mb-6">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -845,7 +903,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         </div>
       )}
 
-      {/* ✅ UPDATED: Always show Toolbar and Filters when we have products globally */}
+      {/* Always show Toolbar and Filters when we have products globally */}
       {hasIntegrations && (
         <>
           <ProductsToolbar
@@ -876,8 +934,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             filterOptions={filterOptions}
           />
 
-          {/* ✅ NEW: Empty State for Warehouse with No Products */}
-          {warehouseHasNoProducts && (
+          {/* Empty State for Warehouse with No Products */}
+          {warehouseHasNoProducts && warehouseHasLinkedIntegrations(selectedWarehouseId) && (
             <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-6">
               <div className="text-center">
                 <svg
@@ -899,12 +957,71 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
                   There are no products assigned to <strong>{warehouseDisplayName}</strong>.
                 </p>
                 <p className="mt-1 text-sm text-gray-500">
-                  You can assign products to this warehouse or select "All Warehouses" to see all products.
+                  Import products from your connected integrations or view all products.
                 </p>
-                <div className="mt-6">
+                <div className="mt-6 flex gap-3 justify-center">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="inline-flex items-center gap-x-2 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Import from Shopify
+                  </button>
                   <button
                     onClick={() => handleWarehouseChange('')}
                     className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    View All Products
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ✅ NEW: Empty state for warehouse with no products AND no linked integrations */}
+          {warehouseHasNoProducts && !warehouseHasLinkedIntegrations(selectedWarehouseId) && (
+            <div className="mt-6 rounded-lg bg-yellow-50 border border-yellow-200 p-6">
+              <div className="text-center">
+                <svg
+                  className="mx-auto h-12 w-12 text-yellow-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                  />
+                </svg>
+                <h3 className="mt-2 text-lg font-medium text-gray-900">No Products in This Warehouse</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  There are no products assigned to <strong>{warehouseDisplayName}</strong>.
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  This warehouse is not configured in any integrations. Configure routing to enable product sync.
+                </p>
+                <div className="mt-6 flex gap-3 justify-center">
+                  <button
+                    onClick={() => window.location.href = '/dashboard/integrations'}
+                    className="inline-flex items-center gap-x-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Configure Integration Routing
+                  </button>
+                  <button
+                    onClick={() => handleWarehouseChange('')}
+                    className="inline-flex items-center gap-x-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
                   >
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />

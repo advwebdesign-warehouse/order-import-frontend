@@ -42,4 +42,17 @@ export class ProductAPI {
       body: JSON.stringify({ productIds })
     })
   }
+
+  /**
+   * ✅ NEW: Import products from an e-commerce integration
+   * @param integrationId - Integration ID to import from
+   * @param options - Import options (warehouse destination, update existing, etc.)
+   * @returns Import result with count and warehouse info
+   */
+  static async importProducts(integrationId: string, options: any) {
+    return apiRequest(`/products/import/${integrationId}`, {
+      method: 'POST',
+      body: JSON.stringify(options)
+    })
+  }
 }

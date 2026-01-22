@@ -546,7 +546,7 @@ export function useOAuthCallbacks({
         // This ensures incremental sync and field preservation
         const result = await IntegrationAPI.syncShopify({
           storeId: integrationStoreId,
-          syncType: 'all',
+          syncType: 'orders',
           fullSync: false  // ✅ CRITICAL: Always use incremental sync for auto-sync
         })
 
@@ -563,7 +563,7 @@ export function useOAuthCallbacks({
           show: true,
           type: 'success',
           title: 'Sync Complete',
-          message: `Synced ${data.orders || 0} orders (${data.ordersNew || 0} new, ${data.ordersUpdated || 0} updated) and ${data.products || 0} products`
+          message: `Synced ${data.orders || 0} orders (${data.ordersNew || 0} new, ${data.ordersUpdated || 0} updated)`
         })
       } catch (error: any) {
         console.error('[Auto-Sync] ❌ Error:', error)

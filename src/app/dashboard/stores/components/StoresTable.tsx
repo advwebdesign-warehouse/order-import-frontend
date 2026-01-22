@@ -98,24 +98,26 @@ export default function StoresTable({
           <div>
             <div className="flex items-center">
               {store.logo ? (
-                <img
-                  src={store.logo}
-                  alt={store.storeName}
-                  className="h-10 w-10 rounded-full object-cover mr-3"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
-                  <BuildingStorefrontIcon className="h-5 w-5 text-indigo-600" />
-                </div>
-              )}
-              <div>
                 <button
-                  onClick={() => onViewStore(store)}
+                  onClick={() => onEditStore(store)}
                   className="text-sm font-medium text-gray-900 hover:text-gray-700 cursor-pointer text-left"
                 >
-                  {store.storeName || <span className="text-gray-400">—</span>}
+                  <img
+                    src={store.logo}
+                    alt={store.storeName}
+                    className="h-10 w-10 rounded-full object-cover mr-3"
+                  />
                 </button>
-              </div>
+              ) : (
+                <div>
+                  <button
+                    onClick={() => onEditStore(store)}
+                    className="text-sm font-medium text-gray-900 hover:text-gray-700 cursor-pointer text-left"
+                  >
+                    {store.storeName || <span className="text-gray-400">—</span>}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )
