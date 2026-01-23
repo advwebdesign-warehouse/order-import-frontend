@@ -75,7 +75,8 @@ interface ProductsTableProps {
   onEditProduct: (product: Product) => void
   onDuplicateProduct: (product: Product) => void
   onColumnReorder: (columns: ProductColumnConfig[]) => void
-  onUpdateQuantity?: (productId: string, newQuantity: number) => Promise<void> // ✅ NEW: Inline quantity update
+  onUpdateQuantity?: (productId: string, newQuantity: number) => Promise<void> // Inline quantity update
+  selectedWarehouseId?: string // To display warehouse-specific quantity
   stores?: Store[] // ✅ lastSyncAtAdded stores for rendering store names
 }
 
@@ -92,6 +93,7 @@ export default function ProductsTable({
   onDuplicateProduct,
   onColumnReorder,
   onUpdateQuantity,
+  selectedWarehouseId, // ✅ NEW: To display warehouse-specific quantity
   stores = [] // ✅ lastSyncAtDefault empty array
 }: ProductsTableProps) {
 
@@ -118,10 +120,24 @@ export default function ProductsTable({
     }
   }
 
+  // ✅ Helper: Get quantity for current context (warehouse-specific or global)
+  const getProductQuantity = (product: Product): number => {
+    if (selectedWarehouseId && product.warehouseStock) {
+      // Find warehouse-specific quantity
+      const warehouseInventory = product.warehouseStock.find(
+        stock => stock.warehouseId === selectedWarehouseId
+      )
+      return warehouseInventory?.stockQuantity ?? 0
+    }
+    // Return global quantity when viewing "All Warehouses"
+    return product.stockQuantity
+  }
+
   // ✅ Start editing quantity
   const handleStartEditQuantity = (product: Product) => {
     setEditingQuantityId(product.id)
-    setEditingQuantityValue(product.stockQuantity.toString())
+    const currentQuantity = getProductQuantity(product)
+    setEditingQuantityValue(currentQuantity.toString())
   }
 
   // ✅ Cancel editing quantity
@@ -526,7 +542,7 @@ export default function ProductsTable({
                 className="inline-flex items-center gap-1.5 font-medium text-gray-900 hover:text-indigo-600 cursor-pointer transition-colors group/qty"
                 title="Click to edit quantity"
               >
-                <span>{product.stockQuantity}</span>
+                <span>{getProductQuantity(product)}</span>
                 <PencilIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/qty:opacity-100 transition-opacity" />
               </div>
               {product.stockThreshold && (

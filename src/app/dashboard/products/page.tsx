@@ -1092,6 +1092,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
                 onDuplicateProduct={handleDuplicateProduct}
                 onColumnReorder={handleColumnReorder}
                 onUpdateQuantity={handleUpdateQuantity}
+                selectedWarehouseId={selectedWarehouseId}
                 stores={stores}
               />
 
