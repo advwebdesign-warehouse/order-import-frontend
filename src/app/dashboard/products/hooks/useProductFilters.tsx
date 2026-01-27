@@ -20,7 +20,7 @@ export function useProductFilters(products: Product[], warehouses: Warehouse[] =
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        product.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        product.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (product.brand && product.brand.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (product.vendor && product.vendor.toLowerCase().includes(searchTerm.toLowerCase()))
 

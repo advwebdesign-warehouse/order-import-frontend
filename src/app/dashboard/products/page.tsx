@@ -357,6 +357,24 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     }
   }
 
+  // ✅ NEW: Handle inline SKU update
+  const handleUpdateSku = async (productId: string, newSku: string) => {
+    try {
+      console.log(`[Products Page] Updating product ${productId} SKU to ${newSku}`)
+
+      // Update product SKU using the API
+      await ProductAPI.updateProductSku(productId, newSku)
+
+      // Refresh products list to show updated SKU
+      await refetchProducts()
+
+      console.log(`✅ Successfully updated SKU to ${newSku}`)
+    } catch (error) {
+      console.error('[Products Page] Failed to update SKU:', error)
+      throw error // Re-throw to show error in table component
+    }
+  }
+
   // ✅ lastSyncAtImplement bulk delete
   const handleBulkAction = async (action: string) => {
     if (selectedProducts.size === 0) {
@@ -494,7 +512,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       console.log('[Products Page] Starting import from integration:', integrationId)
       console.log('[Products Page] Import options:', options)
 
-      // ✅ FIXED: Use ProductAPI instead of fetch
+      // Use ProductAPI instead of fetch
       const result = await ProductAPI.importProducts(integrationId, options)
 
       console.log('[Products Page] Import successful:', result)
@@ -786,7 +804,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             </svg>
             <h3 className="mt-2 text-lg font-medium text-gray-900">No Products Yet</h3>
             <p className="mt-1 text-sm text-gray-500">
-              You have {integrationCount} integration{integrationCount > 1 ? 's' : ''} connected, but no products have been synced yet.
+              You have {integrationCount} integration{integrationCount > 1 ? 's' : ''} connected, but no products have been imported yet.
             </p>
             <div className="mt-6">
               <button
@@ -797,14 +815,14 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
                 {syncing ? (
                   <>
                     <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                    Syncing...
+                    Importing...
                   </>
                 ) : (
                   <>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    Sync Products Now
+                    Import Products
                   </>
                 )}
               </button>
@@ -1092,6 +1110,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
                 onDuplicateProduct={handleDuplicateProduct}
                 onColumnReorder={handleColumnReorder}
                 onUpdateQuantity={handleUpdateQuantity}
+                onUpdateSku={handleUpdateSku}
                 selectedWarehouseId={selectedWarehouseId}
                 stores={stores}
               />

@@ -11,7 +11,9 @@ import {
   ChevronDownIcon,
   Bars3Icon,
   LinkIcon,
-  CheckIcon
+  CheckIcon,
+  ExclamationTriangleIcon, // ✅ NEW: Warning icon for missing SKU
+  XMarkIcon // ✅ NEW: Cancel icon
 } from '@heroicons/react/24/outline'
 import {
   DndContext,
@@ -76,6 +78,7 @@ interface ProductsTableProps {
   onDuplicateProduct: (product: Product) => void
   onColumnReorder: (columns: ProductColumnConfig[]) => void
   onUpdateQuantity?: (productId: string, newQuantity: number) => Promise<void> // Inline quantity update
+  onUpdateSku?: (productId: string, newSku: string) => Promise<void> // ✅ NEW: Inline SKU update
   selectedWarehouseId?: string // To display warehouse-specific quantity
   stores?: Store[] // ✅ lastSyncAtAdded stores for rendering store names
 }
@@ -93,6 +96,7 @@ export default function ProductsTable({
   onDuplicateProduct,
   onColumnReorder,
   onUpdateQuantity,
+  onUpdateSku, // ✅ NEW: SKU update handler
   selectedWarehouseId, // ✅ NEW: To display warehouse-specific quantity
   stores = [] // ✅ lastSyncAtDefault empty array
 }: ProductsTableProps) {
@@ -104,6 +108,11 @@ export default function ProductsTable({
   const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null)
   const [editingQuantityValue, setEditingQuantityValue] = useState<string>('')
   const [isUpdatingQuantity, setIsUpdatingQuantity] = useState(false)
+
+  // ✅ NEW: State for inline SKU editing
+  const [editingSkuId, setEditingSkuId] = useState<string | null>(null)
+  const [editingSkuValue, setEditingSkuValue] = useState<string>('')
+  const [isUpdatingSku, setIsUpdatingSku] = useState(false)
 
   // ✅ Copy SKU to clipboard
   const handleCopySku = async (sku: string) => {
@@ -172,6 +181,64 @@ export default function ProductsTable({
       console.error('Failed to update quantity:', error)
       alert('Failed to update quantity. Please try again.')
       setIsUpdatingQuantity(false)
+    }
+  }
+
+  // ✅ NEW: Check if SKU looks like an external ID (needs warning)
+  const isSkuMissing = (product: Product): boolean => {
+    // Check if SKU matches externalId (fallback SKU)
+    if (product.externalId && product.sku === product.externalId) {
+      return true
+    }
+    // Check if SKU is just numeric (likely an ID)
+    if (/^\d+$/.test(product.sku)) {
+      return true
+    }
+    // Check if SKU looks like a generic placeholder
+    if (!product.sku || product.sku.toLowerCase().includes('unknown')) {
+      return true
+    }
+    return false
+  }
+
+  // ✅ NEW: Start editing SKU
+  const handleStartEditSku = (product: Product) => {
+    setEditingSkuId(product.id)
+    setEditingSkuValue(product.sku)
+  }
+
+  // ✅ NEW: Cancel editing SKU
+  const handleCancelEditSku = () => {
+    setEditingSkuId(null)
+    setEditingSkuValue('')
+    setIsUpdatingSku(false)
+  }
+
+  // ✅ NEW: Save edited SKU
+  const handleSaveSku = async (productId: string) => {
+    const newSku = editingSkuValue.trim()
+
+    // Validate
+    if (!newSku) {
+      alert('SKU cannot be empty')
+      return
+    }
+
+    // If no handler provided, warn user
+    if (!onUpdateSku) {
+      console.warn('onUpdateSku handler not provided - SKU update not saved')
+      handleCancelEditSku()
+      return
+    }
+
+    try {
+      setIsUpdatingSku(true)
+      await onUpdateSku(productId, newSku)
+      handleCancelEditSku()
+    } catch (error) {
+      console.error('Failed to update SKU:', error)
+      alert('Failed to update SKU. Please try again.')
+      setIsUpdatingSku(false)
     }
   }
 
@@ -378,30 +445,105 @@ export default function ProductsTable({
           </div>
         )
 
-      case 'sku':
-        const isSkuCopied = copiedSku === product.sku
-        return (
-          <div>
-            <div
-              onClick={() => handleCopySku(product.sku)}
-              className="group/sku inline-flex items-center gap-1.5 text-sm font-mono font-medium text-gray-900 hover:text-indigo-600 cursor-pointer transition-colors"
-              title="Click to copy SKU"
-            >
-              <span>{product.sku}</span>
-              {isSkuCopied ? (
-                <CheckIcon className="h-3.5 w-3.5 text-green-600 animate-in fade-in zoom-in duration-200" />
+        case 'sku':
+          const isSkuEditing = editingSkuId === product.id
+          const isSkuCopied = copiedSku === product.sku
+          const needsSkuWarning = isSkuMissing(product)
+
+          // ✅ UPDATED: SKU rendering with warning and inline editing
+          return (
+            <div>
+              {isSkuEditing ? (
+                // ✅ NEW: Inline editing mode
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editingSkuValue}
+                    onChange={(e) => setEditingSkuValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveSku(product.id)
+                      } else if (e.key === 'Escape') {
+                        handleCancelEditSku()
+                      }
+                    }}
+                    className="w-32 px-2 py-1 text-sm font-mono border border-indigo-500 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    autoFocus
+                    disabled={isUpdatingSku}
+                  />
+                  <button
+                    onClick={() => handleSaveSku(product.id)}
+                    disabled={isUpdatingSku}
+                    className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                    title="Save SKU"
+                  >
+                    <CheckIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={handleCancelEditSku}
+                    disabled={isUpdatingSku}
+                    className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                    title="Cancel"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
               ) : (
-                <DocumentDuplicateIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/sku:opacity-100 transition-opacity" />
+                // ✅ UPDATED: Display mode with warning
+                <>
+                  <div className="flex items-center gap-2">
+                    <div
+                      onClick={() => handleCopySku(product.sku)}
+                      className="group/sku inline-flex items-center gap-1.5 text-sm font-mono font-medium text-gray-900 hover:text-indigo-600 cursor-pointer transition-colors"
+                      title="Click to copy SKU"
+                    >
+                      <span>{product.sku}</span>
+                      {isSkuCopied ? (
+                        <CheckIcon className="h-3.5 w-3.5 text-green-600 animate-in fade-in zoom-in duration-200" />
+                      ) : (
+                        <DocumentDuplicateIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/sku:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+
+                    {/* ✅ NEW: Warning indicator */}
+                    {needsSkuWarning && (
+                      <ExclamationTriangleIcon
+                        className="h-4 w-4 text-amber-500"
+                        title="SKU appears to be a fallback ID. Click edit to set a proper SKU."
+                      />
+                    )}
+
+                    {/* ✅ NEW: Edit button */}
+                    {onUpdateSku && (
+                      <button
+                        onClick={() => handleStartEditSku(product)}
+                        className="text-blue-600 hover:text-blue-900 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Edit SKU"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ✅ Show external ID if different from SKU */}
+                  {product.externalId && product.sku !== product.externalId && (
+                    <div className="flex items-center text-xs text-gray-500 mt-1">
+                      <LinkIcon className="h-3 w-3 mr-1" />
+                      External: {product.externalId}
+                    </div>
+                  )}
+
+                  {/* ✅ Show parent SKU if variant */}
+                  {product.parentSku && (
+                    <div className="flex items-center text-xs text-gray-500 mt-1">
+                      <LinkIcon className="h-3 w-3 mr-1" />
+                      Parent: {product.parentSku}
+                    </div>
+                  )}
+                </>
               )}
             </div>
-            {product.parentSku && (
-              <div className="flex items-center text-xs text-gray-500 mt-1">
-                <LinkIcon className="h-3 w-3 mr-1" />
-                Parent: {product.parentSku}
-              </div>
-            )}
-          </div>
-        )
+          )
 
       case 'name':
         return (

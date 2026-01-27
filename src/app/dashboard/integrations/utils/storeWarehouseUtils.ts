@@ -33,7 +33,7 @@ export async function checkAccountHasWarehouses(): Promise<boolean> {
 }
 
 /**
- * ✅ UPDATED: Get store by ID and return basic info
+ * Get store by ID and return basic info
  *
  * Note: Stores do NOT have warehouse configurations.
  * Use integration APIs to check warehouse routing for specific integrations.
@@ -151,4 +151,74 @@ export function getIntegrationWarehouseSummary(integration: any): string {
   }
 
   return 'Unknown configuration'
+}
+
+
+/**
+ * ✅ NEW: Get assigned warehouses from integration for display
+ * Returns array of warehouse objects with ID, name, and type (primary/fallback/assigned/single)
+ * Used for rendering warehouse badges with links in IntegrationCard
+ */
+export interface AssignedWarehouseDisplay {
+  id: string
+  name: string
+  type: 'primary' | 'fallback' | 'assigned' | 'single'
+}
+
+export function getIntegrationAssignedWarehouses(integration: any): AssignedWarehouseDisplay[] {
+  const warehouses: AssignedWarehouseDisplay[] = []
+
+  if (!integration) return warehouses
+
+  // Handle shipping integrations (single warehouse)
+  if (integration.type === 'shipping') {
+    if (integration.warehouseId) {
+      warehouses.push({
+        id: integration.warehouseId,
+        name: 'Warehouse', // Generic name - can be enhanced with actual warehouse name lookup
+        type: 'single'
+      })
+    }
+    return warehouses
+  }
+
+  // Handle e-commerce integrations (flexible routing)
+  if (integration.type === 'ecommerce') {
+    const routingConfig = integration.routingConfig
+
+    if (!routingConfig) return warehouses
+
+    // Simple mode: Primary and Fallback
+    if (routingConfig.mode === 'simple') {
+      if (routingConfig.primaryWarehouseId) {
+        warehouses.push({
+          id: routingConfig.primaryWarehouseId,
+          name: 'Primary Warehouse',
+          type: 'primary'
+        })
+      }
+      if (routingConfig.fallbackWarehouseId) {
+        warehouses.push({
+          id: routingConfig.fallbackWarehouseId,
+          name: 'Fallback Warehouse',
+          type: 'fallback'
+        })
+      }
+    }
+
+    // Advanced mode: All assignments
+    if (routingConfig.mode === 'advanced' && routingConfig.assignments) {
+      routingConfig.assignments
+        .filter((assignment: any) => assignment.isActive)
+        .forEach((assignment: any) => {
+          warehouses.push({
+            id: assignment.warehouseId,
+            name: assignment.warehouseName,
+            type: 'assigned'
+          })
+        })
+    }
+  }
+
+  return warehouses
 }

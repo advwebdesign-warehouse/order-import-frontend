@@ -69,4 +69,28 @@ export class ProductAPI {
       body: JSON.stringify({ quantity })
     })
   }
+
+  /**
+   * ✅ NEW: Update product SKU
+   * Convenience method for updating just the SKU field
+   * @param productId - Product ID
+   * @param newSku - New SKU value
+   * @returns Updated product
+   */
+  static async updateProductSku(productId: string, newSku: string) {
+    console.log(`[ProductAPI] Updating SKU for product ${productId} to: ${newSku}`)
+    return this.updateProduct(productId, { sku: newSku })
+  }
+
+  /**
+   * ✅ NEW: Update product quantity
+   * Convenience method for updating just the stock quantity
+   * @param productId - Product ID
+   * @param newQuantity - New stock quantity
+   * @returns Updated product
+   */
+  static async updateProductQuantity(productId: string, newQuantity: number) {
+    console.log(`[ProductAPI] Updating quantity for product ${productId} to: ${newQuantity}`)
+    return this.updateProduct(productId, { stockQuantity: newQuantity })
+  }
 }

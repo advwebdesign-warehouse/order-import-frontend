@@ -11,9 +11,12 @@ import {
   ExclamationTriangleIcon,
   TrashIcon,
   ArrowPathIcon,
-  BuildingStorefrontIcon
+  BuildingStorefrontIcon,
+  BuildingOffice2Icon
 } from '@heroicons/react/24/outline'
 import { Integration } from '../types/integrationTypes'
+import { getIntegrationAssignedWarehouses } from '../utils/storeWarehouseUtils'
+import Link from 'next/link'
 
 // Helper function to get store URL from different integration configs
 function getStoreUrl(integration: Integration): string | null {
@@ -83,6 +86,9 @@ export default function IntegrationCard({
   const integrationStatus = integration.status || 'disconnected'
   const status = statusConfig[integrationStatus]
   const StatusIcon = status.icon
+
+  // ✅ Get assigned warehouses using utility function
+  const assignedWarehouses = getIntegrationAssignedWarehouses(integration)
 
   // Handle toggle with connection test
   const handleToggle = async () => {
@@ -179,6 +185,36 @@ export default function IntegrationCard({
             </div>
           </div>
 
+          {/* ✅ NEW: Assigned Warehouses Display */}
+          {assignedWarehouses.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center mb-1.5">
+                <BuildingOffice2Icon className="h-3.5 w-3.5 mr-1 text-gray-500" />
+                <span className="text-xs font-medium text-gray-600">Assigned Warehouses:</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {assignedWarehouses.map((warehouse, index) => (
+                  <Link
+                    key={`${warehouse.id}-${index}`}
+                    href={`/dashboard/warehouses?id=${warehouse.id}`}
+                    className="inline-flex items-center px-2 py-1 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors group"
+                  >
+                    <BuildingOffice2Icon className="h-3 w-3 mr-1 text-blue-600 group-hover:text-blue-700" />
+                    <span className="text-xs font-medium text-blue-700 group-hover:text-blue-800">
+                      {warehouse.name}
+                    </span>
+                    {warehouse.type === 'primary' && (
+                      <span className="ml-1 text-[10px] text-blue-500">(Primary)</span>
+                    )}
+                    {warehouse.type === 'fallback' && (
+                      <span className="ml-1 text-[10px] text-blue-500">(Fallback)</span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+          
           {/* Delete Button */}
           <button
             onClick={onDelete}
