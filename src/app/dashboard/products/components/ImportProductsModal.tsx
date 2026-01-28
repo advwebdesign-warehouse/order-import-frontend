@@ -50,7 +50,7 @@ export default function ImportProductsModal({
   isImporting
 }: ImportProductsModalProps) {
   const [selectedIntegration, setSelectedIntegration] = useState<string>('')
-  const [warehouseDestination, setWarehouseDestination] = useState<'primary' | 'all_routing' | 'specific'>('primary')
+  const [warehouseDestination, setWarehouseDestination] = useState<'primary' | 'all_routing' | 'specific'>('all_routing')
   const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([])
   const [updateExisting, setUpdateExisting] = useState(true)
   const [createInventory, setCreateInventory] = useState(true)
