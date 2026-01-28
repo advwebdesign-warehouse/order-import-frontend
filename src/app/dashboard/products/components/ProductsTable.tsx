@@ -12,8 +12,8 @@ import {
   Bars3Icon,
   LinkIcon,
   CheckIcon,
-  ExclamationTriangleIcon, // ✅ NEW: Warning icon for missing SKU
-  XMarkIcon // ✅ NEW: Cancel icon
+  ExclamationTriangleIcon, // Warning icon for missing SKU
+  XMarkIcon // Cancel icon
 } from '@heroicons/react/24/outline'
 import {
   DndContext,
@@ -54,11 +54,11 @@ import {
 } from '../utils/productUtils'
 import { Store } from '../../stores/utils/storeTypes'
 
-// ✅ Sticky column configuration
+// Sticky column configuration
 const STICKY_LEFT_COLUMNS = ['select', 'sku']
 const STICKY_RIGHT_COLUMNS = ['actions']
 
-// ✅ Column widths for sticky positioning
+// Column widths for sticky positioning
 const COLUMN_WIDTHS: Record<string, number> = {
   select: 50,
   sku: 150,
@@ -78,9 +78,9 @@ interface ProductsTableProps {
   onDuplicateProduct: (product: Product) => void
   onColumnReorder: (columns: ProductColumnConfig[]) => void
   onUpdateQuantity?: (productId: string, newQuantity: number) => Promise<void> // Inline quantity update
-  onUpdateSku?: (productId: string, newSku: string) => Promise<void> // ✅ NEW: Inline SKU update
+  onUpdateSku?: (productId: string, newSku: string) => Promise<void> // Inline SKU update
   selectedWarehouseId?: string // To display warehouse-specific quantity
-  stores?: Store[] // ✅ lastSyncAtAdded stores for rendering store names
+  stores?: Store[] // lastSyncAtAdded stores for rendering store names
 }
 
 export default function ProductsTable({
@@ -96,25 +96,25 @@ export default function ProductsTable({
   onDuplicateProduct,
   onColumnReorder,
   onUpdateQuantity,
-  onUpdateSku, // ✅ NEW: SKU update handler
-  selectedWarehouseId, // ✅ NEW: To display warehouse-specific quantity
-  stores = [] // ✅ lastSyncAtDefault empty array
+  onUpdateSku, // SKU update handler
+  selectedWarehouseId, // To display warehouse-specific quantity
+  stores = [] // lastSyncAtDefault empty array
 }: ProductsTableProps) {
 
-  // ✅ State to track which SKU was just copied
+  // State to track which SKU was just copied
   const [copiedSku, setCopiedSku] = useState<string | null>(null)
 
-  // ✅ State for inline quantity editing
+  // State for inline quantity editing
   const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null)
   const [editingQuantityValue, setEditingQuantityValue] = useState<string>('')
   const [isUpdatingQuantity, setIsUpdatingQuantity] = useState(false)
 
-  // ✅ NEW: State for inline SKU editing
+  // State for inline SKU editing
   const [editingSkuId, setEditingSkuId] = useState<string | null>(null)
   const [editingSkuValue, setEditingSkuValue] = useState<string>('')
   const [isUpdatingSku, setIsUpdatingSku] = useState(false)
 
-  // ✅ Copy SKU to clipboard
+  // Copy SKU to clipboard
   const handleCopySku = async (sku: string) => {
     try {
       await navigator.clipboard.writeText(sku)
@@ -129,7 +129,7 @@ export default function ProductsTable({
     }
   }
 
-  // ✅ Helper: Get quantity for current context (warehouse-specific or global)
+  // Helper: Get quantity for current context (warehouse-specific or global)
   const getProductQuantity = (product: Product): number => {
     if (selectedWarehouseId && product.warehouseStock) {
       // Find warehouse-specific quantity
@@ -142,21 +142,21 @@ export default function ProductsTable({
     return product.stockQuantity
   }
 
-  // ✅ Start editing quantity
+  // Start editing quantity
   const handleStartEditQuantity = (product: Product) => {
     setEditingQuantityId(product.id)
     const currentQuantity = getProductQuantity(product)
     setEditingQuantityValue(currentQuantity.toString())
   }
 
-  // ✅ Cancel editing quantity
+  // Cancel editing quantity
   const handleCancelEditQuantity = () => {
     setEditingQuantityId(null)
     setEditingQuantityValue('')
     setIsUpdatingQuantity(false)
   }
 
-  // ✅ Save edited quantity
+  // Save edited quantity
   const handleSaveQuantity = async (productId: string) => {
     const newQuantity = parseInt(editingQuantityValue, 10)
 
@@ -184,7 +184,7 @@ export default function ProductsTable({
     }
   }
 
-  // ✅ NEW: Check if SKU looks like an external ID (needs warning)
+  // Check if SKU looks like an external ID (needs warning)
   const isSkuMissing = (product: Product): boolean => {
     // Check if SKU matches externalId (fallback SKU)
     if (product.externalId && product.sku === product.externalId) {
@@ -201,20 +201,20 @@ export default function ProductsTable({
     return false
   }
 
-  // ✅ NEW: Start editing SKU
+  // Start editing SKU
   const handleStartEditSku = (product: Product) => {
     setEditingSkuId(product.id)
     setEditingSkuValue(product.sku)
   }
 
-  // ✅ NEW: Cancel editing SKU
+  // Cancel editing SKU
   const handleCancelEditSku = () => {
     setEditingSkuId(null)
     setEditingSkuValue('')
     setIsUpdatingSku(false)
   }
 
-  // ✅ NEW: Save edited SKU
+  // Save edited SKU
   const handleSaveSku = async (productId: string) => {
     const newSku = editingSkuValue.trim()
 
@@ -260,7 +260,7 @@ export default function ProductsTable({
     }
   }
 
-  // ✅ Calculate sticky position for a column
+  // Calculate sticky position for a column
   const getStickyStyle = (columnId: string, isHeader: boolean = false): React.CSSProperties => {
     const visibleColumns = columns.filter(col => col.visible)
 
@@ -290,7 +290,7 @@ export default function ProductsTable({
     return {}
   }
 
-  // ✅ Get CSS classes for sticky columns
+  // Get CSS classes for sticky columns
   const getStickyClasses = (columnId: string, isHeader: boolean = false): string => {
     const isLeftSticky = STICKY_LEFT_COLUMNS.includes(columnId)
     const isRightSticky = STICKY_RIGHT_COLUMNS.includes(columnId)
@@ -450,11 +450,11 @@ export default function ProductsTable({
           const isSkuCopied = copiedSku === product.sku
           const needsSkuWarning = isSkuMissing(product)
 
-          // ✅ UPDATED: SKU rendering with warning and inline editing
+          // UPDATED: SKU rendering with warning and inline editing
           return (
             <div>
               {isSkuEditing ? (
-                // ✅ NEW: Inline editing mode
+                // Inline editing mode
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -489,31 +489,36 @@ export default function ProductsTable({
                   </button>
                 </div>
               ) : (
-                // ✅ UPDATED: Display mode with warning
+                // UPDATED: Display mode with warning
                 <>
                   <div className="flex items-center gap-2">
                     <div
-                      onClick={() => handleCopySku(product.sku)}
-                      className="group/sku inline-flex items-center gap-1.5 text-sm font-mono font-medium text-gray-900 hover:text-indigo-600 cursor-pointer transition-colors"
-                      title="Click to copy SKU"
+                      onClick={needsSkuWarning ? undefined : () => handleCopySku(product.sku)}
+                      className={`group/sku inline-flex items-center gap-1.5 text-sm font-mono font-medium text-gray-900 transition-colors ${
+                        needsSkuWarning ? '' : 'hover:text-indigo-600 cursor-pointer'
+                      }`}
+                      title={needsSkuWarning ? "SKU appears to be a fallback ID. Click edit to set a proper SKU." : "Click to copy SKU"}
                     >
-                      <span>{product.sku}</span>
-                      {isSkuCopied ? (
-                        <CheckIcon className="h-3.5 w-3.5 text-green-600 animate-in fade-in zoom-in duration-200" />
+                      {/* ✅ Show warning icon if SKU is missing, otherwise show the SKU */}
+                      {needsSkuWarning ? (
+                        <ExclamationTriangleIcon
+                          className="h-4 w-4 text-amber-500"
+                          title="SKU appears to be a fallback ID. Click edit to set a proper SKU."
+                        />
                       ) : (
-                        <DocumentDuplicateIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/sku:opacity-100 transition-opacity" />
+                        <span>{product.sku}</span>
+                      )}
+                      {/* Only show copy icon when SKU is valid */}
+                      {!needsSkuWarning && (
+                        isSkuCopied ? (
+                          <CheckIcon className="h-3.5 w-3.5 text-green-600 animate-in fade-in zoom-in duration-200" />
+                        ) : (
+                          <DocumentDuplicateIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/sku:opacity-100 transition-opacity" />
+                        )
                       )}
                     </div>
 
-                    {/* ✅ NEW: Warning indicator */}
-                    {needsSkuWarning && (
-                      <ExclamationTriangleIcon
-                        className="h-4 w-4 text-amber-500"
-                        title="SKU appears to be a fallback ID. Click edit to set a proper SKU."
-                      />
-                    )}
-
-                    {/* ✅ NEW: Edit button */}
+                    {/* Edit button */}
                     {onUpdateSku && (
                       <button
                         onClick={() => handleStartEditSku(product)}
@@ -525,14 +530,11 @@ export default function ProductsTable({
                     )}
                   </div>
 
-                  {/* ✅ Show external ID if different from SKU */}
-                  {product.externalId && product.sku !== product.externalId && (
+                  {/* ✅ Show external ID only if different from SKU AND SKU is valid */}
                     <div className="flex items-center text-xs text-gray-500 mt-1">
                       <LinkIcon className="h-3 w-3 mr-1" />
                       External: {product.externalId}
                     </div>
-                  )}
-
                   {/* ✅ Show parent SKU if variant */}
                   {product.parentSku && (
                     <div className="flex items-center text-xs text-gray-500 mt-1">
@@ -646,7 +648,7 @@ export default function ProductsTable({
         return (
           <div className="text-sm">
           {isEditingThisQuantity ? (
-            // ✅ Edit mode: Show input field
+            // Edit mode: Show input field
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -676,7 +678,7 @@ export default function ProductsTable({
               )}
             </div>
           ) : (
-            // ✅ View mode: Click to edit
+            // View mode: Click to edit
             <div>
               <div
                 onClick={() => handleStartEditQuantity(product)}
