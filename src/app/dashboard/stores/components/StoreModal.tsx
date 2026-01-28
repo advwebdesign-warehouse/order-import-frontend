@@ -379,7 +379,7 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                             )}
 
                             {formData.logo && (
-                              <div className="mt-2">
+                              <div className="mt-2 relative inline-block">
                                 <img
                                   src={formData.logo.startsWith('/')
                                     ? formData.logo // Server-uploaded files are served from /public
