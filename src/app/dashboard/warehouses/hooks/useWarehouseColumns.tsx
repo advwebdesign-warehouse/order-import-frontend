@@ -1,4 +1,5 @@
-// app/dashboard/warehouses/hooks/useWarehouseColumns.tsx
+//file path: app/dashboard/warehouses/hooks/useWarehouseColumns.tsx
+
 import { useState, useMemo } from 'react'
 import { Warehouse, WarehouseColumnConfig, WarehouseSortState } from '../utils/warehouseTypes'
 
@@ -8,13 +9,11 @@ const DEFAULT_COLUMNS: WarehouseColumnConfig[] = [
   { id: 'name', field: 'name', label: 'Warehouse', sortable: true, visible: true },
   { id: 'address', field: 'address', label: 'Location', sortable: true, visible: true },
   { id: 'status', field: 'status', label: 'Status', sortable: true, visible: true },
+  { id: 'integrations', field: 'integrations', label: 'Integrations', sortable: false, visible: true }, // ✅ NEW
   { id: 'productCount', field: 'productCount', label: 'Products', sortable: true, visible: true },
   { id: 'contact', field: 'contact', label: 'Contact', sortable: false, visible: true },
   { id: 'updatedAt', field: 'updatedAt', label: 'Last Updated', sortable: true, visible: true },
   { id: 'actions', field: 'actions', label: 'Actions', sortable: false, visible: true },
-
-  // Hidden columns (available but not shown by default)
-  { id: 'settings', field: 'settings', label: 'Settings', sortable: false, visible: false },
 ]
 
 const DEFAULT_SORT: WarehouseSortState = {

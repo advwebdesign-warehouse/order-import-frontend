@@ -3,7 +3,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { Warehouse, DEFAULT_ORDER_STATUS_SETTINGS } from '../utils/warehouseTypes'
+import { Warehouse, LinkedIntegration, DEFAULT_ORDER_STATUS_SETTINGS } from '../utils/warehouseTypes'
 import { WarehouseAPI } from '@/lib/api/warehouseApi'
 
 interface WarehouseContextType {
@@ -25,6 +25,107 @@ interface WarehouseProviderProps {
   children: ReactNode
 }
 
+// ✅ NEW: Helper to compute linked integrations for warehouses
+async function computeLinkedIntegrations(warehouses: Warehouse[]): Promise<Warehouse[]> {
+  try {
+    // Fetch all integrations
+    const response = await fetch('/api/integrations', {
+      method: 'GET',
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      console.warn('[WarehouseContext] Failed to fetch integrations, skipping linking')
+      return warehouses
+    }
+
+    const data = await response.json()
+    const integrations = data.integrations || []
+
+    console.log('[WarehouseContext] Computing linked integrations for', warehouses.length, 'warehouses from', integrations.length, 'integrations')
+
+    // Map each warehouse to include linked integrations
+    return warehouses.map(warehouse => {
+      const linkedIntegrations: LinkedIntegration[] = []
+
+      for (const integration of integrations) {
+        // Check shipping integrations (single warehouse)
+        if (integration.type === 'shipping' && integration.warehouseId === warehouse.id) {
+          linkedIntegrations.push({
+            id: integration.id,
+            name: integration.name,
+            type: integration.type,
+            status: integration.status || 'active',
+            logo: integration.logo,
+            linkType: 'single',
+          })
+        }
+
+        // Check e-commerce integrations (routing config)
+        if (integration.type === 'ecommerce' && integration.routingConfig) {
+          const config = integration.routingConfig
+
+          // Simple mode: primary warehouse
+          if (config.mode === 'simple' && config.primaryWarehouseId === warehouse.id) {
+            linkedIntegrations.push({
+              id: integration.id,
+              name: integration.name,
+              type: integration.type,
+              status: integration.status || 'active',
+              logo: integration.logo,
+              linkType: 'primary',
+              storeId: integration.storeId,
+              storeName: integration.storeName,
+            })
+          }
+
+          // Simple mode: fallback warehouse
+          if (config.mode === 'simple' && config.fallbackWarehouseId === warehouse.id) {
+            linkedIntegrations.push({
+              id: integration.id,
+              name: integration.name,
+              type: integration.type,
+              status: integration.status || 'active',
+              logo: integration.logo,
+              linkType: 'fallback',
+              storeId: integration.storeId,
+              storeName: integration.storeName,
+            })
+          }
+
+          // Advanced mode: check assignments
+          if (config.mode === 'advanced' && config.assignments) {
+            const hasAssignment = config.assignments.some(
+              (assignment: any) => assignment.warehouseId === warehouse.id && assignment.isActive
+            )
+
+            if (hasAssignment) {
+              linkedIntegrations.push({
+                id: integration.id,
+                name: integration.name,
+                type: integration.type,
+                status: integration.status || 'active',
+                logo: integration.logo,
+                linkType: 'assigned',
+                storeId: integration.storeId,
+                storeName: integration.storeName,
+              })
+            }
+          }
+        }
+      }
+
+      return {
+        ...warehouse,
+        linkedIntegrations,
+      }
+    })
+  } catch (error) {
+    console.error('[WarehouseContext] Error computing linked integrations:', error)
+    return warehouses
+  }
+}
+
 export function WarehouseProvider({ children }: WarehouseProviderProps) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,10 +144,15 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
 
       console.log('[WarehouseContext] Loading warehouses from API...')
 
-      // ✅ lastSyncAtFetch from API instead of localStorage
-      const warehousesData = await WarehouseAPI.getAllWarehouses()
+      // ✅ FIXED: Changed const to let so we can reassign
+      let warehousesData = await WarehouseAPI.getAllWarehouses()
 
       console.log('[WarehouseContext] ✅ Loaded warehouses:', warehousesData.length)
+
+      // ✅ Compute linked integrations
+      warehousesData = await computeLinkedIntegrations(warehousesData)
+
+      console.log('[WarehouseContext] ✅ Computed linked integrations')
 
       setWarehouses(warehousesData)
     } catch (err: any) {
@@ -76,8 +182,8 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
 
       console.log('[WarehouseContext] ✅ Created warehouse:', newWarehouse.id)
 
-      // Update local state
-      setWarehouses(prev => [...prev, newWarehouse])
+      // Update local state (recompute integrations)
+      await loadWarehouses()
 
       return newWarehouse
     } catch (err: any) {
@@ -96,12 +202,8 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
 
       console.log('[WarehouseContext] ✅ Updated warehouse:', id)
 
-      // Update local state
-      setWarehouses(prev =>
-        prev.map(warehouse =>
-          warehouse.id === id ? updatedWarehouse : warehouse
-        )
-      )
+      // Update local state (recompute integrations)
+      await loadWarehouses()
     } catch (err: any) {
       console.error('[WarehouseContext] Error updating warehouse:', err)
       throw new Error(err.message || 'Failed to update warehouse')
@@ -136,18 +238,8 @@ export function WarehouseProvider({ children }: WarehouseProviderProps) {
 
       console.log('[WarehouseContext] ✅ Updated order settings for warehouse:', id)
 
-      // Update local state
-      setWarehouses(prev =>
-        prev.map(warehouse =>
-          warehouse.id === id
-            ? {
-                ...warehouse,
-                settings: updatedSettings,
-                updatedAt: new Date().toISOString()
-              }
-            : warehouse
-        )
-      )
+      // Update local state (recompute integrations)
+      await loadWarehouses()
     } catch (err: any) {
       console.error('[WarehouseContext] Error updating warehouse order settings:', err)
       throw new Error(err.message || 'Failed to update warehouse order settings')

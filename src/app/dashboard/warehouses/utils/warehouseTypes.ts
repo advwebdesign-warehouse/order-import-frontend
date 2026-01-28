@@ -18,6 +18,21 @@ export interface Warehouse {
   // Return address fields
   useDifferentReturnAddress?: boolean
   returnAddress?: WarehouseAddress
+
+  // ✅ NEW: Linked integrations (computed field)
+  linkedIntegrations?: LinkedIntegration[]
+}
+
+// ✅ NEW: Integration linked to a warehouse
+export interface LinkedIntegration {
+  id: string
+  name: string
+  type: 'shipping' | 'ecommerce' | 'warehouse' | 'accounting' | 'other'
+  status: 'active' | 'inactive' | 'error'
+  logo?: string
+  linkType: 'primary' | 'fallback' | 'assigned' | 'single' // How it's linked
+  storeId?: string // For e-commerce integrations
+  storeName?: string // For display
 }
 
 export interface WarehouseAddress {

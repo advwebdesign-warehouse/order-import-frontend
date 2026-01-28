@@ -15,10 +15,10 @@ export interface Address {
 export interface Store {
   id: string
   storeName: string
-  logo?: string
-  website?: string
-  email?: string
-  phone?: string
+  logo?: string | null  // ✅ Can be NULL in database
+  website?: string | null  // ✅ Can be NULL in database
+  email?: string | null  // ✅ Can be NULL in database
+  phone?: string | null  // ✅ Can be NULL in database
   address: Address
 
   // Timestamps
@@ -27,14 +27,28 @@ export interface Store {
 
   // Multi-tenant support
   accountId: string
+
+  // Linked integrations (computed field)
+  linkedIntegrations?: LinkedIntegration[]
+}
+
+// Integration linked to a store
+export interface LinkedIntegration {
+  id: string
+  name: string
+  type: 'shipping' | 'ecommerce' | 'warehouse' | 'accounting' | 'other'
+  status: 'active' | 'inactive' | 'error'
+  logo?: string | null
+  provider?: string // e.g., 'Shopify', 'WooCommerce', 'USPS'
 }
 
 export interface StoreFormData {
+  id?: string  // ✅ ADDED: Stable identifier - undefined for create, required for edit (validated at runtime)
   storeName?: string
-  logo?: string
-  website?: string
-  email?: string
-  phone?: string
+  logo?: string | null  // ✅ Can be NULL when cleared
+  website?: string | null
+  email?: string | null
+  phone?: string | null
   address1: string
   address2?: string
   city: string

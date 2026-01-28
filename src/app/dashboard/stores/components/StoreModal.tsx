@@ -19,10 +19,10 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [apiError, setApiError] = useState<string | null>(null)
-  const [oldLogoUrl, setOldLogoUrl] = useState<string | null>(null)
 
-  // Store Information Form State - All fields explicitly set to ensure controlled inputs
+  // Store Information Form State - Now includes id for reliable identification
   const [formData, setFormData] = useState<StoreFormData>({
+    id: store?.id,  // Stable identifier - undefined for create, present for edit
     storeName: store?.storeName ?? '',
     logo: store?.logo ?? '',
     website: store?.website ?? '',
@@ -38,6 +38,15 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
   })
 
   const [logoUploadMethod, setLogoUploadMethod] = useState<'upload' | 'url'>('upload')
+
+  // Runtime validation to ensure stores being edited have an ID
+  useEffect(() => {
+    if (store && !store.id) {
+      console.error('❌ CRITICAL: Store passed to modal without ID!', store)
+      setApiError('Cannot edit store without valid ID. Please refresh and try again.')
+      throw new Error('Store validation failed: Missing ID for edit operation')
+    }
+  }, [store])
 
   const handleChange = (field: keyof StoreFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -57,7 +66,7 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
     }
   }
 
-  // ✅ UPDATED: Extract filename from new URL structure
+  // Extract filename from new URL structure
   const extractFilename = (url: string): string | null => {
     if (!url) return null
 
@@ -99,10 +108,15 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
       // ✅ Use UploadAPI instead of inline fetch
       const data = await UploadAPI.uploadLogo(file)
 
-      // ✅ FIXED: Use component state, not FormData object
-      // Save old logo for deletion (if it's a server-uploaded file)
+      // ✅ UPDATED: Delete old logo immediately when new one is uploaded
       if (formData.logo && formData.logo.startsWith('/uploads/')) {
-        setOldLogoUrl(formData.logo)
+        try {
+          await deleteOldLogo(formData.logo)
+          console.log('✅ Old logo deleted after new upload')
+        } catch (error) {
+          console.error('Failed to delete old logo:', error)
+          // Continue anyway - new logo is already uploaded
+        }
       }
 
       handleChange('logo', data.url)
@@ -160,6 +174,7 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
     return Object.keys(newErrors).length === 0
   }
 
+  // ✅ UPDATED: Now uses formData.id instead of store prop for reliable identification
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -173,7 +188,7 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
     try {
       const storeData: Partial<Store> = {
               storeName: formData.storeName!,
-        ...(formData.logo && { logo: formData.logo }),
+        logo: formData.logo || null,  // ✅ UPDATED: Explicitly send logo value (including null) to update database
         ...(formData.website && { website: formData.website }),
         ...(formData.email && { email: formData.email }),
         ...(formData.phone && { phone: formData.phone }),
@@ -188,17 +203,20 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
         }
       }
 
-      if (store) {
-        // Update existing store via API
-        await storeApi.updateStore(store.id, storeData)
+      // ✅ UPDATED: Use formData.id for more reliable create vs update detection
+      if (formData.id) {
+        // UPDATE existing store via API using the stable id
+        await storeApi.updateStore(formData.id, storeData)
+        console.log('✅ Store updated successfully with ID:', formData.id)
       } else {
-        // Create new store via API
-        await storeApi.createStore(storeData)
+        // CREATE new store via API (backend will generate ID)
+        const newStore = await storeApi.createStore(storeData as Omit<Store, 'id' | 'createdAt' | 'updatedAt' | 'accountId'>)
+        console.log('✅ Store created successfully with ID:', newStore.id)
       }
 
       onClose(true)
     } catch (error: any) {
-      console.error('Error saving store:', error)
+      console.error('❌ Failed to save store:', error)
       setApiError(error.message || 'Failed to save store. Please try again.')
     } finally {
       setIsSaving(false)
@@ -236,7 +254,8 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                 <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                   <div className="flex items-start justify-between">
                     <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
-                      {store ? 'Edit Store' : 'Add Store'}
+                      {/* ✅ UPDATED: Display logic now based on formData.id */}
+                      {formData.id ? 'Edit Store' : 'Add New Store'}
                     </Dialog.Title>
                     <button
                       type="button"
@@ -373,6 +392,32 @@ export default function StoreModal({ store, onClose }: StoreModalProps) {
                                     e.currentTarget.style.display = 'none'
                                   }}
                                 />
+                                {/* ✅ DELETE BUTTON */}
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    // ✅ UPDATED: Immediately delete file from server
+                                    if (formData.logo && formData.logo.startsWith('/uploads/')) {
+                                      try {
+                                        await deleteOldLogo(formData.logo)
+                                        console.log('✅ Logo deleted from server')
+                                      } catch (error) {
+                                        console.error('Failed to delete logo:', error)
+                                        setErrors(prev => ({
+                                          ...prev,
+                                          logo: 'Failed to delete logo. Please try again.'
+                                        }))
+                                        return // Don't clear the UI if deletion failed
+                                      }
+                                    }
+                                    // Clear the logo from form data
+                                    handleChange('logo', '')
+                                  }}
+                                  className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-lg transition-colors"
+                                  title="Remove logo"
+                                >
+                                  <XMarkIcon className="h-4 w-4" />
+                                </button>
                               </div>
                             )}
                           </div>

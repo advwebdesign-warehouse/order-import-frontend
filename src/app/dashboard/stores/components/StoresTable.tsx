@@ -3,14 +3,17 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import {
   PencilIcon,
   TrashIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  BuildingStorefrontIcon
+  BuildingStorefrontIcon,
+  BuildingOffice2Icon,
+  LinkIcon
 } from '@heroicons/react/24/outline'
-import { Store, StoreColumnConfig, StoreSortState } from '../utils/storeTypes'
+import { Store, StoreColumnConfig, StoreSortState, LinkedIntegration } from '../utils/storeTypes'
 import { storeApi } from '@/app/services/storeApi'
 
 interface StoresTableProps {
@@ -57,6 +60,28 @@ export default function StoresTable({
       setDeleteConfirm(id)
       setTimeout(() => setDeleteConfirm(null), 3000)
     }
+  }
+
+  // ✅ NEW: Render integration badges with links
+  const IntegrationBadge = ({ integration }: { integration: LinkedIntegration }) => {
+    const typeColors = {
+      ecommerce: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      shipping: 'bg-blue-100 text-blue-800 border-blue-200',
+      warehouse: 'bg-green-100 text-green-800 border-green-200',
+      accounting: 'bg-purple-100 text-purple-800 border-purple-200',
+      other: 'bg-gray-100 text-gray-800 border-gray-200',
+    }
+
+    return (
+      <Link
+        href={`/dashboard/integrations?id=${integration.id}`}
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors hover:shadow-sm ${typeColors[integration.type]}`}
+        title={`${integration.name} (${integration.provider || integration.type})`}
+      >
+        <LinkIcon className="h-3 w-3" />
+        <span>{integration.name}</span>
+      </Link>
+    )
   }
 
   const renderSortIcon = (field: string) => {
@@ -122,18 +147,49 @@ export default function StoresTable({
           </div>
         )
 
-        case 'address':
-          return (
-            <div className="text-sm text-gray-900">
-              <div>{store.address.address1}</div>
-              {store.address.address2 && (
-                <div className="text-gray-500">{store.address.address2}</div>
-              )}
-              <div className="text-gray-500">
-                {store.address.city}, {store.address.state} {store.address.zip}
-              </div>
+      case 'address':
+        return (
+          <div className="text-sm text-gray-900">
+            <div>{store.address.address1}</div>
+            {store.address.address2 && (
+              <div className="text-gray-500">{store.address.address2}</div>
+            )}
+            <div className="text-gray-500">
+              {store.address.city}, {store.address.state} {store.address.zip}
             </div>
+          </div>
+        )
+
+      // ✅ NEW: Render integrations column
+      case 'integrations':
+        const linkedIntegrations = store.linkedIntegrations || []
+
+        if (linkedIntegrations.length === 0) {
+          return (
+            <span className="text-sm text-gray-400 italic">No integrations</span>
           )
+        }
+
+        return (
+          <div className="flex flex-wrap gap-1">
+            {linkedIntegrations.slice(0, 3).map(integration => (
+              <IntegrationBadge key={integration.id} integration={integration} />
+            ))}
+            {linkedIntegrations.length > 3 && (
+              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600">
+                +{linkedIntegrations.length - 3} more
+              </span>
+            )}
+          </div>
+        )
+
+      // ✅ NEW: Render warehouses column (if you have warehouse assignments for stores)
+      case 'warehouses':
+        // If your stores have warehouse assignments, render them here
+        // For now, showing placeholder - update this based on your data structure
+        return (
+          <span className="text-sm text-gray-400 italic">—</span>
+        )
 
       case 'actions':
         return (
@@ -202,10 +258,7 @@ export default function StoresTable({
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {stores.map((store) => (
-                  <tr
-                    key={store.id}
-                    className="hover:bg-gray-50"
-                  >
+                  <tr key={store.id} className="hover:bg-gray-50">
                     {columns.filter(col => col.visible).map((column) => (
                       <td key={`${store.id}-${column.id}`} className="px-6 py-4 whitespace-nowrap">
                         {renderCellContent(column, store)}

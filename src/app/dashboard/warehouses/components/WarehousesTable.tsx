@@ -1,7 +1,9 @@
-// app/dashboard/warehouses/components/WarehousesTable.tsx
+//file path: app/dashboard/warehouses/components/WarehousesTable.tsx
+
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import {
   EyeIcon,
   PencilIcon,
@@ -9,12 +11,13 @@ import {
   StarIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  BuildingOffice2Icon
+  BuildingOffice2Icon,
+  LinkIcon
 } from '@heroicons/react/24/outline'
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid'
 import ReactCountryFlag from "react-country-flag"
 
-import { Warehouse, WarehouseColumnConfig, WarehouseSortState } from '../utils/warehouseTypes'
+import { Warehouse, WarehouseColumnConfig, WarehouseSortState, LinkedIntegration } from '../utils/warehouseTypes'
 
 interface WarehousesTableProps {
   warehouses: Warehouse[]
@@ -66,6 +69,37 @@ export default function WarehousesTable({
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[status as keyof typeof statusColors]}`}>
         {status}
       </span>
+    )
+  }
+
+  // ✅ NEW: Render integration badges with links
+  const IntegrationBadge = ({ integration }: { integration: LinkedIntegration }) => {
+    const linkTypeColors = {
+      primary: 'bg-blue-100 text-blue-800 border-blue-200',
+      fallback: 'bg-orange-100 text-orange-800 border-orange-200',
+      assigned: 'bg-purple-100 text-purple-800 border-purple-200',
+      single: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    }
+
+    const linkTypeLabels = {
+      primary: 'Primary',
+      fallback: 'Fallback',
+      assigned: 'Assigned',
+      single: 'Active',
+    }
+
+    return (
+      <Link
+        href={`/dashboard/integrations?id=${integration.id}`}
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-colors hover:shadow-sm ${linkTypeColors[integration.linkType]}`}
+        title={`${integration.name} - ${linkTypeLabels[integration.linkType]}`}
+      >
+        <LinkIcon className="h-3 w-3" />
+        <span>{integration.name}</span>
+        {integration.linkType !== 'single' && (
+          <span className="text-[10px] opacity-75">({linkTypeLabels[integration.linkType]})</span>
+        )}
+      </Link>
     )
   }
 
@@ -157,6 +191,29 @@ export default function WarehousesTable({
       case 'status':
         return <StatusBadge status={warehouse.status} />
 
+        // ✅ NEW: Render integrations column
+        case 'integrations':
+          const linkedIntegrations = warehouse.linkedIntegrations || []
+
+          if (linkedIntegrations.length === 0) {
+            return (
+              <span className="text-sm text-gray-400 italic">No integrations</span>
+            )
+          }
+
+          return (
+            <div className="flex flex-wrap gap-1">
+              {linkedIntegrations.slice(0, 3).map(integration => (
+                <IntegrationBadge key={integration.id} integration={integration} />
+              ))}
+              {linkedIntegrations.length > 3 && (
+                <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600">
+                  +{linkedIntegrations.length - 3} more
+                </span>
+              )}
+            </div>
+          )
+
       case 'productCount':
         return (
           <div className="text-sm text-gray-900">
@@ -180,29 +237,6 @@ export default function WarehousesTable({
             {!warehouse.contactInfo.managerName && !warehouse.contactInfo.phone && !warehouse.contactInfo.email && (
               <span className="text-gray-400">-</span>
             )}
-          </div>
-        )
-
-      case 'settings':
-        return (
-          <div className="text-sm text-gray-600">
-            <div className="flex flex-wrap gap-1">
-              {warehouse.settings.trackInventory && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                  Inventory
-                </span>
-              )}
-              {warehouse.settings.allowBackorders && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                  Backorders
-                </span>
-              )}
-              {warehouse.settings.autoFulfill && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                  Auto-fulfill
-                </span>
-              )}
-            </div>
           </div>
         )
 
