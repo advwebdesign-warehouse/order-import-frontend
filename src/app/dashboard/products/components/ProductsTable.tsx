@@ -104,6 +104,9 @@ export default function ProductsTable({
   // State to track which SKU was just copied
   const [copiedSku, setCopiedSku] = useState<string | null>(null)
 
+  // State to track which product name was just copied
+  const [copiedProductName, setCopiedProductName] = useState<string | null>(null)
+
   // State for inline quantity editing
   const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null)
   const [editingQuantityValue, setEditingQuantityValue] = useState<string>('')
@@ -113,6 +116,11 @@ export default function ProductsTable({
   const [editingSkuId, setEditingSkuId] = useState<string | null>(null)
   const [editingSkuValue, setEditingSkuValue] = useState<string>('')
   const [isUpdatingSku, setIsUpdatingSku] = useState(false)
+
+  // State for inline product name editing
+  const [editingNameId, setEditingNameId] = useState<string | null>(null)
+  const [editingNameValue, setEditingNameValue] = useState<string>('')
+  const [isUpdatingName, setIsUpdatingName] = useState(false)
 
   // Copy SKU to clipboard
   const handleCopySku = async (sku: string) => {
@@ -126,6 +134,21 @@ export default function ProductsTable({
       }, 2000)
     } catch (error) {
       console.error('Failed to copy SKU:', error)
+    }
+  }
+
+  // Copy product name to clipboard
+  const handleCopyProductName = async (name: string, productId: string) => {
+    try {
+      await navigator.clipboard.writeText(name)
+      setCopiedProductName(productId)
+
+      // Clear the "copied" indicator after 2 seconds
+      setTimeout(() => {
+        setCopiedProductName(null)
+      }, 2000)
+    } catch (error) {
+      console.error('Failed to copy product name:', error)
     }
   }
 
@@ -239,6 +262,53 @@ export default function ProductsTable({
       console.error('Failed to update SKU:', error)
       alert('Failed to update SKU. Please try again.')
       setIsUpdatingSku(false)
+    }
+  }
+
+  // Start editing product name
+  const handleStartEditName = (product: Product) => {
+    setEditingNameId(product.id)
+    setEditingNameValue(product.name)
+  }
+
+  // Cancel editing product name
+  const handleCancelEditName = () => {
+    setEditingNameId(null)
+    setEditingNameValue('')
+    setIsUpdatingName(false)
+  }
+
+  // Save edited product name
+  const handleSaveName = async (productId: string) => {
+    const newName = editingNameValue.trim()
+
+    // Validate
+    if (!newName) {
+      alert('Product name cannot be empty')
+      return
+    }
+
+    // Import ProductAPI dynamically to avoid circular dependencies
+    try {
+      setIsUpdatingName(true)
+
+      const { ProductAPI } = await import('@/lib/api/productApi')
+      await ProductAPI.updateProductName(productId, newName)
+
+      console.log('[ProductsTable] ✅ Product name updated successfully')
+      handleCancelEditName()
+
+      // Notify parent to refresh products
+      if (onUpdateSku) {
+        // Reuse the refetch mechanism from SKU updates
+        setTimeout(() => {
+          window.location.reload() // Simple refresh for now
+        }, 500)
+      }
+    } catch (error: any) {
+      console.error('[ProductsTable] ❌ Failed to update product name:', error)
+      alert(`Failed to update product name: ${error.message || 'Unknown error'}`)
+      setIsUpdatingName(false)
     }
   }
 
@@ -450,7 +520,7 @@ export default function ProductsTable({
           const isSkuCopied = copiedSku === product.sku
           const needsSkuWarning = isSkuMissing(product)
 
-          // UPDATED: SKU rendering with warning and inline editing
+          // SKU rendering with warning and inline editing
           return (
             <div>
               {isSkuEditing ? (
@@ -489,7 +559,7 @@ export default function ProductsTable({
                   </button>
                 </div>
               ) : (
-                // UPDATED: Display mode with warning
+                // Display mode with warning
                 <>
                   <div className="flex items-center gap-2">
                     <div
@@ -548,24 +618,87 @@ export default function ProductsTable({
           )
 
       case 'name':
+        const isNameBeingEdited = editingNameId === product.id
+        const isNameCopied = copiedProductName === product.id
+
         return (
           <div className="min-w-[200px] max-w-[300px]">
-            <button
-              onClick={() => onViewProduct(product)}
-              className="text-sm font-medium text-gray-900 hover:text-gray-700 cursor-pointer text-left"
-              title={product.name}
-            >
-              {product.name}
-            </button>
-            {product.shortDescription && (
-              <div className="text-sm text-gray-500 truncate">
-                {product.shortDescription}
+            {isNameBeingEdited ? (
+              // Editing mode - inline input
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editingNameValue}
+                  onChange={(e) => setEditingNameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveName(product.id)
+                    } else if (e.key === 'Escape') {
+                      handleCancelEditName()
+                    }
+                  }}
+                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isUpdatingName}
+                  autoFocus
+                />
+                <button
+                  onClick={() => handleSaveName(product.id)}
+                  disabled={isUpdatingName}
+                  className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                  title="Save"
+                >
+                  <CheckIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleCancelEditName}
+                  disabled={isUpdatingName}
+                  className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                  title="Cancel"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
               </div>
-            )}
-            {product.parentName && (
-              <div className="text-xs text-gray-500 mt-1">
-                Variant of: {product.parentName}
-              </div>
+            ) : (
+              // Display mode - with copy and edit buttons
+              <>
+                <div className="flex items-center gap-2 group">
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCopyProductName(product.name, product.id)
+                      }}
+                      className="group/name inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 hover:text-indigo-600 cursor-pointer transition-colors"
+                      title="Click to copy product name"
+                    >
+                      <span>{product.name}</span>
+                      {isNameCopied ? (
+                        <CheckIcon className="h-3.5 w-3.5 text-green-600 animate-in fade-in zoom-in duration-200" />
+                      ) : (
+                        <DocumentDuplicateIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                      )}
+                    </div>
+
+                  {/* Edit button */}
+                  <button
+                    onClick={() => handleStartEditName(product)}
+                    className="text-blue-600 hover:text-blue-900 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit product name"
+                  >
+                    <PencilIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {product.shortDescription && (
+                  <div className="text-sm text-gray-500 truncate">
+                    {product.shortDescription}
+                  </div>
+                )}
+                {product.parentName && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Variant of: {product.parentName}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )

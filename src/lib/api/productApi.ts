@@ -57,7 +57,7 @@ export class ProductAPI {
   }
 
   /**
-   * ✅ NEW: Update warehouse-specific inventory
+   * Update warehouse-specific inventory
    * @param productId - Product ID
    * @param warehouseId - Warehouse ID
    * @param quantity - New quantity for this warehouse
@@ -71,7 +71,7 @@ export class ProductAPI {
   }
 
   /**
-   * ✅ NEW: Update product SKU
+   * Update product SKU
    * Convenience method for updating just the SKU field
    * @param productId - Product ID
    * @param newSku - New SKU value
@@ -83,7 +83,19 @@ export class ProductAPI {
   }
 
   /**
-   * ✅ NEW: Update product quantity
+   * ✅ NEW: Update product name
+   * Convenience method for updating just the product name
+   * @param productId - Product ID
+   * @param newName - New product name
+   * @returns Updated product
+   */
+  static async updateProductName(productId: string, newName: string) {
+    console.log(`[ProductAPI] Updating name for product ${productId} to: ${newName}`)
+    return this.updateProduct(productId, { name: newName })
+  }
+
+  /**
+   * Update product quantity
    * Convenience method for updating just the stock quantity
    * @param productId - Product ID
    * @param newQuantity - New stock quantity

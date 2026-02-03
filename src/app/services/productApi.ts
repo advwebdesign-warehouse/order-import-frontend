@@ -62,7 +62,7 @@ class ProductApiService {
   }
 
 /**
- * ✅ NEW: Update product SKU
+ * Update product SKU
  * Convenience method for updating just the SKU field
  * @param productId - Product ID
  * @param newSku - New SKU value
@@ -74,7 +74,19 @@ class ProductApiService {
   }
 
 /**
- * ✅ NEW: Update product quantity
+  * ✅ NEW: Update product name
+  * Convenience method for updating just the product name
+  * @param productId - Product ID
+  * @param newName - New product name
+  * @returns Updated product
+  */
+  async updateProductName(productId: string, newName: string): Promise<Product> {
+    console.log(`[ProductApiService] Updating name for product ${productId} to: ${newName}`)
+    return this.updateProduct(productId, { name: newName })
+  }
+
+/**
+ * Update product quantity
  * Convenience method for updating just the stock quantity
  * @param productId - Product ID
  * @param newQuantity - New stock quantity
