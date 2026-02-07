@@ -135,4 +135,40 @@ export class UploadAPI {
 
     return response.json()
   }
+
+  /**
+    * List all files for current account
+    */
+  static async listFiles(): Promise<{
+    success: boolean
+    files: Array<{
+      filename: string
+      uploadType: string
+      size: number
+      sizeFormatted: string
+      createdAt: string
+      modifiedAt: string
+      url: string
+    }>
+    stats: {
+      totalFiles: number
+      totalSize: number
+      totalSizeFormatted: string
+    }
+  }> {
+    const response = await fetch(`${API_BASE}/upload/list`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to list files')
+    }
+
+    return response.json()
+  }
 }
