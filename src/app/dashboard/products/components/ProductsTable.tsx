@@ -567,13 +567,13 @@ export default function ProductsTable({
                       className={`group/sku inline-flex items-center gap-1.5 text-sm font-mono font-medium text-gray-900 transition-colors ${
                         needsSkuWarning ? '' : 'hover:text-indigo-600 cursor-pointer'
                       }`}
-                      title={needsSkuWarning ? "SKU appears to be a fallback ID. Click edit to set a proper SKU." : "Click to copy SKU"}
+                      title={needsSkuWarning ? "No SKU — please add a SKU to this product" : "Click to copy SKU"}
                     >
                       {/* ✅ Show warning icon if SKU is missing, otherwise show the SKU */}
                       {needsSkuWarning ? (
                         <ExclamationTriangleIcon
                           className="h-4 w-4 text-amber-500"
-                          title="SKU appears to be a fallback ID. Click edit to set a proper SKU."
+                          title="No SKU — please add a SKU to this product"
                         />
                       ) : (
                         <span>{product.sku}</span>

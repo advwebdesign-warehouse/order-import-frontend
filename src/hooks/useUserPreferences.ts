@@ -1,4 +1,4 @@
-//file path: app/hooks/useUserPreferences.ts
+//file path: hooks/useUserPreferences.ts
 
 import { useState, useEffect, useCallback } from 'react'
 import { UserAPI, UserPreferences } from '@/lib/api/userApi'
