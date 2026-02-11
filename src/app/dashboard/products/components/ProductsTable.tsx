@@ -79,6 +79,7 @@ interface ProductsTableProps {
   onColumnReorder: (columns: ProductColumnConfig[]) => void
   onUpdateQuantity?: (productId: string, newQuantity: number) => Promise<void> // Inline quantity update
   onUpdateSku?: (productId: string, newSku: string) => Promise<void> // Inline SKU update
+  onUpdatePrice?: (productId: string, newPrice: number, newComparePrice?: number | null) => Promise<void> // Inline price update
   selectedWarehouseId?: string // To display warehouse-specific quantity
   stores?: Store[] // lastSyncAtAdded stores for rendering store names
 }
@@ -97,6 +98,7 @@ export default function ProductsTable({
   onColumnReorder,
   onUpdateQuantity,
   onUpdateSku, // SKU update handler
+  onUpdatePrice, // Price update handler
   selectedWarehouseId, // To display warehouse-specific quantity
   stores = [] // lastSyncAtDefault empty array
 }: ProductsTableProps) {
@@ -121,6 +123,11 @@ export default function ProductsTable({
   const [editingNameId, setEditingNameId] = useState<string | null>(null)
   const [editingNameValue, setEditingNameValue] = useState<string>('')
   const [isUpdatingName, setIsUpdatingName] = useState(false)
+
+  // State for inline price editing
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
+  const [editingPriceValue, setEditingPriceValue] = useState<string>('')
+  const [isUpdatingPrice, setIsUpdatingPrice] = useState(false)
 
   // Copy SKU to clipboard
   const handleCopySku = async (sku: string) => {
@@ -309,6 +316,47 @@ export default function ProductsTable({
       console.error('[ProductsTable] ❌ Failed to update product name:', error)
       alert(`Failed to update product name: ${error.message || 'Unknown error'}`)
       setIsUpdatingName(false)
+    }
+  }
+
+  // Start editing price
+  const handleStartEditPrice = (product: Product) => {
+    setEditingPriceId(product.id)
+    setEditingPriceValue(product.price?.toString() || '0')
+  }
+
+  // Cancel editing price
+  const handleCancelEditPrice = () => {
+    setEditingPriceId(null)
+    setEditingPriceValue('')
+    setIsUpdatingPrice(false)
+  }
+
+  // Save edited price
+  const handleSavePrice = async (productId: string) => {
+    const newPrice = parseFloat(editingPriceValue)
+
+    // Validate
+    if (isNaN(newPrice) || newPrice < 0) {
+      alert('Please enter a valid price (0 or greater)')
+      return
+    }
+
+    // If no handler provided, warn user
+    if (!onUpdatePrice) {
+      console.warn('onUpdatePrice handler not provided - price update not saved')
+      handleCancelEditPrice()
+      return
+    }
+
+    try {
+      setIsUpdatingPrice(true)
+      await onUpdatePrice(productId, newPrice)
+      handleCancelEditPrice()
+    } catch (error: any) {
+      console.error('[ProductsTable] Failed to update price:', error)
+      alert(`Failed to update price: ${error.message || 'Unknown error'}`)
+      setIsUpdatingPrice(false)
     }
   }
 
@@ -833,14 +881,74 @@ export default function ProductsTable({
         )
 
       case 'price':
+        const isEditingThisPrice = editingPriceId === product.id
+
         return (
           <div className="text-sm">
-            <div className="font-medium text-gray-900">
-              {formatCurrency(product.price, product.currency)}
-            </div>
-            {product.comparePrice && product.comparePrice > product.price && (
-              <div className="text-xs text-gray-500 line-through">
-                {formatCurrency(product.comparePrice, product.currency)}
+            {isEditingThisPrice ? (
+              // Edit mode: Show input field
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingPriceValue}
+                    onChange={(e) => setEditingPriceValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleSavePrice(product.id)
+                      } else if (e.key === 'Escape') {
+                        handleCancelEditPrice()
+                      }
+                    }}
+                    autoFocus
+                    disabled={isUpdatingPrice}
+                    className="w-24 pl-5 pr-2 py-1 text-sm font-medium text-gray-900 border border-indigo-500 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <button
+                  onClick={() => handleSavePrice(product.id)}
+                  disabled={isUpdatingPrice}
+                  className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                  title="Save price"
+                >
+                  <CheckIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleCancelEditPrice}
+                  disabled={isUpdatingPrice}
+                  className="text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                  title="Cancel"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+                {isUpdatingPrice && (
+                  <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                )}
+              </div>
+            ) : (
+              // View mode: Click to edit
+              <div>
+                <div
+                  onClick={onUpdatePrice ? () => handleStartEditPrice(product) : undefined}
+                  className={`inline-flex items-center gap-1.5 font-medium text-gray-900 transition-colors group/price ${
+                    onUpdatePrice ? 'hover:text-indigo-600 cursor-pointer' : ''
+                  }`}
+                  title={onUpdatePrice ? 'Click to edit price' : undefined}
+                >
+                  <span>{formatCurrency(product.price, product.currency)}</span>
+                  {onUpdatePrice && (
+                    <PencilIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover/price:opacity-100 transition-opacity" />
+                  )}
+                </div>
+                {product.comparePrice && product.comparePrice > product.price && (
+                  <div className="text-xs text-gray-500 line-through">
+                    {formatCurrency(product.comparePrice, product.currency)}
+                  </div>
+                )}
               </div>
             )}
           </div>

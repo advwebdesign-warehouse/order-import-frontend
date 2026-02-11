@@ -96,6 +96,23 @@ class ProductApiService {
     console.log(`[ProductApiService] Updating quantity for product ${productId} to: ${newQuantity}`)
     return this.updateProduct(productId, { stockQuantity: newQuantity })
   }
+
+/**
+ * Update product price (and optionally compare-at price)
+ * Backend handles Shopify sync automatically on price change detection
+ * @param productId - Product ID
+ * @param newPrice - New price value
+ * @param newComparePrice - Optional new compare-at price (pass null to clear)
+ * @returns Updated product
+ */
+  async updateProductPrice(productId: string, newPrice: number, newComparePrice?: number | null): Promise<Product> {
+    console.log(`[ProductApiService] Updating price for product ${productId} to: ${newPrice}`)
+    const updates: any = { price: newPrice }
+    if (newComparePrice !== undefined) {
+      updates.comparePrice = newComparePrice
+    }
+    return this.updateProduct(productId, updates)
+  }
 }
 
 export const productApi = new ProductApiService()

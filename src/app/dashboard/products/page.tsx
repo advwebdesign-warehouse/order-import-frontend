@@ -375,6 +375,24 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     }
   }
 
+  // ✅ Handle inline price update (syncs to Shopify)
+  const handleUpdatePrice = async (productId: string, newPrice: number, newComparePrice?: number | null) => {
+    try {
+      console.log(`[Products Page] Updating product ${productId} price to ${newPrice}`)
+
+      // Update product price using the API (backend handles Shopify sync)
+      await ProductAPI.updateProductPrice(productId, newPrice, newComparePrice)
+
+      // Refresh products list to show updated price
+      await refetchProducts()
+
+      console.log(`✅ Successfully updated price to ${newPrice}`)
+    } catch (error) {
+      console.error('[Products Page] Failed to update price:', error)
+      throw error // Re-throw to show error in table component
+    }
+  }
+
   // ✅ lastSyncAtImplement bulk delete
   const handleBulkAction = async (action: string) => {
     if (selectedProducts.size === 0) {
@@ -1101,6 +1119,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
                 onColumnReorder={handleColumnReorder}
                 onUpdateQuantity={handleUpdateQuantity}
                 onUpdateSku={handleUpdateSku}
+                onUpdatePrice={handleUpdatePrice}
                 selectedWarehouseId={selectedWarehouseId}
                 stores={stores}
               />
