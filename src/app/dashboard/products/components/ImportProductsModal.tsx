@@ -2,17 +2,19 @@
 
 'use client'
 
-import { Fragment, useState, useCallback } from 'react'
+import { Fragment, useState, useCallback, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import {
   XMarkIcon,
   ArrowDownTrayIcon,
   InformationCircleIcon,
   BuildingOffice2Icon,
-  CheckIcon
+  CheckIcon,
+  MapPinIcon
 } from '@heroicons/react/24/outline'
 import { type Integration, isEcommerceIntegration } from '@/app/dashboard/integrations/types/integrationTypes'
 import type { Warehouse } from '@/app/dashboard/warehouses/utils/warehouseTypes'
+import { IntegrationAPI, type ShopifyLocation } from '@/lib/api/integrationApi'
 
 interface ImportProductsModalProps {
   isOpen: boolean
@@ -28,6 +30,7 @@ export interface ImportOptions {
   selectedWarehouseIds?: string[]
   updateExisting: boolean
   createInventory: boolean
+  sourceLocationId?: string
 }
 
 // Helper function to get integration display name
@@ -55,6 +58,47 @@ export default function ImportProductsModal({
   const [updateExisting, setUpdateExisting] = useState(true)
   const [createInventory, setCreateInventory] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // ✅ Source location state
+  const [shopifyLocations, setShopifyLocations] = useState<ShopifyLocation[]>([])
+  const [sourceLocationId, setSourceLocationId] = useState<string>('')
+  const [loadingLocations, setLoadingLocations] = useState(false)
+
+  // ✅ Fetch Shopify locations when integration is selected
+  useEffect(() => {
+    if (!selectedIntegration) {
+      setShopifyLocations([])
+      setSourceLocationId('')
+      return
+    }
+
+    const integration = ecommerceIntegrations.find(i => i.id === selectedIntegration)
+    if (!integration || integration.name !== 'Shopify') {
+      setShopifyLocations([])
+      setSourceLocationId('')
+      return
+    }
+
+    const fetchLocations = async () => {
+      setLoadingLocations(true)
+      try {
+        const locations = await IntegrationAPI.getShopifyLocations(selectedIntegration)
+        setShopifyLocations(locations)
+        // Auto-select first non-app location (typically "Shop location")
+        if (locations.length > 0) {
+          const defaultLocation = locations.find(loc => !loc.fulfillsOnlineOrders) || locations[0]
+          setSourceLocationId(defaultLocation.id)
+        }
+      } catch (err) {
+        console.error('[ImportModal] Failed to fetch Shopify locations:', err)
+        setShopifyLocations([])
+      } finally {
+        setLoadingLocations(false)
+      }
+    }
+
+    fetchLocations()
+  }, [selectedIntegration, ecommerceIntegrations])
 
   // Get selected integration details
   const integration = ecommerceIntegrations.find(i => i.id === selectedIntegration)
@@ -137,13 +181,16 @@ export default function ImportProductsModal({
         warehouseDestination,
         selectedWarehouseIds: warehouseDestination === 'specific' ? selectedWarehouseIds : undefined,
         updateExisting,
-        createInventory
+        createInventory,
+        sourceLocationId: sourceLocationId || undefined
       })
 
       // Reset form
       setSelectedIntegration('')
       setWarehouseDestination('primary')
       setSelectedWarehouseIds([])
+      setSourceLocationId('')
+      setShopifyLocations([])
 
       onClose()
     } catch (error: any) {
@@ -223,6 +270,66 @@ export default function ImportProductsModal({
 
                   {selectedIntegration && (
                     <>
+                    {/* ✅ Source Location - Import From */}
+                    {shopifyLocations.length > 0 && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Import from
+                        </label>
+                        <div className="space-y-3">
+                          {shopifyLocations.map((location) => {
+                            const isAppLocation = location.fulfillsOnlineOrders
+                            return (
+                              <button
+                                key={location.id}
+                                type="button"
+                                onClick={() => setSourceLocationId(location.id)}
+                                className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
+                                  sourceLocationId === location.id
+                                    ? 'border-indigo-600 bg-indigo-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <div className="flex items-start">
+                                  <div className="flex-shrink-0">
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                                      sourceLocationId === location.id
+                                        ? 'border-indigo-600'
+                                        : 'border-gray-300'
+                                    }`}>
+                                      {sourceLocationId === location.id && (
+                                        <div className="w-3 h-3 rounded-full bg-indigo-600"></div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="ml-3 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <MapPinIcon className="h-4 w-4 text-gray-400" />
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {location.name}
+                                      </p>
+                                      {isAppLocation && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                          App
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {loadingLocations && (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+                        <span className="ml-2 text-sm text-gray-500">Loading locations...</span>
+                      </div>
+                    )}
+
                       {/* Warehouse Destination */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-3">

@@ -8,6 +8,16 @@ import type { Integration } from '@/app/dashboard/integrations/types/integration
 export type { Integration } from '@/app/dashboard/integrations/types/integrationTypes'
 
 /**
+ * ✅ Shopify Location type for source location selection
+ */
+export interface ShopifyLocation {
+  id: string
+  name: string
+  isActive: boolean
+  fulfillsOnlineOrders: boolean
+}
+
+/**
  * Warehouse type for integration-warehouse linking
  * Matches the warehouse schema from the backend
  */
@@ -90,6 +100,19 @@ export class IntegrationAPI {
   static async getIntegrationById(integrationId: string) {
     const response = await apiRequest(`/integrations/${integrationId}`)
     return response.integration
+  }
+
+  /**
+   * ✅ Get Shopify locations for an integration
+   * Used by Import Products modal to let user choose source location
+   * Backend route: GET /integrations/:id/shopify/locations
+   */
+  static async getShopifyLocations(integrationId: string): Promise<ShopifyLocation[]> {
+    const response = await apiRequestOptional<{ locations: ShopifyLocation[] }>(
+      `/integrations/${integrationId}/shopify/locations`,
+      { locations: [] }
+    )
+    return response.locations || []
   }
 
   // ============================================================================
@@ -485,7 +508,7 @@ export class IntegrationAPI {
    }
 
    /**
-    * ✅ NEW: Sync linked GravityHub warehouses TO Shopify as fulfillment locations
+    * Sync linked GravityHub warehouses TO Shopify as fulfillment locations
     * Backend route: POST /integrations/shopify/:integrationId/sync-warehouses
     *
     * This pushes warehouses that are linked to this integration to Shopify
