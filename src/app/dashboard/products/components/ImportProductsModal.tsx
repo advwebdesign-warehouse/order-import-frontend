@@ -86,7 +86,7 @@ export default function ImportProductsModal({
         setShopifyLocations(locations)
         // Auto-select first non-app location (typically "Shop location")
         if (locations.length > 0) {
-          const defaultLocation = locations.find(loc => !loc.fulfillsOnlineOrders) || locations[0]
+          const defaultLocation = locations.find(loc => !loc.isAppLocation) || locations[0]
           setSourceLocationId(defaultLocation.id)
         }
       } catch (err) {
@@ -278,7 +278,6 @@ export default function ImportProductsModal({
                         </label>
                         <div className="space-y-3">
                           {shopifyLocations.map((location) => {
-                            const isAppLocation = location.fulfillsOnlineOrders
                             return (
                               <button
                                 key={location.id}
@@ -308,7 +307,7 @@ export default function ImportProductsModal({
                                       <p className="text-sm font-medium text-gray-900">
                                         {location.name}
                                       </p>
-                                      {isAppLocation && (
+                                      {location.isAppLocation && (
                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
                                           App
                                         </span>

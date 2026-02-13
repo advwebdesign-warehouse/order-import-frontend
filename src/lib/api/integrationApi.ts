@@ -15,6 +15,7 @@ export interface ShopifyLocation {
   name: string
   isActive: boolean
   fulfillsOnlineOrders: boolean
+  isAppLocation: boolean
 }
 
 /**
