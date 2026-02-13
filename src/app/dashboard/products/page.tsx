@@ -503,24 +503,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   }
 
   const handleClearAllFilters = () => {
-    setSearchTerm('')
-    setFilters({
-      search: '',
-      status: '',
-      visibility: '',
-      type: '',
-      stockStatus: '',
-      category: '',
-      vendor: '',
-      brand: '',
-      priceMin: '',
-      priceMax: '',
-      tags: [],
-      hasVariants: '',
-      parentOnly: false,
-      includeVariants: true,
-      warehouseId: '',
-    })
+    resetFilters() // ✅ Uses DEFAULT_PRODUCT_FILTERS from constants (includes platform, storeId, integrationId)
   }
 
   const handleImport = async (integrationId: string, options: ImportOptions) => {

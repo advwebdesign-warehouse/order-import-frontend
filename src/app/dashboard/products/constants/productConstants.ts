@@ -78,6 +78,7 @@ export const DEFAULT_PRODUCT_FILTERS: ProductFilterState = {
   parentOnly: false,
   includeVariants: true,
   warehouseId: '',
+  integrationId: '',  // ✅ Added - prevents undefined breaking filter logic
   platform: '',
   storeId: '',
 }
