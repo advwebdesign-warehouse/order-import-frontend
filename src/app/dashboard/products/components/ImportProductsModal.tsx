@@ -29,7 +29,6 @@ export interface ImportOptions {
   warehouseDestination: 'primary' | 'all_routing' | 'specific'
   selectedWarehouseIds?: string[]
   updateExisting: boolean
-  createInventory: boolean
   sourceLocationId?: string
 }
 
@@ -56,7 +55,6 @@ export default function ImportProductsModal({
   const [warehouseDestination, setWarehouseDestination] = useState<'primary' | 'all_routing' | 'specific'>('all_routing')
   const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([])
   const [updateExisting, setUpdateExisting] = useState(true)
-  const [createInventory, setCreateInventory] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // ✅ Source location state
@@ -181,7 +179,6 @@ export default function ImportProductsModal({
         warehouseDestination,
         selectedWarehouseIds: warehouseDestination === 'specific' ? selectedWarehouseIds : undefined,
         updateExisting,
-        createInventory,
         sourceLocationId: sourceLocationId || undefined
       })
 
@@ -513,26 +510,6 @@ export default function ImportProductsModal({
                             </label>
                             <p className="text-xs text-gray-500">
                               Overwrite product data if already exists
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start">
-                          <div className="flex h-6 items-center">
-                            <input
-                              id="create-inventory"
-                              type="checkbox"
-                              checked={createInventory}
-                              onChange={(e) => setCreateInventory(e.target.checked)}
-                              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
-                            />
-                          </div>
-                          <div className="ml-3">
-                            <label htmlFor="create-inventory" className="text-sm font-medium text-gray-700">
-                              Create inventory entries
-                            </label>
-                            <p className="text-xs text-gray-500">
-                              Set up warehouse inventory for imported products
                             </p>
                           </div>
                         </div>
