@@ -46,6 +46,7 @@ import {
   formatCurrency,
   formatDate,
   getMainImage,
+  getAllImages,
   getStockLevel,
   formatStockStatus,
   formatProductType,
@@ -53,6 +54,7 @@ import {
   getStoreName
 } from '../utils/productUtils'
 import { Store } from '../../stores/utils/storeTypes'
+import ProductImageGalleryModal from './ProductImageGalleryModal'
 
 // Sticky column configuration
 const STICKY_LEFT_COLUMNS = ['select', 'sku']
@@ -118,6 +120,10 @@ export default function ProductsTable({
   const [editingSkuId, setEditingSkuId] = useState<string | null>(null)
   const [editingSkuValue, setEditingSkuValue] = useState<string>('')
   const [isUpdatingSku, setIsUpdatingSku] = useState(false)
+
+  // ✅ State for image gallery modal
+  const [galleryProduct, setGalleryProduct] = useState<Product | null>(null)
+  const [showGallery, setShowGallery] = useState(false)
 
   // State for inline product name editing
   const [editingNameId, setEditingNameId] = useState<string | null>(null)
@@ -548,17 +554,35 @@ export default function ProductsTable({
 
       case 'image':
         const imageUrl = getMainImage(product)
+        const productImageCount = getAllImages(product).length
         return (
-          <div className="w-12 h-12 flex-shrink-0">
+          <div className="w-12 h-12 flex-shrink-0 relative group">
             {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt={product.name}
-                className="w-12 h-12 rounded-lg object-cover border border-gray-200 hover:scale-105 transition-transform cursor-pointer"
-                onClick={() => onViewProduct(product)}
-              />
+              <>
+                <img
+                  src={imageUrl}
+                  alt={product.name}
+                  className="w-12 h-12 rounded-lg object-cover border border-gray-200 hover:scale-105 transition-transform cursor-pointer hover:shadow-md"
+                  onClick={() => {
+                    setGalleryProduct(product)
+                    setShowGallery(true)
+                  }}
+                />
+                {/* Image count badge (show if more than 1 image) */}
+                {productImageCount > 1 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white ring-1 ring-white">
+                    {productImageCount}
+                  </span>
+                )}
+              </>
             ) : (
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+              <div
+                className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200 cursor-pointer hover:bg-gray-150 transition-colors"
+                onClick={() => {
+                  setGalleryProduct(product)
+                  setShowGallery(true)
+                }}
+              >
                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
@@ -1177,6 +1201,16 @@ export default function ProductsTable({
           <p className="mt-1 text-sm text-gray-500">Get started by creating a new product.</p>
         </div>
       )}
+
+      {/* ✅ Product Image Gallery Modal */}
+      <ProductImageGalleryModal
+        isOpen={showGallery}
+        onClose={() => {
+          setShowGallery(false)
+          setGalleryProduct(null)
+        }}
+        product={galleryProduct}
+      />
     </div>
   )
 }

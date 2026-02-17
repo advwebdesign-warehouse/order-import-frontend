@@ -76,6 +76,34 @@ export function generateStorageKeys(userId: string) {
  }
 
 /**
+ * Get ALL images for a product (for gallery modal)
+ * Returns normalized array from images JSON column, images array, or single imageUrl
+ */
+export function getAllImages(product: Product): Array<{url: string; altText?: string; width?: number; height?: number; position: number}> {
+  // 1. Check images array (ProductImage[] from frontend type)
+  if (product.images && product.images.length > 0) {
+    return product.images.map((img, index) => ({
+      url: img.url,
+      altText: img.altText || undefined,
+      width: undefined,
+      height: undefined,
+      position: img.position || index + 1,
+    }))
+  }
+
+  // 2. Fallback to single imageUrl
+  if (product.imageUrl) {
+    return [{
+      url: product.imageUrl,
+      altText: product.name,
+      position: 1,
+    }]
+  }
+
+  return []
+}
+
+/**
  * Get stock level information for a product
  */
 export function getStockLevel(product: Product): {
