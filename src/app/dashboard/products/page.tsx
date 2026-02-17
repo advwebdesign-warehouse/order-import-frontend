@@ -437,44 +437,53 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const handleDeleteProducts = async (productIds: string[]) => {
     setIsDeleting(true)
     setDeleteMessage(null)
+
+    const isWarehouseSpecific = !!selectedWarehouseId
+    const warehouseName = selectedWarehouse?.name || selectedWarehouseId
+
     console.log('[ProductsPage] 🗑️ Starting bulk delete for', productIds.length, 'products')
-    console.log('[ProductsPage] Product IDs to delete:', productIds)
+    console.log('[ProductsPage] Warehouse context:', isWarehouseSpecific ? warehouseName : 'All Warehouses')
 
     try {
-      // ✅ Single API call to delete all products at once
-      console.log('[ProductsPage] Calling ProductAPI.bulkDeleteProducts...')
-      const result = await ProductAPI.bulkDeleteProducts(productIds)
+      // ✅ Pass warehouseId for warehouse-specific removal
+      const result = await ProductAPI.bulkDeleteProducts(
+        productIds,
+        isWarehouseSpecific ? selectedWarehouseId : undefined
+      )
 
       console.log('[ProductsPage] ✅ Bulk delete result:', result)
-      console.log('[ProductsPage] Response type:', typeof result)
-      console.log('[ProductsPage] Response keys:', Object.keys(result || {}))
 
       // Refetch products to update the list
-      console.log('[ProductsPage] Refetching products...')
       await refetchProducts()
-      console.log('[ProductsPage] Products refetched successfully')
 
       // Clear selection
       clearSelection()
 
-      // Show success message
-      if (result.notFoundCount && result.notFoundCount > 0) {
-        const message = `Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}. ${result.notFoundCount} product${result.notFoundCount > 1 ? 's were' : ' was'} not found.`
-        console.log('[ProductsPage] 📝', message)
-        setDeleteMessage({ type: 'success', text: message })
+      // Show success message based on context
+      let message: string
+      if (isWarehouseSpecific) {
+        const removed = result.removedFromWarehouseCount || productIds.length
+        const fullyDeleted = result.deletedCount || 0
+        message = `Removed ${removed} product${removed > 1 ? 's' : ''} from ${warehouseName}.`
+        if (fullyDeleted > 0) {
+          message += ` ${fullyDeleted} product${fullyDeleted > 1 ? 's had' : ' had'} no other warehouses and ${fullyDeleted > 1 ? 'were' : 'was'} deleted entirely.`
+        }
       } else {
-        const message = `Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''}!`
-        console.log('[ProductsPage] 📝', message)
-        setDeleteMessage({ type: 'success', text: message })
+        message = `Successfully deleted ${result.deletedCount} product${result.deletedCount > 1 ? 's' : ''} from all warehouses!`
       }
+
+      if (result.notFoundCount && result.notFoundCount > 0) {
+        message += ` ${result.notFoundCount} not found.`
+      }
+
+      console.log('[ProductsPage] 📝', message)
+      setDeleteMessage({ type: 'success', text: message })
 
       // Auto-hide success message after 5 seconds
       setTimeout(() => setDeleteMessage(null), 5000)
 
     } catch (error) {
       console.error('[ProductsPage] ❌ Error during bulk delete:', error)
-      console.error('[ProductsPage] Error type:', typeof error)
-      console.error('[ProductsPage] Error details:', error)
 
       const errorMessage = 'An error occurred while deleting products. Please try again.'
       console.log('[ProductsPage] 📝', errorMessage)
@@ -484,7 +493,6 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
       setTimeout(() => setDeleteMessage(null), 5000)
     } finally {
       setIsDeleting(false)
-      console.log('[ProductsPage] Delete operation completed')
     }
   }
 
@@ -606,19 +614,26 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
           {/* Modal */}
           <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
             <div className="sm:flex sm:items-start">
-              <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className={`mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full ${selectedWarehouseId ? 'bg-yellow-100' : 'bg-red-100'} sm:mx-0 sm:h-10 sm:w-10`}>
+                <svg className={`h-6 w-6 ${selectedWarehouseId ? 'text-yellow-600' : 'text-red-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
               <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
                 <h3 className="text-lg font-semibold leading-6 text-gray-900">
-                  Delete Products
+                  {selectedWarehouseId ? 'Remove from Warehouse' : 'Delete Products'}
                 </h3>
                 <div className="mt-2">
-                  <p className="text-sm text-gray-500">
-                    Are you sure you want to delete {productsToDelete.length} product{productsToDelete.length > 1 ? 's' : ''}? This action cannot be undone.
-                  </p>
+                  {selectedWarehouseId ? (
+                    <p className="text-sm text-gray-500">
+                      Remove {productsToDelete.length} product{productsToDelete.length > 1 ? 's' : ''} from <strong>{selectedWarehouse?.name || 'this warehouse'}</strong>?
+                      Products will remain in other warehouses. If a product has no other warehouses, it will be deleted entirely.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      Are you sure you want to delete {productsToDelete.length} product{productsToDelete.length > 1 ? 's' : ''} from <strong>all warehouses</strong>? This action cannot be undone.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -626,9 +641,13 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="inline-flex w-full justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:w-auto"
+                className={`inline-flex w-full justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm sm:w-auto ${
+                  selectedWarehouseId
+                    ? 'bg-yellow-600 hover:bg-yellow-500'
+                    : 'bg-red-600 hover:bg-red-500'
+                }`}
               >
-                Delete
+                {selectedWarehouseId ? 'Remove from Warehouse' : 'Delete'}
               </button>
               <button
                 type="button"

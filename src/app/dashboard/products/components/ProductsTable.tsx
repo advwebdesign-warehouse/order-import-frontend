@@ -168,7 +168,11 @@ export default function ProductsTable({
       )
       return warehouseInventory?.stockQuantity ?? 0
     }
-    // Return global quantity when viewing "All Warehouses"
+    // ✅ "All Warehouses" → sum actual warehouse inventory entries
+    if (product.warehouseStock && product.warehouseStock.length > 0) {
+      return product.warehouseStock.reduce((sum, stock) => sum + (stock.stockQuantity ?? 0), 0)
+    }
+    // Fallback if no warehouse stock entries exist
     return product.stockQuantity
   }
 

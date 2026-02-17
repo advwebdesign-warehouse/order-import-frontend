@@ -33,13 +33,17 @@ export class ProductAPI {
 
   /**
    * Bulk delete multiple products in a single request
+   * If warehouseId is provided, only removes inventory from that warehouse
+   * (and deletes the product entirely if no warehouse entries remain).
+   * If warehouseId is not provided, deletes products entirely from all warehouses.
    * @param productIds - Array of product IDs to delete
-   * @returns Object with deletedCount and notFoundCount
+   * @param warehouseId - Optional warehouse ID for warehouse-specific removal
+   * @returns Object with deletedCount, removedFromWarehouseCount, and notFoundCount
    */
-  static async bulkDeleteProducts(productIds: string[]) {
+  static async bulkDeleteProducts(productIds: string[], warehouseId?: string) {
     return apiRequest('/products/bulk-delete', {
       method: 'POST',
-      body: JSON.stringify({ productIds })
+      body: JSON.stringify({ productIds, warehouseId })
     })
   }
 
@@ -83,7 +87,7 @@ export class ProductAPI {
   }
 
   /**
-   * ✅ NEW: Update product name
+   * Update product name
    * Convenience method for updating just the product name
    * @param productId - Product ID
    * @param newName - New product name
