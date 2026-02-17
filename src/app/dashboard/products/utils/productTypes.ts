@@ -61,7 +61,10 @@ export interface Product {
   platform?: string      // e.g., 'Shopify', 'WooCommerce', 'Etsy'
   storeId?: string       // Store identifier
   externalId?: string    // External ID from the integration platform (e.g., Shopify product ID)
-  
+
+  // Product image from integration (stored as flat URL in DB)
+  imageUrl?: string      // Direct image URL from Shopify/integration
+
   // Multi-warehouse support - product can exist in multiple warehouses
   warehouseStock?: WarehouseStock[]
 

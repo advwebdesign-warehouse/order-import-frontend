@@ -57,11 +57,18 @@ export function generateStorageKeys(userId: string) {
 
 /**
  * Get the main image URL for a product
+ * Checks images array first (for locally uploaded images),
+ * then falls back to imageUrl (from Shopify/integration import)
  */
  export function getMainImage(product: Product): string | null {
    // If product has images array, return the first one's URL
    if (product.images && product.images.length > 0) {
      return product.images[0].url || null
+   }
+
+   // ✅ Fallback to flat imageUrl from DB (Shopify/integration imported)
+   if (product.imageUrl) {
+     return product.imageUrl
    }
 
    // No image found
