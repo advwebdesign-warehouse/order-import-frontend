@@ -26,6 +26,7 @@ import WarehouseSelector from '../shared/components/WarehouseSelector'
 import { withAuth } from '../shared/components/withAuth'
 import ImportProductsModal, { ImportOptions } from './components/ImportProductsModal'
 import MoveToWarehouseModal from './components/MoveToWarehouseModal'
+import ViewProductModal from './components/ViewProductModal'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
@@ -157,10 +158,14 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const [showImportModal, setShowImportModal] = useState(false)
   const [importing, setImporting] = useState(false)
 
-  // ✅ NEW: Move to warehouse modal state
+  // Move to warehouse modal state
   const [showMoveModal, setShowMoveModal] = useState(false)
   const [productsToMove, setProductsToMove] = useState<string[]>([])
   const [isMoving, setIsMoving] = useState(false)
+
+  // ✅ View Product modal state
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [viewProduct, setViewProduct] = useState<Product | null>(null)
 
   // ✅ Load integrations on mount
   useEffect(() => {
@@ -322,7 +327,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   // Event handlers
   const handleViewProduct = (product: Product) => {
     console.log('View product:', product.sku)
-    // TODO: Navigate to product details page or open modal
+    setViewProduct(product)
+    setShowViewModal(true)
   }
 
   const handleEditProduct = (product: Product) => {
@@ -363,7 +369,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     }
   }
 
-  // ✅ NEW: Handle inline SKU update
+  // Handle inline SKU update
   const handleUpdateSku = async (productId: string, newSku: string) => {
     try {
       console.log(`[Products Page] Updating product ${productId} SKU to ${newSku}`)
@@ -567,7 +573,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     setCurrentPage(1)
   }
 
-  // ✅ NEW: Handle "Move to Warehouse" from toolbar (bulk) or table (single)
+  // Handle "Move to Warehouse" from toolbar (bulk) or table (single)
   const handleOpenMoveModal = (productIdsToMove?: string[]) => {
     if (!selectedWarehouseId) {
       setDeleteMessage({ type: 'error', text: 'Please select a specific warehouse first to move products from.' })
@@ -587,12 +593,12 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
     setShowMoveModal(true)
   }
 
-  // ✅ NEW: Handle single product move from table actions
+  // Handle single product move from table actions
   const handleMoveProductFromTable = (product: Product) => {
     handleOpenMoveModal([product.id])
   }
 
-  // ✅ NEW: Handle confirmed move
+  // Handle confirmed move
   const handleConfirmMove = async (destinationWarehouseId: string) => {
     setIsMoving(true)
     setDeleteMessage(null)
@@ -1236,7 +1242,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         isImporting={importing}
       />
 
-      {/* ✅ NEW: Move to Warehouse Modal */}
+      {/* Move to Warehouse Modal */}
       <MoveToWarehouseModal
         isOpen={showMoveModal}
         onClose={() => {
@@ -1250,6 +1256,23 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         warehouses={warehouses}
         ecommerceIntegrations={ecommerceIntegrations}
         isMoving={isMoving}
+      />
+
+      {/* ✅ View Product Modal */}
+      <ViewProductModal
+        isOpen={showViewModal}
+        onClose={() => {
+          setShowViewModal(false)
+          setViewProduct(null)
+        }}
+        product={viewProduct}
+        stores={stores}
+        warehouses={warehouses}
+        onEdit={(product) => {
+          setShowViewModal(false)
+          setViewProduct(null)
+          handleEditProduct(product)
+        }}
       />
     </div>
   )

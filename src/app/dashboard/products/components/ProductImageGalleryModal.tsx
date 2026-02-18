@@ -71,7 +71,9 @@ export default function ProductImageGalleryModal({
   return (
     <>
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog as="div" className="relative z-50" onClose={() => {
+          if (!isFullscreen) onClose()
+        }}>
         {/* Backdrop */}
         <Transition.Child
           as={Fragment}
@@ -250,7 +252,9 @@ export default function ProductImageGalleryModal({
     {isFullscreen && currentImage && (
       <div
         className="fixed inset-0 z-[100] bg-black flex items-center justify-center"
-        onClick={() => setIsFullscreen(false)}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setIsFullscreen(false)
+        }}
       >
         {/* Close button */}
         <button
