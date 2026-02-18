@@ -106,7 +106,9 @@ export default function ProductImageGalleryModal({
                     <p className="mt-0.5 text-sm text-gray-500">
                       {images.length} {images.length === 1 ? 'image' : 'images'}
                       {product.sku && (
-                        <span className="ml-2 font-mono text-xs text-gray-400">SKU: {product.sku}</span>
+                        <span className="ml-2 font-mono text-xs text-gray-400">
+                          {(!product.externalId || product.sku !== product.externalId) ? `SKU: ${product.sku}` : `External: ${product.externalId}`}
+                        </span>
                       )}
                     </p>
                   </div>
