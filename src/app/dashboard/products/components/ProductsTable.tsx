@@ -13,7 +13,8 @@ import {
   LinkIcon,
   CheckIcon,
   ExclamationTriangleIcon, // Warning icon for missing SKU
-  XMarkIcon // Cancel icon
+  XMarkIcon,
+  ArrowsRightLeftIcon // ✅ NEW: Move to warehouse icon
 } from '@heroicons/react/24/outline'
 import {
   DndContext,
@@ -82,6 +83,7 @@ interface ProductsTableProps {
   onUpdateQuantity?: (productId: string, newQuantity: number) => Promise<void> // Inline quantity update
   onUpdateSku?: (productId: string, newSku: string) => Promise<void> // Inline SKU update
   onUpdatePrice?: (productId: string, newPrice: number, newComparePrice?: number | null) => Promise<void> // Inline price update
+  onMoveToWarehouse?: (product: Product) => void // ✅ NEW: Move product to another warehouse
   selectedWarehouseId?: string // To display warehouse-specific quantity
   stores?: Store[] // lastSyncAtAdded stores for rendering store names
 }
@@ -101,6 +103,7 @@ export default function ProductsTable({
   onUpdateQuantity,
   onUpdateSku, // SKU update handler
   onUpdatePrice, // Price update handler
+  onMoveToWarehouse, // ✅ NEW: Move to warehouse handler
   selectedWarehouseId, // To display warehouse-specific quantity
   stores = [] // lastSyncAtDefault empty array
 }: ProductsTableProps) {
@@ -1123,6 +1126,16 @@ export default function ProductsTable({
             >
               <DocumentDuplicateIcon className="h-4 w-4" />
             </button>
+            {/* ✅ NEW: Move to Warehouse button - only show when viewing a specific warehouse */}
+            {selectedWarehouseId && onMoveToWarehouse && (
+              <button
+                onClick={() => onMoveToWarehouse(product)}
+                className="text-orange-600 hover:text-orange-900"
+                title="Move to Another Warehouse"
+              >
+                <ArrowsRightLeftIcon className="h-4 w-4" />
+              </button>
+            )}
           </div>
         )
 

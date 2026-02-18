@@ -25,6 +25,7 @@ import { usePagination } from '../shared/hooks/usePagination'
 import WarehouseSelector from '../shared/components/WarehouseSelector'
 import { withAuth } from '../shared/components/withAuth'
 import ImportProductsModal, { ImportOptions } from './components/ImportProductsModal'
+import MoveToWarehouseModal from './components/MoveToWarehouseModal'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
@@ -155,6 +156,11 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   // ✅ Import modal state
   const [showImportModal, setShowImportModal] = useState(false)
   const [importing, setImporting] = useState(false)
+
+  // ✅ NEW: Move to warehouse modal state
+  const [showMoveModal, setShowMoveModal] = useState(false)
+  const [productsToMove, setProductsToMove] = useState<string[]>([])
+  const [isMoving, setIsMoving] = useState(false)
 
   // ✅ Load integrations on mount
   useEffect(() => {
@@ -559,6 +565,85 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setProductsPerPage(newItemsPerPage)
     setCurrentPage(1)
+  }
+
+  // ✅ NEW: Handle "Move to Warehouse" from toolbar (bulk) or table (single)
+  const handleOpenMoveModal = (productIdsToMove?: string[]) => {
+    if (!selectedWarehouseId) {
+      setDeleteMessage({ type: 'error', text: 'Please select a specific warehouse first to move products from.' })
+      setTimeout(() => setDeleteMessage(null), 3000)
+      return
+    }
+
+    const ids = productIdsToMove || Array.from(selectedProducts)
+    if (ids.length === 0) {
+      setDeleteMessage({ type: 'error', text: 'Please select at least one product to move.' })
+      setTimeout(() => setDeleteMessage(null), 3000)
+      return
+    }
+
+    console.log('[ProductsPage] 📦 Opening move modal for', ids.length, 'products')
+    setProductsToMove(ids)
+    setShowMoveModal(true)
+  }
+
+  // ✅ NEW: Handle single product move from table actions
+  const handleMoveProductFromTable = (product: Product) => {
+    handleOpenMoveModal([product.id])
+  }
+
+  // ✅ NEW: Handle confirmed move
+  const handleConfirmMove = async (destinationWarehouseId: string) => {
+    setIsMoving(true)
+    setDeleteMessage(null)
+
+    const sourceWarehouseName = selectedWarehouse?.name || selectedWarehouseId
+    const destWarehouse = warehouses.find(w => w.id === destinationWarehouseId)
+    const destWarehouseName = destWarehouse?.name || destinationWarehouseId
+
+    console.log('[ProductsPage] 📦 Moving', productsToMove.length, 'products from', sourceWarehouseName, 'to', destWarehouseName)
+
+    try {
+      const result = await ProductAPI.moveToWarehouse(
+        productsToMove,
+        selectedWarehouseId,
+        destinationWarehouseId
+      )
+
+      console.log('[ProductsPage] ✅ Move result:', result)
+
+      // Refetch products to update the list
+      await refetchProducts()
+
+      // Clear selection
+      clearSelection()
+
+      // Close modal
+      setShowMoveModal(false)
+      setProductsToMove([])
+
+      // Show success message
+      let message = `Successfully moved ${result.movedCount} product${result.movedCount > 1 ? 's' : ''} from ${result.sourceWarehouse} to ${result.destinationWarehouse}.`
+      if (result.skippedCount > 0) {
+        message += ` ${result.skippedCount} skipped (no inventory in source).`
+      }
+      if (result.errorCount > 0) {
+        message += ` ${result.errorCount} error${result.errorCount > 1 ? 's' : ''}.`
+      }
+
+      setDeleteMessage({ type: 'success', text: message })
+      setTimeout(() => setDeleteMessage(null), 5000)
+
+    } catch (error: any) {
+      console.error('[ProductsPage] ❌ Error moving products:', error)
+      setDeleteMessage({
+        type: 'error',
+        text: error.message || 'Failed to move products. Please try again.'
+      })
+      setTimeout(() => setDeleteMessage(null), 5000)
+    } finally {
+      setIsMoving(false)
+    }
   }
 
   const handleWarehouseChange = (warehouseId: string) => {
@@ -968,7 +1053,9 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
             onExport={handleExport}
             onResetLayout={handleResetLayout}
             onImport={() => setShowImportModal(true)}
+            onMoveToWarehouse={() => handleOpenMoveModal()}
             hasEcommerceIntegrations={ecommerceIntegrations.length > 0}
+            selectedWarehouseId={selectedWarehouseId}
             columns={columns}
             onColumnVisibilityChange={handleColumnVisibilityChange}
             totalProducts={allProducts.length} // Global total (for export, etc.)
@@ -1122,6 +1209,7 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
                 onUpdateQuantity={handleUpdateQuantity}
                 onUpdateSku={handleUpdateSku}
                 onUpdatePrice={handleUpdatePrice}
+                onMoveToWarehouse={handleMoveProductFromTable}
                 selectedWarehouseId={selectedWarehouseId}
                 stores={stores}
               />
@@ -1146,6 +1234,22 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
         ecommerceIntegrations={ecommerceIntegrations}
         warehouses={warehouses}
         isImporting={importing}
+      />
+
+      {/* ✅ NEW: Move to Warehouse Modal */}
+      <MoveToWarehouseModal
+        isOpen={showMoveModal}
+        onClose={() => {
+          setShowMoveModal(false)
+          setProductsToMove([])
+        }}
+        onConfirm={handleConfirmMove}
+        productsToMove={allProducts.filter(p => productsToMove.includes(p.id))}
+        sourceWarehouseId={selectedWarehouseId}
+        sourceWarehouseName={selectedWarehouse?.name || 'Unknown Warehouse'}
+        warehouses={warehouses}
+        ecommerceIntegrations={ecommerceIntegrations}
+        isMoving={isMoving}
       />
     </div>
   )

@@ -9,7 +9,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ArrowsPointingOutIcon,
-  ArrowsPointingInIcon,
 } from '@heroicons/react/24/outline'
 import { Product } from '../utils/productTypes'
 import { getAllImages } from '../utils/productUtils'
@@ -26,14 +25,14 @@ export default function ProductImageGalleryModal({
   product,
 }: ProductImageGalleryModalProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [isZoomed, setIsZoomed] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const images = product ? getAllImages(product) : []
 
   // Reset state when product changes
   useEffect(() => {
     setSelectedIndex(0)
-    setIsZoomed(false)
+    setIsFullscreen(false)
   }, [product?.id])
 
   // Keyboard navigation
@@ -50,14 +49,14 @@ export default function ProductImageGalleryModal({
         setSelectedIndex(prev => (prev < images.length - 1 ? prev + 1 : 0))
         break
       case 'Escape':
-        if (isZoomed) {
-          setIsZoomed(false)
+        if (isFullscreen) {
+          setIsFullscreen(false)
         } else {
           onClose()
         }
         break
     }
-  }, [isOpen, images.length, isZoomed, onClose])
+  }, [isOpen, images.length, isFullscreen, onClose])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -70,6 +69,7 @@ export default function ProductImageGalleryModal({
   const hasMultipleImages = images.length > 1
 
   return (
+    <>
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         {/* Backdrop */}
@@ -135,19 +135,13 @@ export default function ProductImageGalleryModal({
                     <>
                       {/* Image Display */}
                       <div
-                        className={`relative flex items-center justify-center overflow-hidden transition-all duration-200 ${
-                          isZoomed ? 'h-[500px] cursor-zoom-out' : 'h-[400px] cursor-zoom-in'
-                        }`}
-                        onClick={() => setIsZoomed(!isZoomed)}
+                        className="relative flex items-center justify-center overflow-hidden h-[400px] cursor-pointer"
+                        onClick={() => setIsFullscreen(true)}
                       >
                         <img
                           src={currentImage?.url}
                           alt={currentImage?.altText || product.name}
-                          className={`transition-transform duration-300 ${
-                            isZoomed
-                              ? 'max-h-full max-w-full object-contain scale-110'
-                              : 'max-h-[380px] max-w-full object-contain'
-                          }`}
+                          className="max-h-[380px] max-w-full object-contain transition-transform duration-300"
                           draggable={false}
                         />
 
@@ -155,16 +149,12 @@ export default function ProductImageGalleryModal({
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            setIsZoomed(!isZoomed)
+                            setIsFullscreen(true)
                           }}
                           className="absolute top-3 right-3 rounded-lg bg-white/80 p-1.5 text-gray-600 shadow-sm hover:bg-white transition-colors"
-                          title={isZoomed ? 'Zoom out' : 'Zoom in'}
+                          title="View fullscreen"
                         >
-                          {isZoomed ? (
-                            <ArrowsPointingInIcon className="h-4 w-4" />
-                          ) : (
-                            <ArrowsPointingOutIcon className="h-4 w-4" />
-                          )}
+                          <ArrowsPointingOutIcon className="h-4 w-4" />
                         </button>
 
                         {/* Image counter badge */}
@@ -205,7 +195,7 @@ export default function ProductImageGalleryModal({
                           key={index}
                           onClick={() => {
                             setSelectedIndex(index)
-                            setIsZoomed(false)
+                            setIsFullscreen(false)
                           }}
                           className={`relative flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all duration-150 ${
                             index === selectedIndex
@@ -255,5 +245,67 @@ export default function ProductImageGalleryModal({
         </div>
       </Dialog>
     </Transition>
+
+    {/* ✅ Fullscreen Image Overlay — covers entire viewport */}
+    {isFullscreen && currentImage && (
+      <div
+        className="fixed inset-0 z-[100] bg-black flex items-center justify-center"
+        onClick={() => setIsFullscreen(false)}
+      >
+        {/* Close button */}
+        <button
+          onClick={() => setIsFullscreen(false)}
+          className="absolute top-5 right-5 z-10 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 transition-colors"
+        >
+          <XMarkIcon className="h-6 w-6" />
+        </button>
+
+        {/* Image counter */}
+        {hasMultipleImages && (
+          <div className="absolute top-5 left-5 rounded-full bg-white/10 px-3 py-1.5 text-sm font-medium text-white">
+            {selectedIndex + 1} / {images.length}
+          </div>
+        )}
+
+        {/* Full-size image */}
+        <img
+          src={currentImage.url}
+          alt={currentImage.altText || product?.name || ''}
+          className="max-h-[95vh] max-w-[95vw] object-contain"
+          onClick={(e) => e.stopPropagation()}
+          draggable={false}
+        />
+
+        {/* Navigation arrows */}
+        {hasMultipleImages && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedIndex(prev => (prev > 0 ? prev - 1 : images.length - 1))
+              }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 transition-colors"
+            >
+              <ChevronLeftIcon className="h-6 w-6" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedIndex(prev => (prev < images.length - 1 ? prev + 1 : 0))
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white hover:bg-white/20 transition-colors"
+            >
+              <ChevronRightIcon className="h-6 w-6" />
+            </button>
+          </>
+        )}
+
+        {/* ESC hint */}
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-xs text-white/40">
+          Press ESC or click anywhere to exit
+        </div>
+      </div>
+    )}
+    </>
   )
 }

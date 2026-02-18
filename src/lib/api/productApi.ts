@@ -48,6 +48,22 @@ export class ProductAPI {
   }
 
   /**
+   * Move products from one warehouse to another
+   * Transfers inventory rows: removes from source, creates/adds to destination.
+   * Only allowed if destination warehouse is linked to the product's integration.
+   * @param productIds - Array of product IDs to move
+   * @param sourceWarehouseId - Source warehouse ID to move from
+   * @param destinationWarehouseId - Destination warehouse ID to move to
+   * @returns Object with movedCount, errors, etc.
+   */
+  static async moveToWarehouse(productIds: string[], sourceWarehouseId: string, destinationWarehouseId: string) {
+    return apiRequest('/products/move-warehouse', {
+      method: 'POST',
+      body: JSON.stringify({ productIds, sourceWarehouseId, destinationWarehouseId })
+    })
+  }
+
+  /**
    * Import products from an e-commerce integration
    * @param integrationId - Integration ID to import from
    * @param options - Import options (warehouse destination, update existing, etc.)

@@ -4,7 +4,8 @@
 
 import {
   ArrowDownTrayIcon,
-  PlusIcon
+  PlusIcon,
+  ArrowsRightLeftIcon
 } from '@heroicons/react/24/outline'
 import { ProductColumnConfig, ProductFilterState } from '../utils/productTypes'
 import ScreenOptions from '../../shared/components/ScreenOptions'
@@ -15,6 +16,7 @@ interface ProductsToolbarProps {
   onExport: () => void
   onResetLayout: () => void
   onImport?: () => void // Import handler
+  onMoveToWarehouse?: () => void // Move to warehouse handler
   columns: ProductColumnConfig[]
   onColumnVisibilityChange: (columnId: string, visible: boolean) => void
   totalProducts: number
@@ -27,6 +29,7 @@ interface ProductsToolbarProps {
   hasEcommerceIntegrations?: boolean // Show import button only if integrations exist
   searchTerm?: string // For detecting if search filter is active
   filters?: ProductFilterState // For detecting if filters are active
+  selectedWarehouseId?: string // To show move button only when a warehouse is selected
 }
 
 export default function ProductsToolbar({
@@ -35,6 +38,7 @@ export default function ProductsToolbar({
   onExport,
   onResetLayout,
   onImport,
+  onMoveToWarehouse,
   columns,
   onColumnVisibilityChange,
   totalProducts,
@@ -46,7 +50,8 @@ export default function ProductsToolbar({
   onOptionsOpenChange,
   hasEcommerceIntegrations = false,
   searchTerm = '',
-  filters
+  filters,
+  selectedWarehouseId = ''
 }: ProductsToolbarProps) {
 
   // ✅ Helper: Check if any real filters (not warehouse/store context) are active
@@ -76,10 +81,10 @@ export default function ProductsToolbar({
     )
   }
 
-  // ✅ DEBUG: Log when component renders
+  // Log when component renders
   console.log('[ProductsToolbar] Rendered with selectedProductsCount:', selectedProductsCount)
 
-  // ✅ DEBUG: Add handler with logging
+  // Add handler with logging
   const handleDeleteClick = () => {
     console.log('[ProductsToolbar] 🔴 DELETE BUTTON CLICKED!')
     console.log('[ProductsToolbar] Selected products count:', selectedProductsCount)
@@ -89,6 +94,15 @@ export default function ProductsToolbar({
       console.log('[ProductsToolbar] ✅ onBulkAction called successfully')
     } catch (error) {
       console.error('[ProductsToolbar] ❌ Error calling onBulkAction:', error)
+    }
+  }
+
+  // ✅ NEW: Move to warehouse handler
+  const handleMoveClick = () => {
+    console.log('[ProductsToolbar] 📦 MOVE TO WAREHOUSE BUTTON CLICKED!')
+    console.log('[ProductsToolbar] Selected products count:', selectedProductsCount)
+    if (onMoveToWarehouse) {
+      onMoveToWarehouse()
     }
   }
 
@@ -120,13 +134,24 @@ export default function ProductsToolbar({
         </div>
 
         <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none flex gap-2">
-          {/* Bulk Actions Dropdown */}
+          {/* Bulk Actions - Delete */}
           {selectedProductsCount > 0 && (
             <button
               onClick={handleDeleteClick}
               className="inline-flex items-center gap-x-2 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
             >
               Delete Products ({selectedProductsCount})
+            </button>
+          )}
+
+          {/* ✅ NEW: Bulk Actions - Move to Warehouse (only when warehouse is selected) */}
+          {selectedProductsCount > 0 && selectedWarehouseId && onMoveToWarehouse && (
+            <button
+              onClick={handleMoveClick}
+              className="inline-flex items-center gap-x-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              <ArrowsRightLeftIcon className="h-4 w-4" />
+              Move to Warehouse ({selectedProductsCount})
             </button>
           )}
 
