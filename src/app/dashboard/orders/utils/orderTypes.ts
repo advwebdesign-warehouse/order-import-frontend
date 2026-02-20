@@ -318,7 +318,7 @@ export interface OrderLineItemSummary {
   billingCountryCode?: string
   billingPhone?: string
   billingCompany?: string
-  
+
   // Warehouse assignment
   warehouseId?: string
 
@@ -657,7 +657,12 @@ export function productToOrderItem(
 
     // Physical properties SNAPSHOT
     weight: variant?.weight || product.weight,
-    dimensions: product.dimensions,
+    dimensions: (product.dimensionLength || product.dimensionWidth || product.dimensionHeight) ? {
+      length: product.dimensionLength,
+      width: product.dimensionWidth,
+      height: product.dimensionHeight,
+      unit: product.dimensionUnit || 'in',
+    } : undefined,
 
     // Fulfillment
     warehouseId: options?.warehouseId,

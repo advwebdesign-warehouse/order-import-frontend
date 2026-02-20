@@ -18,6 +18,7 @@ export const STOCK_STATUS_COLORS = {
 
 export const PRODUCT_TYPE_COLORS = {
   simple: 'bg-blue-100 text-blue-800',
+  parent: 'bg-teal-100 text-teal-800',
   variant: 'bg-purple-100 text-purple-800',
   bundle: 'bg-orange-100 text-orange-800',
   configurable: 'bg-indigo-100 text-indigo-800',

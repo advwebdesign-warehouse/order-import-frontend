@@ -1,4 +1,4 @@
-//file path: src/lib/shopify/shopifyGraphQLClient.ts
+//file path frontend: src/lib/shopify/shopifyGraphQLClient.ts
 // ✅ BACKEND SERVICE - Shopify GraphQL API Client
 // Added updateOrderFulfillment method for syncing status back to Shopify
 

@@ -27,6 +27,7 @@ import { withAuth } from '../shared/components/withAuth'
 import ImportProductsModal, { ImportOptions } from './components/ImportProductsModal'
 import MoveToWarehouseModal from './components/MoveToWarehouseModal'
 import ViewProductModal from './components/ViewProductModal'
+import EditProductModal from './components/EditProductModal'
 
 // Warehouse support
 import { useWarehouses } from '../warehouses/hooks/useWarehouses'
@@ -94,7 +95,7 @@ const exportProductsToCSV = (
         case 'weight':
           return product.weight ? product.weight.toString() : ''
         case 'dimensions':
-          return product.dimensions ? `${product.dimensions.length}Ã—${product.dimensions.width}Ã—${product.dimensions.height}` : ''
+          return (product.dimensionLength || product.dimensionWidth || product.dimensionHeight) ? `${product.dimensionLength || 0}×${product.dimensionWidth || 0}×${product.dimensionHeight || 0}` : ''
         case 'tags':
           return product.tags.join(', ')
         case 'variants':
@@ -166,6 +167,10 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
   // ✅ View Product modal state
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewProduct, setViewProduct] = useState<Product | null>(null)
+
+  // ✅ Edit Product modal state
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editProduct, setEditProduct] = useState<Product | null>(null)
 
   // ✅ Load integrations on mount
   useEffect(() => {
@@ -333,7 +338,8 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
 
   const handleEditProduct = (product: Product) => {
     console.log('Edit product:', product.sku)
-    // TODO: Navigate to product edit page or open modal
+    setEditProduct(product)
+    setShowEditModal(true)
   }
 
   const handleDuplicateProduct = (product: Product) => {
@@ -1272,6 +1278,22 @@ function ProductsPageContent({ accountId }: { accountId: string }) {
           setShowViewModal(false)
           setViewProduct(null)
           handleEditProduct(product)
+        }}
+      />
+
+      {/* ✅ Edit Product Modal */}
+      <EditProductModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setEditProduct(null)
+        }}
+        product={editProduct}
+        stores={stores}
+        warehouses={warehouses}
+        onSave={async (updatedProduct) => {
+          console.log('[ProductsPage] ✅ Product updated:', updatedProduct.sku)
+          await refetchProducts()
         }}
       />
     </div>

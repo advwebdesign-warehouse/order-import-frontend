@@ -1,4 +1,4 @@
-//file path: lib/shopify/shopifyGraphQLTransform.ts
+//file path frontend: lib/shopify/shopifyGraphQLTransform.ts
 
 import { Order, OrderItem } from '@/app/dashboard/orders/utils/orderTypes';
 import { Product, VariantAttribute } from '@/app/dashboard/products/utils/productTypes';
@@ -6,8 +6,8 @@ import { LineItemWithWeight } from './shopifyTypes'
 
 /**
  * Transform GraphQL order to app Order format
- * ✅ UPDATED: Now properly maps updatedAt field for incremental sync
- * ✅ UPDATED: Warehouse assignment handled by backend via integration warehouseConfig
+ * Now properly maps updatedAt field for incremental sync
+ * Warehouse assignment handled by backend via integration warehouseConfig
  */
 export function transformGraphQLOrder(
   graphqlOrder: any,
@@ -219,12 +219,11 @@ export function transformGraphQLProduct(
     stockStatus: stockStatus,
     trackQuantity: true,
     weight: weightOz,
-    dimensions: {
-      length: 0,
-      width: 0,
-      height: 0,
-      unit: 'in',
-    },
+    weightUnit: 'oz',
+    dimensionLength: 0,
+    dimensionWidth: 0,
+    dimensionHeight: 0,
+    dimensionUnit: 'in',
     barcode: primaryVariant?.barcode || '',
     status: mapProductStatus(graphqlProduct.status),
     visibility: 'visible',

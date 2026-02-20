@@ -236,15 +236,15 @@ export default function ViewProductModal({
                       </Section>
 
                       {/* Physical */}
-                      {(product.weight || product.dimensions || product.barcode) && (
+                      {(product.weight || product.dimensionLength || product.barcode) && (
                         <Section title="Physical">
                           <Grid>
-                            <Field label="Weight" value={product.weight ? `${product.weight} g` : '—'} />
+                            <Field label="Weight" value={product.weight ? `${product.weight} ${product.weightUnit || 'lb'}` : '—'} />
                             <Field
                               label="Dimensions"
                               value={
-                                product.dimensions
-                                  ? `${product.dimensions.length || 0} × ${product.dimensions.width || 0} × ${product.dimensions.height || 0} ${product.dimensions.unit || 'cm'}`
+                                (product.dimensionLength || product.dimensionWidth || product.dimensionHeight)
+                                  ? `${product.dimensionLength || 0} × ${product.dimensionWidth || 0} × ${product.dimensionHeight || 0} ${product.dimensionUnit || 'in'}`
                                   : '—'
                               }
                             />

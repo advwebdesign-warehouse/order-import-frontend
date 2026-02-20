@@ -17,7 +17,7 @@ export interface Product {
   name: string
   description?: string
   shortDescription?: string
-  type: 'simple' | 'variant' | 'bundle' | 'configurable'
+  type: 'simple' | 'variant' | 'parent' | 'bundle' | 'configurable'
   status: 'active' | 'inactive' | 'draft' | 'archived'
   visibility: 'visible' | 'hidden' | 'catalog' | 'search'
   price: number
@@ -28,13 +28,15 @@ export interface Product {
   stockStatus: 'in_stock' | 'out_of_stock' | 'low_stock' | 'backorder'
   stockThreshold?: number
   trackQuantity: boolean
+
+  // Physical dimensions & weight (flat columns — match DB schema)
   weight?: number
-  dimensions?: {
-    length?: number
-    width?: number
-    height?: number
-    unit?: 'cm' | 'in'
-  }
+  weightUnit?: 'g' | 'kg' | 'oz' | 'lb'
+  dimensionLength?: number
+  dimensionWidth?: number
+  dimensionHeight?: number
+  dimensionUnit?: 'cm' | 'in'
+
   category?: string
   tags: string[]
   images: ProductImage[]
@@ -42,7 +44,9 @@ export interface Product {
   parentId?: string
   parentSku?: string
   parentName?: string
+  variantName?: string                 // e.g., "Ice" — variant-specific display name
   variantAttributes?: VariantAttribute[]
+  variantPosition?: number             // Display order among siblings
   createdAt: string
   updatedAt: string
   publishedAt?: string
@@ -57,7 +61,7 @@ export interface Product {
   seoSlug?: string
 
   // Integration relationship - links to the integration (platform + store)
-  integrationId: string  // e.g., 'shopify-store1', 'woocommerce-store2'
+  integrationId?: string  // e.g., 'shopify-store1', 'woocommerce-store2'
   platform?: string      // e.g., 'Shopify', 'WooCommerce', 'Etsy'
   storeId?: string       // Store identifier
   externalId?: string    // External ID from the integration platform (e.g., Shopify product ID)
