@@ -114,6 +114,11 @@ export function transformGraphQLOrder(
 
 /**
  * Transform GraphQL product to app Product format
+ * ✅ UPDATED: Uses flat dimension/weight columns matching Product interface
+ * ✅ UPDATED: Maps weight in native Shopify units (no forced oz conversion)
+ * ✅ UPDATED: 'parent' type for multi-variant products
+ * ✅ UPDATED: Maps SEO fields from graphqlProduct.seo
+ * ✅ UPDATED: Maps imageUrl from first image
  */
 export function transformGraphQLProduct(
   graphqlProduct: any,
@@ -133,20 +138,20 @@ export function transformGraphQLProduct(
     stockQuantity > 0 ? 'low_stock' :
     'out_of_stock';
 
-  // Convert weight to ounces
-  let weightOz = 0;
-  if (primaryVariant?.weight) {
-    const unit = primaryVariant.weightUnit;
-    if (unit === 'GRAMS') {
-      weightOz = primaryVariant.weight / 28.3495;
-    } else if (unit === 'KILOGRAMS') {
-      weightOz = primaryVariant.weight * 35.274;
-    } else if (unit === 'POUNDS') {
-      weightOz = primaryVariant.weight * 16;
-    } else if (unit === 'OUNCES') {
-      weightOz = primaryVariant.weight;
+  // Map Shopify weight unit to our format
+  const mapWeightUnit = (unit: string | undefined): 'g' | 'kg' | 'oz' | 'lb' => {
+    const map: Record<string, 'g' | 'kg' | 'oz' | 'lb'> = {
+      GRAMS: 'g',
+      KILOGRAMS: 'kg',
+      OUNCES: 'oz',
+      POUNDS: 'lb',
     }
+    return map[unit || ''] || 'lb'
   }
+
+  // Get weight in native unit (no conversion — store as-is)
+  const weight = primaryVariant?.weight || undefined;
+  const weightUnit = primaryVariant?.weight ? mapWeightUnit(primaryVariant.weightUnit) : undefined;
 
   // Transform images
   const images = graphqlProduct.images.edges.map((edge: any, index: number) => {
@@ -159,6 +164,9 @@ export function transformGraphQLProduct(
       isMain: index === 0,
     };
   });
+
+  // Primary image URL
+  const imageUrl = images.length > 0 ? images[0].url : undefined;
 
   // Transform variants
   const productVariants = variants.map((v: any) => {
@@ -174,21 +182,6 @@ export function transformGraphQLProduct(
       variantStockQuantity > 0 ? 'low_stock' :
       'out_of_stock';
 
-    // Convert variant weight to ounces
-    let variantWeightOz = 0;
-    if (v.weight) {
-      const unit = v.weightUnit;
-      if (unit === 'GRAMS') {
-        variantWeightOz = v.weight / 28.3495;
-      } else if (unit === 'KILOGRAMS') {
-        variantWeightOz = v.weight * 35.274;
-      } else if (unit === 'POUNDS') {
-        variantWeightOz = v.weight * 16;
-      } else if (unit === 'OUNCES') {
-        variantWeightOz = v.weight;
-      }
-    }
-
     return {
       id: `shopify-variant-${v.id.split('/').pop()}`,
       name: v.title,
@@ -199,7 +192,7 @@ export function transformGraphQLProduct(
       stockStatus: variantStockStatus,
       attributes: attributes,
       barcode: v.barcode || undefined,
-      weight: variantWeightOz || undefined,
+      weight: v.weight || undefined,
     };
   });
 
@@ -207,38 +200,49 @@ export function transformGraphQLProduct(
     id: `shopify-${productId}`,
     sku: primaryVariant?.sku || `SHOPIFY-${productId}`,
     name: graphqlProduct.title,
-    description: graphqlProduct.description || '',
-    type: variants.length > 1 ? 'variant' : 'simple',
-    category: graphqlProduct.productType || 'Uncategorized',
-    brand: graphqlProduct.vendor || '',
-    vendor: graphqlProduct.vendor || '',
+    description: graphqlProduct.descriptionHtml || graphqlProduct.description || '',
+    type: variants.length > 1 ? 'parent' : 'simple',
+    category: graphqlProduct.productType || undefined,
+    brand: graphqlProduct.vendor || undefined,
+    vendor: graphqlProduct.vendor || undefined,
     price: parseFloat(primaryVariant?.price || '0'),
     comparePrice: primaryVariant?.compareAtPrice ? parseFloat(primaryVariant.compareAtPrice) : undefined,
+    costPrice: primaryVariant?.inventoryItem?.unitCost?.amount
+      ? parseFloat(primaryVariant.inventoryItem.unitCost.amount)
+      : undefined,
     currency: 'USD',
     stockQuantity: stockQuantity,
     stockStatus: stockStatus,
     trackQuantity: true,
-    weight: weightOz,
-    weightUnit: 'oz',
-    dimensionLength: 0,
-    dimensionWidth: 0,
-    dimensionHeight: 0,
+
+    // Physical — flat columns matching DB schema
+    weight: weight,
+    weightUnit: weightUnit,
+    dimensionLength: undefined,
+    dimensionWidth: undefined,
+    dimensionHeight: undefined,
     dimensionUnit: 'in',
-    barcode: primaryVariant?.barcode || '',
+
+    barcode: primaryVariant?.barcode || undefined,
     status: mapProductStatus(graphqlProduct.status),
     visibility: 'visible',
+    imageUrl: imageUrl,
     images: images,
     tags: graphqlProduct.tags || [],
     variants: productVariants,
+
+    // SEO
+    metaTitle: graphqlProduct.seo?.title || undefined,
+    metaDescription: graphqlProduct.seo?.description || undefined,
+
     createdAt: graphqlProduct.createdAt,
     updatedAt: graphqlProduct.updatedAt,
     publishedAt: graphqlProduct.publishedAt,
 
     // Integration and store info
-    integrationId: `shopify-${storeId}`,
     platform: 'Shopify',
     storeId: storeId,
-    externalId: productId, // Store the Shopify product ID
+    externalId: productId,
   };
 }
 

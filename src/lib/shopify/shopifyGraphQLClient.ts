@@ -337,6 +337,10 @@ export class ShopifyGraphQLClient {
               updatedAt
               publishedAt
               tags
+              seo {
+                title
+                description
+              }
               variants(first: 100) {
                 edges {
                   node {
@@ -346,8 +350,20 @@ export class ShopifyGraphQLClient {
                     barcode
                     price
                     compareAtPrice
+                    weight
+                    weightUnit
                     inventoryQuantity
                     position
+                    image {
+                      url
+                    }
+                    inventoryItem {
+                      id
+                      unitCost {
+                        amount
+                        currencyCode
+                      }
+                    }
                     selectedOptions {
                       name
                       value
